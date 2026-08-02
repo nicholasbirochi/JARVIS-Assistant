@@ -98,6 +98,44 @@ def test_listener_wait_returns_clap_when_clap_detector_fires_first(monkeypatch):
     assert trigger == "clap"
 
 
+def test_listener_wait_returns_none_when_stop_event_already_set(monkeypatch):
+    import threading
+
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine(detect_on_call=None)  # never fires
+    stop_event = threading.Event()
+    stop_event.set()
+
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
+    trigger = listener.wait(stop_event=stop_event)
+
+    recorder = FakeRecorder.instances[-1]
+    assert trigger is None
+    assert recorder.read_count == 0  # returned before ever reading a frame
+
+
+def test_listener_wait_stops_mid_wait_once_event_is_set(monkeypatch):
+    import threading
+
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine(detect_on_call=None)  # never fires
+    stop_event = threading.Event()
+
+    class StoppingClapDetector(FakeClapDetector):
+        """Sets stop_event partway through, simulating the menu-bar app's
+        off button being clicked while wait() is already blocking."""
+
+        def process(self, frame, frame_seconds) -> bool:
+            if self._calls == 2:
+                stop_event.set()
+            return super().process(frame, frame_seconds)
+
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=StoppingClapDetector())
+    trigger = listener.wait(stop_event=stop_event)
+
+    assert trigger is None
+
+
 def test_listener_close_tears_down_recorder_and_engine(monkeypatch):
     monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
     engine = FakeEngine()

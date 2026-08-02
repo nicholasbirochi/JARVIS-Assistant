@@ -8,6 +8,7 @@ dependencies = [
     "docstring-parser>=0.16",
     "openwakeword>=0.6.0",
     "pypdf>=4.0.0",
+    "rumps>=0.4.0",
     "pvporcupine>=3.0.0",
     "pvrecorder>=1.2.0",
     "faster-whisper>=1.0.0",

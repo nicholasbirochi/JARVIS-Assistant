@@ -10,6 +10,7 @@ fires first wins.
 
 from __future__ import annotations
 
+import threading
 from typing import Callable, Literal
 
 from pvrecorder import PvRecorder
@@ -85,11 +86,15 @@ class WakeWordListener:
     def read_frame(self) -> list[int]:
         return self._recorder.read()
 
-    def wait(self) -> Trigger:
-        """Blocks until the wake word is heard OR two claps land within the
-        configured window -- whichever comes first. Returns which one it was
-        so the caller can speak the matching greeting."""
+    def wait(self, stop_event: threading.Event | None = None) -> Trigger | None:
+        """Blocks until the wake word is heard, two claps land within the
+        configured window, or `stop_event` is set -- whichever comes first.
+        Returns which trigger it was, or None if stopped externally (the
+        menu-bar app's off button sets stop_event to make this return
+        promptly instead of blocking forever)."""
         while True:
+            if stop_event is not None and stop_event.is_set():
+                return None
             frame = self._recorder.read()
             if self._engine.process(frame):
                 return "wake_word"

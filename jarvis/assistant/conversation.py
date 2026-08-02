@@ -10,6 +10,8 @@ fired (WakeWordListener.wait() reports "wake_word" or "clap").
 
 from __future__ import annotations
 
+import threading
+
 from jarvis.assistant.llm_client import send_turn
 from jarvis.config import CLAP_GREETING, GREETING, STOP_PHRASES
 
@@ -82,14 +84,20 @@ def _run_active_session(listener, record_utterance, transcribe, speak) -> None:
         stt.unload()
 
 
-def run_voice_loop() -> None:
+def run_voice_loop(stop_event: threading.Event | None = None) -> None:
+    """Runs until an unhandled exception, or (when `stop_event` is given, as
+    the menu-bar app does) until it's set -- checked between wake-word
+    sessions, so "off" takes effect immediately while idle, or as soon as
+    the current conversation naturally ends if one is in progress."""
     from jarvis.voice import audio, stt, tts
     from jarvis.voice.wake_word import WakeWordListener
 
     listener = WakeWordListener()
     try:
-        while True:
-            trigger = listener.wait()
+        while stop_event is None or not stop_event.is_set():
+            trigger = listener.wait(stop_event=stop_event)
+            if trigger is None:
+                break
             tts.speak(_GREETING_BY_TRIGGER[trigger])
             _run_active_session(listener, audio.record_utterance, stt.transcribe, tts.speak)
     finally:
