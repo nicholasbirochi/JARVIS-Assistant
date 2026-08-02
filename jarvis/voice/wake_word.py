@@ -2,15 +2,22 @@
 mic-capture library, no account/key required) stays the shared capture layer
 regardless of which detection engine (openWakeWord, default; Porcupine,
 optional) is active -- only the frame size differs per engine.
+
+Two claps is a second, independent activation trigger that always runs
+alongside the primary engine (not a WAKE_WORD_ENGINE choice) -- whichever
+fires first wins.
 """
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Literal
 
 from pvrecorder import PvRecorder
 
 from jarvis.voice.engines.base import WakeWordEngine
+from jarvis.voice.engines.clap_detector import ClapDetector
+
+Trigger = Literal["wake_word", "clap"]
 
 _ENGINE_FACTORIES: dict[str, Callable[[], WakeWordEngine]] = {}
 
@@ -50,10 +57,22 @@ class WakeWordListener:
     stream.
     """
 
-    def __init__(self, engine: WakeWordEngine | None = None) -> None:
+    def __init__(
+        self,
+        engine: WakeWordEngine | None = None,
+        clap_detector: ClapDetector | None = None,
+    ) -> None:
         self._engine = engine or get_wake_word_engine()
         self._recorder = PvRecorder(device_index=-1, frame_length=self._engine.frame_length)
         self._recorder.start()
+        self._clap_detector = clap_detector if clap_detector is not None else self._maybe_clap_detector()
+        self._frame_seconds = self._engine.frame_length / self._engine.sample_rate
+
+    @staticmethod
+    def _maybe_clap_detector() -> ClapDetector | None:
+        from jarvis.config import CLAP_ACTIVATION_ENABLED
+
+        return ClapDetector() if CLAP_ACTIVATION_ENABLED else None
 
     @property
     def frame_length(self) -> int:
@@ -66,10 +85,16 @@ class WakeWordListener:
     def read_frame(self) -> list[int]:
         return self._recorder.read()
 
-    def wait(self) -> None:
+    def wait(self) -> Trigger:
+        """Blocks until the wake word is heard OR two claps land within the
+        configured window -- whichever comes first. Returns which one it was
+        so the caller can speak the matching greeting."""
         while True:
-            if self._engine.process(self._recorder.read()):
-                return
+            frame = self._recorder.read()
+            if self._engine.process(frame):
+                return "wake_word"
+            if self._clap_detector is not None and self._clap_detector.process(frame, self._frame_seconds):
+                return "clap"
 
     def close(self) -> None:
         self._recorder.stop()

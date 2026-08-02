@@ -27,10 +27,12 @@ LLM_PROVIDER = os.environ.get("JARVIS_LLM_PROVIDER", "ollama")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 LOCAL_MODEL = os.environ.get("JARVIS_MODEL", "qwen2.5:14b")
 
-# Spoken the instant the wake word fires, before the model is ever invoked -- an
-# LLM asked to "say this greeting" could paraphrase or drop the ellipsis, which
-# isn't acceptable for a phrase the user specified verbatim.
+# Spoken the instant a trigger fires, before the model is ever invoked -- an
+# LLM asked to "say this greeting" could paraphrase or drop the punctuation,
+# which isn't acceptable for a phrase the user specified verbatim. Each
+# trigger has its own exact phrase.
 GREETING = "Seja bem-vindo, Senhor Nicholas... vamos começar o trabalho!"
+CLAP_GREETING = "Olá, Nicolas, vamos começar o trabalho!"
 
 TTS_VOICE = "Luciana"
 WAKE_WORD = "jarvis"
@@ -39,6 +41,14 @@ STOP_PHRASES = ("tchau jarvis", "tchau, jarvis", "obrigado jarvis", "encerrar")
 # "openwakeword" (default, no account/key -- ships a pretrained "hey jarvis"
 # model) or "porcupine" (optional adapter, needs PICOVOICE_ACCESS_KEY).
 WAKE_WORD_ENGINE = os.environ.get("WAKE_WORD_ENGINE", "openwakeword")
+
+# Two claps is a second, independent activation trigger that always runs
+# alongside the wake-word engine above (see jarvis/voice/engines/clap_detector.py).
+# Amplitude-based detection is more environment-sensitive than the neural
+# wake-word engines, so the threshold is a tunable env var, not fixed in code.
+CLAP_ACTIVATION_ENABLED = os.environ.get("CLAP_ACTIVATION_ENABLED", "true").lower() != "false"
+CLAP_RMS_THRESHOLD = float(os.environ.get("CLAP_RMS_THRESHOLD", "4000"))
+CLAP_WINDOW_SECONDS = float(os.environ.get("CLAP_WINDOW_SECONDS", "1.5"))
 
 WHISPER_MODEL_SIZE = "small"
 WHISPER_LANGUAGE = "pt"

@@ -21,6 +21,17 @@ class FakeEngine:
         self.closed = True
 
 
+class FakeClapDetector:
+    def __init__(self, detect_on_call=None):
+        self._detect_on_call = detect_on_call  # 0-indexed call number that returns True
+        self._calls = 0
+
+    def process(self, frame, frame_seconds) -> bool:
+        result = self._calls == self._detect_on_call
+        self._calls += 1
+        return result
+
+
 class FakeRecorder:
     instances: list["FakeRecorder"] = []
 
@@ -64,23 +75,34 @@ def test_get_wake_word_engine_unknown_raises(monkeypatch):
         wake_word.get_wake_word_engine()
 
 
-def test_listener_wait_blocks_until_engine_detects(monkeypatch):
+def test_listener_wait_returns_wake_word_when_engine_detects(monkeypatch):
     monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
     engine = FakeEngine(detect_on_call=2)
 
-    listener = wake_word.WakeWordListener(engine=engine)
-    listener.wait()
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
+    trigger = listener.wait()
 
     recorder = FakeRecorder.instances[-1]
+    assert trigger == "wake_word"
     assert recorder.read_count == 3  # calls 0, 1 miss; call 2 hits
-    assert recorder.started is True
+
+
+def test_listener_wait_returns_clap_when_clap_detector_fires_first(monkeypatch):
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine(detect_on_call=None)  # never fires
+    clap_detector = FakeClapDetector(detect_on_call=1)
+
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=clap_detector)
+    trigger = listener.wait()
+
+    assert trigger == "clap"
 
 
 def test_listener_close_tears_down_recorder_and_engine(monkeypatch):
     monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
     engine = FakeEngine()
 
-    listener = wake_word.WakeWordListener(engine=engine)
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
     listener.close()
 
     recorder = FakeRecorder.instances[-1]
@@ -93,7 +115,27 @@ def test_listener_frame_length_and_sample_rate_proxy_engine(monkeypatch):
     monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
     engine = FakeEngine(frame_length=512, sample_rate=16000)
 
-    listener = wake_word.WakeWordListener(engine=engine)
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
 
     assert listener.frame_length == 512
     assert listener.sample_rate == 16000
+
+
+def test_listener_disables_clap_detector_when_config_flag_off(monkeypatch):
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    monkeypatch.setattr(config, "CLAP_ACTIVATION_ENABLED", False)
+    engine = FakeEngine()
+
+    listener = wake_word.WakeWordListener(engine=engine)
+
+    assert listener._clap_detector is None
+
+
+def test_listener_enables_real_clap_detector_by_default(monkeypatch):
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    monkeypatch.setattr(config, "CLAP_ACTIVATION_ENABLED", True)
+    engine = FakeEngine()
+
+    listener = wake_word.WakeWordListener(engine=engine)
+
+    assert listener._clap_detector is not None

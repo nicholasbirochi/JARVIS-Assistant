@@ -1,6 +1,12 @@
 from jarvis.assistant import conversation
 from jarvis.assistant import llm_client
 from jarvis.assistant.providers import ProviderResponse
+from jarvis.config import CLAP_GREETING, GREETING
+
+
+def test_greeting_by_trigger_maps_wake_word_and_clap():
+    assert conversation._GREETING_BY_TRIGGER["wake_word"] == GREETING
+    assert conversation._GREETING_BY_TRIGGER["clap"] == CLAP_GREETING
 
 
 class ScriptedProvider:
