@@ -1,0 +1,854 @@
+{
+  "$defs": {
+    "Availability": {
+      "additionalProperties": false,
+      "description": "Grouped under JobPreferences, not the root -- availability is a\njob-search preference/constraint, not a resume fact.",
+      "properties": {
+        "status": {
+          "default": "unspecified",
+          "enum": [
+            "immediate",
+            "notice_period",
+            "date",
+            "unspecified"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "notice_period_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notice Period Days"
+        },
+        "available_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Available From"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        }
+      },
+      "title": "Availability",
+      "type": "object"
+    },
+    "Bilingual": {
+      "additionalProperties": false,
+      "description": "Free-text content that already exists in both languages in the\nsource résumés (pt is required, en is optional until translated).",
+      "properties": {
+        "pt": {
+          "title": "Pt",
+          "type": "string"
+        },
+        "en": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "En"
+        }
+      },
+      "required": [
+        "pt"
+      ],
+      "title": "Bilingual",
+      "type": "object"
+    },
+    "Certification": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "hours": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hours"
+        },
+        "status": {
+          "default": "completed",
+          "enum": [
+            "in_progress",
+            "completed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Certification",
+      "type": "object"
+    },
+    "ChangeRecord": {
+      "additionalProperties": false,
+      "description": "One entry per applied change to the résumé -- the audit trail.",
+      "properties": {
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "field_path": {
+          "title": "Field Path",
+          "type": "string"
+        },
+        "old_value": {
+          "default": null,
+          "title": "Old Value"
+        },
+        "new_value": {
+          "default": null,
+          "title": "New Value"
+        },
+        "source": {
+          "enum": [
+            "voice",
+            "import",
+            "manual_review",
+            "proposal_review"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "timestamp",
+        "field_path",
+        "source"
+      ],
+      "title": "ChangeRecord",
+      "type": "object"
+    },
+    "Conflict": {
+      "additionalProperties": false,
+      "description": "Two sources disagreed on a fact -- registered for human review,\nnever silently resolved by picking one side.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "field_path": {
+          "title": "Field Path",
+          "type": "string"
+        },
+        "existing_value": {
+          "default": null,
+          "title": "Existing Value"
+        },
+        "proposed_value": {
+          "default": null,
+          "title": "Proposed Value"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "detected_at": {
+          "title": "Detected At",
+          "type": "string"
+        },
+        "status": {
+          "default": "open",
+          "enum": [
+            "open",
+            "resolved_existing",
+            "resolved_proposed",
+            "resolved_manual"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "resolution_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolution Note"
+        }
+      },
+      "required": [
+        "id",
+        "field_path",
+        "detected_at"
+      ],
+      "title": "Conflict",
+      "type": "object"
+    },
+    "Education": {
+      "additionalProperties": false,
+      "properties": {
+        "degree": {
+          "$ref": "#/$defs/Bilingual"
+        },
+        "institution": {
+          "title": "Institution",
+          "type": "string"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "status": {
+          "default": "completed",
+          "enum": [
+            "in_progress",
+            "completed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "start_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Date"
+        },
+        "end_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Date"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "degree",
+        "institution"
+      ],
+      "title": "Education",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "Where a specific fact came from. Attached to individual résumé items\nso conflicting information from different documents can be tracked\ninstead of one silently overwriting another.",
+      "properties": {
+        "source_path": {
+          "title": "Source Path",
+          "type": "string"
+        },
+        "source_type": {
+          "enum": [
+            "docx",
+            "pdf",
+            "txt",
+            "md",
+            "voice",
+            "manual"
+          ],
+          "title": "Source Type",
+          "type": "string"
+        },
+        "read_at": {
+          "title": "Read At",
+          "type": "string"
+        },
+        "snippet": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Snippet"
+        },
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "review_status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "confirmed",
+            "rejected"
+          ],
+          "title": "Review Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_path",
+        "source_type",
+        "read_at"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "Experience": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "$ref": "#/$defs/Bilingual"
+        },
+        "company": {
+          "title": "Company",
+          "type": "string"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "start_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Date"
+        },
+        "end_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End Date"
+        },
+        "is_current": {
+          "default": false,
+          "title": "Is Current",
+          "type": "boolean"
+        },
+        "bullets_pt": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Bullets Pt",
+          "type": "array"
+        },
+        "bullets_en": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Bullets En",
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "company"
+      ],
+      "title": "Experience",
+      "type": "object"
+    },
+    "JobPreferences": {
+      "additionalProperties": false,
+      "properties": {
+        "target_roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Target Roles",
+          "type": "array"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "availability": {
+          "$ref": "#/$defs/Availability"
+        }
+      },
+      "title": "JobPreferences",
+      "type": "object"
+    },
+    "LanguageSkill": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "proficiency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proficiency"
+        },
+        "test_score": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Test Score"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "LanguageSkill",
+      "type": "object"
+    },
+    "Links": {
+      "additionalProperties": false,
+      "properties": {
+        "linkedin": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Linkedin"
+        },
+        "github": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Github"
+        },
+        "portfolio": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Portfolio"
+        },
+        "other": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Other",
+          "type": "array"
+        }
+      },
+      "title": "Links",
+      "type": "object"
+    },
+    "Location": {
+      "additionalProperties": false,
+      "properties": {
+        "city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "City"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "State"
+        },
+        "country": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Country"
+        }
+      },
+      "title": "Location",
+      "type": "object"
+    },
+    "PersonalInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "full_name": {
+          "title": "Full Name",
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/Location"
+        },
+        "phone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Phone"
+        },
+        "email": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Email"
+        },
+        "links": {
+          "$ref": "#/$defs/Links"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "full_name"
+      ],
+      "title": "PersonalInfo",
+      "type": "object"
+    },
+    "Project": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/Bilingual"
+        },
+        "description": {
+          "$ref": "#/$defs/Bilingual"
+        },
+        "tech": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tech",
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "Project",
+      "type": "object"
+    },
+    "ResumeMeta": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": "2.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "canonical_language": {
+          "default": "pt-BR",
+          "title": "Canonical Language",
+          "type": "string"
+        },
+        "last_updated": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Updated"
+        },
+        "source_documents": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Documents",
+          "type": "array"
+        }
+      },
+      "title": "ResumeMeta",
+      "type": "object"
+    },
+    "SkillCategory": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "title": "Category",
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "category"
+      ],
+      "title": "SkillCategory",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "$ref": "#/$defs/ResumeMeta"
+    },
+    "personal_info": {
+      "$ref": "#/$defs/PersonalInfo"
+    },
+    "summary": {
+      "$ref": "#/$defs/Bilingual"
+    },
+    "skills": {
+      "items": {
+        "$ref": "#/$defs/SkillCategory"
+      },
+      "title": "Skills",
+      "type": "array"
+    },
+    "experience": {
+      "items": {
+        "$ref": "#/$defs/Experience"
+      },
+      "title": "Experience",
+      "type": "array"
+    },
+    "education": {
+      "items": {
+        "$ref": "#/$defs/Education"
+      },
+      "title": "Education",
+      "type": "array"
+    },
+    "projects": {
+      "items": {
+        "$ref": "#/$defs/Project"
+      },
+      "title": "Projects",
+      "type": "array"
+    },
+    "certifications": {
+      "items": {
+        "$ref": "#/$defs/Certification"
+      },
+      "title": "Certifications",
+      "type": "array"
+    },
+    "languages": {
+      "items": {
+        "$ref": "#/$defs/LanguageSkill"
+      },
+      "title": "Languages",
+      "type": "array"
+    },
+    "job_preferences": {
+      "$ref": "#/$defs/JobPreferences"
+    },
+    "conflicts": {
+      "items": {
+        "$ref": "#/$defs/Conflict"
+      },
+      "title": "Conflicts",
+      "type": "array"
+    },
+    "change_log": {
+      "items": {
+        "$ref": "#/$defs/ChangeRecord"
+      },
+      "title": "Change Log",
+      "type": "array"
+    }
+  },
+  "required": [
+    "personal_info",
+    "summary"
+  ],
+  "title": "Resume",
+  "type": "object"
+}
