@@ -6,7 +6,7 @@ FRAME_SECONDS = 0.05
 
 
 def make_detector(**kwargs) -> ClapDetector:
-    kwargs.setdefault("threshold", 4000)
+    kwargs.setdefault("threshold", 6000)
     kwargs.setdefault("clap_window_seconds", 1.5)
     return ClapDetector(**kwargs)
 
@@ -60,3 +60,15 @@ def test_three_onsets_second_and_third_pair_up():
     assert detector.process(LOUD, FRAME_SECONDS) is True  # 2nd onset pairs with 1st -- fires
     assert detector.process(QUIET, FRAME_SECONDS) is False
     assert detector.process(LOUD, FRAME_SECONDS) is False  # 3rd onset -- starts a fresh attempt, no pair yet
+
+
+def test_short_transient_in_mostly_silent_frame_is_still_detected():
+    # This is the actual real-world bug: a clap's transient only lasts a few
+    # ms inside an 80ms frame. RMS over the whole frame would dilute this
+    # far below threshold; peak amplitude catches it directly.
+    detector = make_detector(threshold=6000)
+    transient_frame = [0] * 1270 + [30_000] * 10  # spike buried in near-silence
+
+    assert detector.process(transient_frame, FRAME_SECONDS) is False  # 1st onset
+    assert detector.process(QUIET, FRAME_SECONDS) is False
+    assert detector.process(transient_frame, FRAME_SECONDS) is True  # 2nd onset -- fires

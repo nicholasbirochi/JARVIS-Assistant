@@ -4,9 +4,15 @@ rising-edge amplitude detection on the same mic frames), so it's driven
 alongside the primary engine by WakeWordListener rather than selected via
 WAKE_WORD_ENGINE.
 
+Uses PEAK amplitude, not RMS. A clap's actual acoustic transient is only a
+few ms long; RMS averages energy across the whole frame (openWakeWord's
+frame is 80ms), which dilutes a brief sharp spike enough that real claps
+were empirically observed not to cross an RMS threshold at all. Peak (max
+|sample|) captures the transient directly, which is what a clap actually is.
+
 Amplitude-based clap detection is inherently more environment-sensitive
 than the neural-net wake-word engines (mic gain, distance, room noise all
-shift what "loud" means) -- CLAP_RMS_THRESHOLD is deliberately a tunable
+shift what "loud" means) -- CLAP_PEAK_THRESHOLD is deliberately a tunable
 config constant, not a hardcoded one, so it can be adjusted without a code
 change if it's too trigger-happy or too insensitive in practice.
 """
@@ -14,10 +20,10 @@ change if it's too trigger-happy or too insensitive in practice.
 from __future__ import annotations
 
 
-def _rms(frame: list[int]) -> float:
+def _peak(frame: list[int]) -> int:
     if not frame:
-        return 0.0
-    return (sum(sample * sample for sample in frame) / len(frame)) ** 0.5
+        return 0
+    return max(abs(sample) for sample in frame)
 
 
 class ClapDetector:
@@ -27,9 +33,9 @@ class ClapDetector:
         clap_window_seconds: float | None = None,
         min_gap_seconds: float = 0.1,
     ) -> None:
-        from jarvis.config import CLAP_RMS_THRESHOLD, CLAP_WINDOW_SECONDS
+        from jarvis.config import CLAP_PEAK_THRESHOLD, CLAP_WINDOW_SECONDS
 
-        self._threshold = threshold if threshold is not None else CLAP_RMS_THRESHOLD
+        self._threshold = threshold if threshold is not None else CLAP_PEAK_THRESHOLD
         self._clap_window_seconds = (
             clap_window_seconds if clap_window_seconds is not None else CLAP_WINDOW_SECONDS
         )
@@ -44,7 +50,7 @@ class ClapDetector:
         this frame -- passed in rather than assumed, since it depends on
         whichever WakeWordEngine's frame_length/sample_rate is active."""
         self._elapsed += frame_seconds
-        loud = _rms(frame) >= self._threshold
+        loud = _peak(frame) >= self._threshold
 
         # Rising-edge only: a clap's reverb/decay can span a couple of
         # frames, and counting every still-loud frame would register one

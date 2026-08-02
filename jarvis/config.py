@@ -44,10 +44,12 @@ WAKE_WORD_ENGINE = os.environ.get("WAKE_WORD_ENGINE", "openwakeword")
 
 # Two claps is a second, independent activation trigger that always runs
 # alongside the wake-word engine above (see jarvis/voice/engines/clap_detector.py).
+# Peak amplitude, not RMS -- a clap's transient is a few ms long and RMS
+# over an 80ms frame dilutes it too much to reliably cross a threshold.
 # Amplitude-based detection is more environment-sensitive than the neural
 # wake-word engines, so the threshold is a tunable env var, not fixed in code.
 CLAP_ACTIVATION_ENABLED = os.environ.get("CLAP_ACTIVATION_ENABLED", "true").lower() != "false"
-CLAP_RMS_THRESHOLD = float(os.environ.get("CLAP_RMS_THRESHOLD", "4000"))
+CLAP_PEAK_THRESHOLD = float(os.environ.get("CLAP_PEAK_THRESHOLD", "6000"))
 CLAP_WINDOW_SECONDS = float(os.environ.get("CLAP_WINDOW_SECONDS", "1.5"))
 
 WHISPER_MODEL_SIZE = "small"
