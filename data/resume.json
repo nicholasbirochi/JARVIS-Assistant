@@ -1,0 +1,392 @@
+{
+  "meta": {
+    "schema_version": "2.0",
+    "canonical_language": "pt-BR",
+    "last_updated": "2026-07-30T03:59:24.728116+00:00",
+    "source_documents": [
+      "Currículo - DataBase - Brasil ATS.docx",
+      "Currículo - DataBase - International ATS.docx"
+    ]
+  },
+  "personal_info": {
+    "full_name": "Nicholas Birochi",
+    "location": {
+      "city": "São Bernardo do Campo",
+      "state": "SP",
+      "country": null
+    },
+    "phone": "+55 11 98888-7777",
+    "email": "nicholas.birochi@gmail.com",
+    "links": {
+      "linkedin": "https://www.linkedin.com/in/nicholasbirochi/",
+      "github": "https://github.com/nicholasbirochi/",
+      "portfolio": "https://app.rocketseat.com.br/me/nicholasbirochi/",
+      "other": []
+    },
+    "evidence": []
+  },
+  "summary": {
+    "pt": "Estudante de Engenharia da Computação com experiência em análise de dados e desenvolvimento de projetos em Python, R, SQL e Power BI. Busco uma posição como Analista de Dados Júnior para aplicar e aprimorar minhas habilidades em análise estatística, visualização de dados e machine learning, contribuindo para a geração de insights e soluções baseadas em dados.",
+    "en": "I am a Computer Engineering student with experience in data analysis and projects using Python, R, SQL, and Power BI. Seeking a Junior Data Analyst position to apply and develop skills in statistical analysis, data visualization, and machine learning, contributing to data-driven insights and solutions."
+  },
+  "skills": [
+    {
+      "category": "Programming",
+      "items": [
+        "Python",
+        "R",
+        "SQL",
+        "C#",
+        "Java"
+      ]
+    },
+    {
+      "category": "BI & Analytics Tools",
+      "items": [
+        "Power BI",
+        "Excel",
+        "PowerApps"
+      ]
+    },
+    {
+      "category": "Data Analysis",
+      "items": [
+        "Statistical Analysis",
+        "Data Modeling",
+        "Data Visualization",
+        "Data Cleaning & Wrangling"
+      ]
+    },
+    {
+      "category": "Libraries (Python/R)",
+      "items": [
+        "Pandas",
+        "NumPy",
+        "Matplotlib",
+        "Seaborn",
+        "scikit-learn",
+        "ggplot2",
+        "dplyr"
+      ]
+    },
+    {
+      "category": "Databases",
+      "items": [
+        "SQL querying for data extraction and manipulation"
+      ]
+    }
+  ],
+  "experience": [
+    {
+      "id": "default",
+      "title": {
+        "pt": "Estagiário em Análise de Dados",
+        "en": "Data Analysis Intern"
+      },
+      "company": "Volkswagen",
+      "location": "São Paulo, Brazil",
+      "start_date": "Apr 2025",
+      "end_date": "Present",
+      "is_current": true,
+      "bullets_pt": [
+        "Atuação na área de análise de dados com foco em investigação de dados adquiridos pela empresa.",
+        "Utilização de Python, Power BI, SQL, SAP e Excel para processar e analisar grandes volumes de dados.",
+        "Colaboração com equipes multidisciplinares para resolver problemas de dados e implementar soluções práticas."
+      ],
+      "bullets_en": [
+        "Work in data analysis focused on investigating datasets acquired by the company.",
+        "Use Python, Power BI, SQL, SAP, and Excel to process and analyze large data volumes.",
+        "Collaborate with cross-functional teams to troubleshoot data issues and implement practical solutions."
+      ],
+      "evidence": []
+    },
+    {
+      "id": "default",
+      "title": {
+        "pt": "Estagiário em Análise de Dados",
+        "en": "Data Analysis Intern"
+      },
+      "company": "PratikaUD",
+      "location": "São Paulo, Brazil",
+      "start_date": "Jan 2023",
+      "end_date": "Dec 2024",
+      "is_current": false,
+      "bullets_pt": [
+        "Automatização e análise de dados utilizando funções avançadas do Excel, como 'PROC', 'ÍNDICE' e tabelas dinâmicas.",
+        "Contribuição para a melhoria da eficiência dos processos de dados, resultando em um aumento de 45% na precisão de relatórios internos."
+      ],
+      "bullets_en": [
+        "Automated and analyzed data using advanced Excel functions (LOOKUP, INDEX) and PivotTables.",
+        "Contributed to process efficiency improvements, increasing internal report accuracy by 45%."
+      ],
+      "evidence": []
+    }
+  ],
+  "education": [
+    {
+      "degree": {
+        "pt": "Engenharia da Computação",
+        "en": "B.S., Computer Engineering"
+      },
+      "institution": "Faculdade Engenheiro Salvador Arena",
+      "location": "São Bernardo do Campo, SP",
+      "status": "in_progress",
+      "start_date": "2023-01-01",
+      "end_date": "2027-12-31",
+      "evidence": []
+    },
+    {
+      "degree": {
+        "pt": "Ensino Médio",
+        "en": "High School Diploma"
+      },
+      "institution": "Colégio Ábaco",
+      "location": "São Bernardo do Campo, SP",
+      "status": "completed",
+      "start_date": "2019-01-01",
+      "end_date": "2022-12-31",
+      "evidence": []
+    }
+  ],
+  "projects": [
+    {
+      "name": {
+        "pt": "Projetos de Análise de Dados em R",
+        "en": "Data Analysis Projects in R"
+      },
+      "description": {
+        "pt": "Análise e listagem de aprendizados práticos utilizando a linguagem R para manipulação e visualização de dados.",
+        "en": "Practical analyses documenting learnings in data manipulation and visualization."
+      },
+      "tech": [],
+      "evidence": []
+    },
+    {
+      "name": {
+        "pt": "Projeto de Simulação de Áudio com Efeito Doppler (C# e JAVA)",
+        "en": "Audio Doppler Effect Simulation (C# & Java)"
+      },
+      "description": {
+        "pt": "Desenvolvimento de uma aplicação para simular o efeito Doppler em áudio, aplicando conceitos de programação orientada a objetos.",
+        "en": "Application simulating the Doppler effect in audio using OOP concepts."
+      },
+      "tech": [],
+      "evidence": []
+    },
+    {
+      "name": {
+        "pt": "Projeto de Lançamento Balístico e Sistemas Lineares (C# e JAVA)",
+        "en": "Ballistic Trajectory & Linear Systems (C# & Java)"
+      },
+      "description": {
+        "pt": "Implementação de modelos matemáticos para simulação de lançamento balístico e resolução de sistemas lineares.",
+        "en": "Mathematical modeling for ballistic simulations and solving linear systems."
+      },
+      "tech": [],
+      "evidence": []
+    },
+    {
+      "name": {
+        "pt": "Projeto de Criptografia (Matrix - C# e JAVA)",
+        "en": "Cryptography (Matrix-based, C# & Java)"
+      },
+      "description": {
+        "pt": "Criação de um sistema de criptografia baseado em operações de matrizes.",
+        "en": "Encryption system built on matrix operations."
+      },
+      "tech": [],
+      "evidence": []
+    },
+    {
+      "name": {
+        "pt": "Projetos Finais em Power BI",
+        "en": "Power BI Final Projects"
+      },
+      "description": {
+        "pt": "Desenvolvimento de dashboards interativos para análise de dados de negócios, focando em clareza e usabilidade.",
+        "en": "Interactive dashboards for business analytics with a focus on clarity and usability."
+      },
+      "tech": [],
+      "evidence": []
+    }
+  ],
+  "certifications": [
+    {
+      "name": "Comprehensive Data Analytics & Data Science Program",
+      "hours": 26,
+      "status": "in_progress",
+      "date": "Oct/2025",
+      "evidence": []
+    },
+    {
+      "name": "Clean Code with Python",
+      "hours": 13,
+      "status": "completed",
+      "date": "Sep/2025",
+      "evidence": []
+    },
+    {
+      "name": "R Programming Course",
+      "hours": 7,
+      "status": "completed",
+      "date": "Dec/2024",
+      "evidence": []
+    },
+    {
+      "name": "Advanced Probability & Statistics",
+      "hours": 3,
+      "status": "completed",
+      "date": "Dec/2024",
+      "evidence": []
+    },
+    {
+      "name": "Data Science for Beginners + Real Projects",
+      "hours": 4,
+      "status": "completed",
+      "date": "Aug/2024",
+      "evidence": []
+    },
+    {
+      "name": "Data Analysis in Python & Machine Learning",
+      "hours": 5,
+      "status": "completed",
+      "date": "Aug/2024",
+      "evidence": []
+    },
+    {
+      "name": "Power BI (Elective)",
+      "hours": 40,
+      "status": "completed",
+      "date": null,
+      "evidence": []
+    }
+  ],
+  "languages": [
+    {
+      "name": "Portuguese",
+      "proficiency": "Native",
+      "test_score": null,
+      "evidence": []
+    },
+    {
+      "name": "English",
+      "proficiency": "Upper-Intermediate (B2 First - Score 153)",
+      "test_score": null,
+      "evidence": []
+    },
+    {
+      "name": "German",
+      "proficiency": "Beginner (A1)",
+      "test_score": null,
+      "evidence": []
+    }
+  ],
+  "job_preferences": {
+    "target_roles": [],
+    "notes": null,
+    "availability": {
+      "status": "unspecified",
+      "notice_period_days": null,
+      "available_from": null,
+      "notes": null
+    }
+  },
+  "conflicts": [
+    {
+      "id": "conflict-9dc37642",
+      "field_path": "personal_info.phone",
+      "existing_value": "+55 11 98888-7777",
+      "proposed_value": "+55 (11) 95827-5250",
+      "sources": [
+        {
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - International ATS.docx",
+          "source_type": "docx",
+          "read_at": "2026-07-30T03:57:16.007483+00:00",
+          "snippet": "+55 (11) 95827-5250",
+          "confidence": 1.0,
+          "review_status": "pending"
+        }
+      ],
+      "detected_at": "2026-07-30T03:59:24.723231+00:00",
+      "status": "open",
+      "resolution_note": null
+    },
+    {
+      "id": "conflict-29642c05",
+      "field_path": "certifications.4.hours",
+      "existing_value": 4,
+      "proposed_value": 4.5,
+      "sources": [
+        {
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - International ATS.docx",
+          "source_type": "docx",
+          "read_at": "2026-07-30T03:57:16.007483+00:00",
+          "snippet": "(4.5h, Aug/2024)",
+          "confidence": 1.0,
+          "review_status": "pending"
+        }
+      ],
+      "detected_at": "2026-07-30T03:59:24.726091+00:00",
+      "status": "open",
+      "resolution_note": null
+    },
+    {
+      "id": "conflict-e71f988a",
+      "field_path": "certifications.3.hours",
+      "existing_value": 3,
+      "proposed_value": 7.5,
+      "sources": [
+        {
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - International ATS.docx",
+          "source_type": "docx",
+          "read_at": "2026-07-30T03:57:16.007483+00:00",
+          "snippet": "(7.5h, Dec/2024)",
+          "confidence": 1.0,
+          "review_status": "pending"
+        }
+      ],
+      "detected_at": "2026-07-30T03:59:24.726747+00:00",
+      "status": "open",
+      "resolution_note": null
+    },
+    {
+      "id": "conflict-06d9929c",
+      "field_path": "personal_info.phone",
+      "existing_value": "+55 11 98888-7777",
+      "proposed_value": "+55 (11) 95827-5250",
+      "sources": [
+        {
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - Brasil ATS.docx",
+          "source_type": "docx",
+          "read_at": "2026-07-30T03:58:18.398436+00:00",
+          "snippet": "+55 (11) 95827-5250",
+          "confidence": 1.0,
+          "review_status": "pending"
+        }
+      ],
+      "detected_at": "2026-07-30T03:59:24.727329+00:00",
+      "status": "open",
+      "resolution_note": null
+    },
+    {
+      "id": "conflict-b0543fe4",
+      "field_path": "certifications.4.hours",
+      "existing_value": 4,
+      "proposed_value": 4.5,
+      "sources": [
+        {
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - Brasil ATS.docx",
+          "source_type": "docx",
+          "read_at": "2026-07-30T03:58:18.398436+00:00",
+          "snippet": "Ciência de Dados para Iniciantes + Projetos Reais (4,5h, Ago/2024)",
+          "confidence": 1.0,
+          "review_status": "pending"
+        }
+      ],
+      "detected_at": "2026-07-30T03:59:24.727858+00:00",
+      "status": "open",
+      "resolution_note": null
+    }
+  ],
+  "change_log": []
+}
