@@ -9,12 +9,13 @@ Indeed, Academia do Universitário e outros via adaptadores).
 100% local: o "cérebro" roda via [Ollama](https://ollama.com) na própria máquina —
 nenhum dado do currículo ou da conversa sai do Mac, sem API paga, sem chave de nenhum
 serviço em nuvem. O reconhecimento de voz (wake word + transcrição) também é
-inteiramente local e não exige conta de nenhum tipo.
+inteiramente local e não exige conta de nenhum tipo. Ativa por "Hey Jarvis" ou por duas
+palmas -- o que vier primeiro.
 
-Estado atual: **Etapas 1-3 completas** (diagnóstico, consolidação de dados + indexação
-incremental, voz totalmente local). **Etapa 4** (app de menu bar) e a implementação real
-do primeiro adaptador de site (**Etapa 5**, já com design e recomendação prontos) ficam
-para uma próxima rodada.
+Estado atual: **Etapas 1-4 completas** (diagnóstico, consolidação de dados + indexação
+incremental, voz totalmente local, app de menu bar). A implementação real do primeiro
+adaptador de site (**Etapa 5**, já com design e recomendação prontos) fica para uma
+próxima rodada.
 
 ## Arquitetura
 
@@ -39,6 +40,9 @@ para uma próxima rodada.
   conversa.
 - **`jarvis/sites/base.py`** — interface `SiteAdapter` (design pronto, nenhum adaptador
   implementado ainda). Ver seção "Próximo adaptador de site" abaixo.
+- **`jarvis/menubar.py`** — app de menu bar (macOS) com botão liga/desliga; roda o loop
+  de voz em background thread, controlado por `VoiceLoopController`. Sempre iniciado
+  manualmente (`python -m jarvis menubar`), nunca no login.
 
 ## Setup
 
@@ -84,10 +88,16 @@ Conversar em modo texto (sem microfone, útil para depurar):
 python -m jarvis --text-only
 ```
 
-Modo de voz completo (diga "Hey Jarvis" para ativar):
+Modo de voz completo (diga "Hey Jarvis" ou bata duas palmas para ativar):
 
 ```bash
 python -m jarvis
+```
+
+App de menu bar (mesma coisa, com um ícone e botão liga/desliga):
+
+```bash
+python -m jarvis menubar
 ```
 
 ## Próximo adaptador de site
@@ -107,11 +117,10 @@ com diff, confirmação explícita antes de qualquer envio real.
 
 ## Roadmap
 
-- **Etapa 4** (não implementada nesta entrega): app de menu bar (macOS) com
-  liga/desliga do wake word, status, abrir logs/perfil, revisar propostas pendentes —
-  sem auto-início no login.
 - **Etapa 5**: implementar o primeiro adaptador real (Gupy, ver acima) seguindo a
   interface já definida em `jarvis/sites/base.py`.
 - Depois: adaptadores restantes (Catho, InfoJobs, Vagas.com, Indeed, Academia do
   Universitário) + mapeamento de campos por site; MLXProvider como opção de menor
-  latência; detecção de duplicatas entre propostas do indexador.
+  latência; detecção de duplicatas entre propostas do indexador; itens extras no menu
+  bar (abrir logs/perfil, revisar propostas pendentes direto do menu -- hoje só tem
+  liga/desliga).
