@@ -2,9 +2,7 @@
 loop, running in a background thread so the menu itself stays responsive.
 
 Launched manually (`python -m jarvis menubar`) -- never auto-starts at
-login. Starts already listening (matches what running `python -m jarvis`
-directly already does) so switching to the menu-bar app isn't a step
-backward; the button is there for whenever you want to turn it off.
+login, and starts OFF -- listening only begins once you click the toggle.
 """
 
 from __future__ import annotations
@@ -16,8 +14,8 @@ import rumps
 
 from jarvis.assistant.conversation import run_voice_loop
 
-ICON_OFF = "🤖"
-ICON_ON = "🤖🎙️"
+ICON_OFF = "🔇"
+ICON_ON = "🔈"
 
 
 class VoiceLoopController:
@@ -54,12 +52,10 @@ class VoiceLoopController:
 
 class JarvisMenuBarApp(rumps.App):
     def __init__(self) -> None:
-        super().__init__(ICON_OFF, quit_button="Sair")
-        self._toggle_item = rumps.MenuItem("Desligar JARVIS", callback=self.toggle)
+        super().__init__("JARVIS", title=ICON_OFF, quit_button="Sair")
+        self._toggle_item = rumps.MenuItem("Ligar JARVIS", callback=self.toggle)
         self.menu = [self._toggle_item]
-        self._controller = VoiceLoopController()
-        self._controller.start()  # listening by default -- see module docstring
-        self.title = ICON_ON
+        self._controller = VoiceLoopController()  # starts OFF -- see module docstring
 
     def toggle(self, _sender: rumps.MenuItem) -> None:
         if self._controller.is_running:

@@ -3,6 +3,7 @@ constant that must never be paraphrased by the LLM."""
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -10,6 +11,15 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
+
+# Quiet by design: this runs as a background listener, not a dev tool, so
+# library log/progress noise (huggingface_hub download bars, openwakeword's
+# "tried to import tflite runtime" notice, etc.) has nowhere useful to go.
+# Must be set before those libraries are imported, which is why this lives
+# at the top of config.py -- everything else imports config first.
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+logging.getLogger().setLevel(logging.ERROR)
 
 PICOVOICE_ACCESS_KEY = os.environ.get("PICOVOICE_ACCESS_KEY")
 
@@ -34,7 +44,7 @@ LOCAL_MODEL = os.environ.get("JARVIS_MODEL", "qwen2.5:14b")
 GREETING = "Seja bem-vindo, Senhor Nicholas... vamos começar o trabalho!"
 CLAP_GREETING = "Olá, Nicolas, vamos começar o trabalho!"
 
-TTS_VOICE = "Luciana"
+TTS_VOICE = os.environ.get("TTS_VOICE", "Eddy")  # pt_BR male voice; "Luciana" is the female alternative
 WAKE_WORD = "jarvis"
 STOP_PHRASES = ("tchau jarvis", "tchau, jarvis", "obrigado jarvis", "encerrar")
 
