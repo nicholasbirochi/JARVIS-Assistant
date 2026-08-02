@@ -1,0 +1,72 @@
+"""Central configuration: paths, secrets, model IDs, and the one exact-phrase
+constant that must never be paraphrased by the LLM."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
+
+PICOVOICE_ACCESS_KEY = os.environ.get("PICOVOICE_ACCESS_KEY")
+
+DATA_DIR = PROJECT_ROOT / "data"
+RESUME_PATH = DATA_DIR / "resume.json"
+RESUME_SCHEMA_PATH = DATA_DIR / "resume.schema.json"
+BACKUPS_DIR = DATA_DIR / "backups"
+REVIEW_DIR = DATA_DIR / "review"
+
+# Local LLM served by Ollama (https://ollama.com) -- no cloud API, no API key.
+# `ollama pull` the model once via CLI before first use; see README.md.
+# LLM_PROVIDER selects the LocalLLMProvider implementation (jarvis/assistant/providers.py);
+# only "ollama" exists today, kept configurable so a future MLXProvider slots in cleanly.
+LLM_PROVIDER = os.environ.get("JARVIS_LLM_PROVIDER", "ollama")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+LOCAL_MODEL = os.environ.get("JARVIS_MODEL", "qwen2.5:14b")
+
+# Spoken the instant the wake word fires, before the model is ever invoked -- an
+# LLM asked to "say this greeting" could paraphrase or drop the ellipsis, which
+# isn't acceptable for a phrase the user specified verbatim.
+GREETING = "Seja bem-vindo, Senhor Nicholas... vamos começar o trabalho!"
+
+TTS_VOICE = "Luciana"
+WAKE_WORD = "jarvis"
+STOP_PHRASES = ("tchau jarvis", "tchau, jarvis", "obrigado jarvis", "encerrar")
+
+# "openwakeword" (default, no account/key -- ships a pretrained "hey jarvis"
+# model) or "porcupine" (optional adapter, needs PICOVOICE_ACCESS_KEY).
+WAKE_WORD_ENGINE = os.environ.get("WAKE_WORD_ENGINE", "openwakeword")
+
+WHISPER_MODEL_SIZE = "small"
+WHISPER_LANGUAGE = "pt"
+
+SOURCE_RESUME_DOCS = [
+    "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - Brasil ATS.docx",
+    "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - International ATS.docx",
+]
+
+# Incremental document indexer (jarvis/indexing/) -- only these roots are ever
+# scanned; the project's own repo is explicitly excluded so code/README never
+# get mistaken for résumé projects.
+_ONEDRIVE_ROOT = "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena"
+AUTHORIZED_INDEX_ROOTS = [
+    Path(f"{_ONEDRIVE_ROOT}/Extras/Perfil/Currículos"),
+    Path(f"{_ONEDRIVE_ROOT}/Estudos/Completed courses"),
+    Path(f"{_ONEDRIVE_ROOT}/Estudos/Projetos"),
+]
+EXCLUDED_INDEX_PATHS = [
+    Path(f"{_ONEDRIVE_ROOT}/Estudos/Projetos/54 - J.A.R.V.I.S"),
+]
+INDEXABLE_EXTENSIONS = {".docx", ".pdf", ".txt", ".md"}
+# Vendored/build noise inside project folders -- not the user's own writing,
+# and would otherwise drown out real project READMEs in every indexing run.
+EXCLUDED_DIR_NAMES = {
+    "node_modules", ".git", ".venv", "venv", "__pycache__", "obj", "bin",
+    "dist", "build", ".next", "target", ".pytest_cache", "egg-info",
+}
+INDEX_STATE_PATH = DATA_DIR / "index_state.json"
+PROPOSALS_DIR = DATA_DIR / "proposals"
+INDEX_MAX_FILES_PER_RUN = 20

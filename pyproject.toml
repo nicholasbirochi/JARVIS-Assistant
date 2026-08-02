@@ -1,0 +1,28 @@
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "Personal voice assistant: wake word + conversation to review/update Nicholas's resume."
+requires-python = ">=3.11"
+dependencies = [
+    "ollama>=0.4.0",
+    "docstring-parser>=0.16",
+    "openwakeword>=0.6.0",
+    "pypdf>=4.0.0",
+    "pvporcupine>=3.0.0",
+    "pvrecorder>=1.2.0",
+    "faster-whisper>=1.0.0",
+    "numpy>=1.26.0",
+    "pydantic>=2.6.0",
+    "python-docx>=1.1.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["jarvis*"]

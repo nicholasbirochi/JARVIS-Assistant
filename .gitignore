@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/backups/
+data/proposals/
+data/index_state.json
+.pytest_cache/
+*.egg-info/
+Completed courses/
