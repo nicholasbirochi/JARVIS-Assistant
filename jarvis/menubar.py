@@ -3,19 +3,26 @@ loop, running in a background thread so the menu itself stays responsive.
 
 Launched manually (`python -m jarvis menubar`) -- never auto-starts at
 login, and starts OFF -- listening only begins once you click the toggle.
+
+Icons are template PNGs rendered from SF Symbols (see
+scripts/generate_menubar_icons.py) -- macOS tints them to match every other
+native menu-bar icon (monochrome, adapts to light/dark) instead of showing
+a colored emoji.
 """
 
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import Callable
 
 import rumps
 
 from jarvis.assistant.conversation import run_voice_loop
 
-ICON_OFF = "🔇"
-ICON_ON = "🔈"
+_ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+ICON_OFF = str(_ASSETS_DIR / "icon_off.png")
+ICON_ON = str(_ASSETS_DIR / "icon_on.png")
 
 
 class VoiceLoopController:
@@ -52,7 +59,7 @@ class VoiceLoopController:
 
 class JarvisMenuBarApp(rumps.App):
     def __init__(self) -> None:
-        super().__init__("JARVIS", title=ICON_OFF, quit_button="Sair")
+        super().__init__("JARVIS", icon=ICON_OFF, template=True, quit_button="Sair")
         self._toggle_item = rumps.MenuItem("Ligar JARVIS", callback=self.toggle)
         self.menu = [self._toggle_item]
         self._controller = VoiceLoopController()  # starts OFF -- see module docstring
@@ -60,11 +67,11 @@ class JarvisMenuBarApp(rumps.App):
     def toggle(self, _sender: rumps.MenuItem) -> None:
         if self._controller.is_running:
             self._controller.stop()
-            self.title = ICON_OFF
+            self.icon = ICON_OFF
             self._toggle_item.title = "Ligar JARVIS"
         else:
             self._controller.start()
-            self.title = ICON_ON
+            self.icon = ICON_ON
             self._toggle_item.title = "Desligar JARVIS"
 
 
