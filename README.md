@@ -100,6 +100,17 @@ App de menu bar (mesma coisa, com um ícone e botão liga/desliga):
 python -m jarvis menubar
 ```
 
+Pra ele iniciar sozinho a cada login (ícone sempre disponível, sem precisar abrir terminal),
+registre como LaunchAgent -- ajuste os caminhos pro seu usuário/pasta do projeto:
+
+```bash
+cp com.nicholasbirochi.jarvis.menubar.plist.example ~/Library/LaunchAgents/com.SEUUSUARIO.jarvis.menubar.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.SEUUSUARIO.jarvis.menubar.plist
+```
+
+`RunAtLoad` liga sozinho no login; sem `KeepAlive`, então "Sair" no menu realmente encerra
+até o próximo login (não fica sendo religado). Logs em `~/Library/Logs/JARVIS/menubar.log`.
+
 ## Próximo adaptador de site
 
 Recomendação: **Gupy primeiro, não LinkedIn.** O LinkedIn tem infraestrutura de
