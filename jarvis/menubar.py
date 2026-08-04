@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 import rumps
+from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 
 from jarvis.assistant.conversation import run_voice_loop
 
@@ -60,6 +61,13 @@ class VoiceLoopController:
 class JarvisMenuBarApp(rumps.App):
     def __init__(self) -> None:
         super().__init__("JARVIS", icon=ICON_OFF, template=True, quit_button="Sair")
+        # rumps never sets an activation policy, so by default this process
+        # (literally "Python", since there's no .app bundle) shows a Dock
+        # icon and grabs Cmd-Tab like a regular foreground app. Accessory
+        # policy makes it a pure menu-bar presence -- no Dock, no Cmd-Tab.
+        NSApplication.sharedApplication().setActivationPolicy_(
+            NSApplicationActivationPolicyAccessory
+        )
         self._toggle_item = rumps.MenuItem("Ligar JARVIS", callback=self.toggle)
         self.menu = [self._toggle_item]
         self._controller = VoiceLoopController()  # starts OFF -- see module docstring
