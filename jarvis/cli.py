@@ -3,7 +3,9 @@
 by typing instead of speaking -- no mic, wake-word engine, or TTS needed.
 `python -m jarvis index` scans authorized directories for résumé updates;
 `python -m jarvis review-proposals` reviews the most recent proposal;
-`python -m jarvis menubar` runs the macOS menu-bar on/off toggle."""
+`python -m jarvis menubar` runs the macOS menu-bar on/off toggle;
+`python -m jarvis calibrate-claps` prints live mic peak amplitude to help
+tune CLAP_PEAK_THRESHOLD."""
 
 from __future__ import annotations
 
@@ -23,6 +25,10 @@ def main() -> None:
     )
     subparsers.add_parser("review-proposals", help="Revisa interativamente a proposta mais recente.")
     subparsers.add_parser("menubar", help="App de menu bar do macOS com botão liga/desliga.")
+    subparsers.add_parser(
+        "calibrate-claps",
+        help="Mostra o pico de amplitude de cada som captado, para ajustar CLAP_PEAK_THRESHOLD.",
+    )
     args = parser.parse_args()
 
     if args.command == "index":
@@ -46,6 +52,12 @@ def main() -> None:
         from jarvis.menubar import main as menubar_main
 
         menubar_main()
+        return
+
+    if args.command == "calibrate-claps":
+        from jarvis.voice.calibrate import run as calibrate_run
+
+        calibrate_run()
         return
 
     from jarvis.assistant.conversation import run_text_loop, run_voice_loop

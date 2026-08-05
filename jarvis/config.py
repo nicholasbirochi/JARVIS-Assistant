@@ -58,8 +58,12 @@ WAKE_WORD_ENGINE = os.environ.get("WAKE_WORD_ENGINE", "openwakeword")
 # over an 80ms frame dilutes it too much to reliably cross a threshold.
 # Amplitude-based detection is more environment-sensitive than the neural
 # wake-word engines, so the threshold is a tunable env var, not fixed in code.
+# Default lowered from 6000: a moderate clap at normal laptop-mic distance
+# was empirically observed to often peak well below that. Run
+# `python -m jarvis calibrate-claps` to see real peak values for your own
+# mic/room and set this precisely instead of guessing.
 CLAP_ACTIVATION_ENABLED = os.environ.get("CLAP_ACTIVATION_ENABLED", "true").lower() != "false"
-CLAP_PEAK_THRESHOLD = float(os.environ.get("CLAP_PEAK_THRESHOLD", "6000"))
+CLAP_PEAK_THRESHOLD = float(os.environ.get("CLAP_PEAK_THRESHOLD", "3500"))
 CLAP_WINDOW_SECONDS = float(os.environ.get("CLAP_WINDOW_SECONDS", "1.5"))
 
 WHISPER_MODEL_SIZE = "small"

@@ -22,8 +22,14 @@ não implementado para nenhum site, apenas explique isso quando pedido).
 
 Sempre que for editar um campo, primeiro use read_resume para confirmar o \
 caminho e o valor atual antes de chamar update_resume_field. Depois de \
-editar, confirme em uma frase curta o que mudou. Respostas devem ser curtas \
-e naturais para serem faladas em voz alta -- evite listas longas ou markdown.
+editar, confirme em uma frase curta o que mudou.
+
+Fale o mínimo necessário. Cada resposta deve ter, no máximo, uma ou duas \
+frases curtas -- só o essencial para responder ao que foi perguntado, sem \
+introdução, sem repetir o que o Nicholas disse, sem markdown, listas, ou \
+oferecer ajuda extra que não foi pedida ("posso ajudar com mais algo?" só \
+se fizer sentido de verdade, não por padrão). Se a resposta puder ser uma \
+frase, não use duas.
 """
 
 MAX_TOOL_ITERATIONS = 8

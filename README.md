@@ -41,8 +41,10 @@ próxima rodada.
 - **`jarvis/sites/base.py`** — interface `SiteAdapter` (design pronto, nenhum adaptador
   implementado ainda). Ver seção "Próximo adaptador de site" abaixo.
 - **`jarvis/menubar.py`** — app de menu bar (macOS) com botão liga/desliga; roda o loop
-  de voz em background thread, controlado por `VoiceLoopController`. Sempre iniciado
-  manualmente (`python -m jarvis menubar`), nunca no login.
+  de voz em background thread, controlado por `VoiceLoopController`. Inicia **desligado**
+  (ícone visível, mas não ouvindo até você clicar) e sem ícone no Dock/Cmd-Tab (política de
+  ativação "accessory"). Pode ser iniciado manualmente (`python -m jarvis menubar`) ou
+  automaticamente no login via LaunchAgent -- ver "Iniciar automaticamente" abaixo.
 
 ## Setup
 
@@ -92,6 +94,13 @@ Modo de voz completo (diga "Hey Jarvis" ou bata duas palmas para ativar):
 
 ```bash
 python -m jarvis
+```
+
+Se as palmas não estiverem sendo detectadas (ou disparando à toa), meça o pico real do
+seu microfone/ambiente antes de ajustar `CLAP_PEAK_THRESHOLD` no `.env`:
+
+```bash
+python -m jarvis calibrate-claps
 ```
 
 App de menu bar (mesma coisa, com um ícone e botão liga/desliga):

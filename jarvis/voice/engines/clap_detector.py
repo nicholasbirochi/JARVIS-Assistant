@@ -20,7 +20,7 @@ change if it's too trigger-happy or too insensitive in practice.
 from __future__ import annotations
 
 
-def _peak(frame: list[int]) -> int:
+def peak(frame: list[int]) -> int:
     if not frame:
         return 0
     return max(abs(sample) for sample in frame)
@@ -50,7 +50,7 @@ class ClapDetector:
         this frame -- passed in rather than assumed, since it depends on
         whichever WakeWordEngine's frame_length/sample_rate is active."""
         self._elapsed += frame_seconds
-        loud = _peak(frame) >= self._threshold
+        loud = peak(frame) >= self._threshold
 
         # Rising-edge only: a clap's reverb/decay can span a couple of
         # frames, and counting every still-loud frame would register one
