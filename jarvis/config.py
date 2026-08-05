@@ -44,19 +44,25 @@ LOCAL_MODEL = os.environ.get("JARVIS_MODEL", "qwen2.5:14b")
 GREETING = "Seja bem-vindo, Senhor Nicholas... vamos começar o trabalho!"
 CLAP_GREETING = "Olá, Nicolas, vamos começar o trabalho!"
 
-# "Luciana" (com.apple.voice.compact.pt-BR.Luciana) is the only good-quality
-# pt_BR voice installed by default on macOS. The male-sounding pt_BR options
-# (Eddy, Flo, Grandpa, Reed, Rocko...) all run on the old "Eloquence" engine
-# (com.apple.eloquence.pt-BR.*) -- noticeably robotic/broken-sounding
-# compared to Luciana's engine, confirmed via each voice's
-# AVSpeechSynthesisVoice identifier. Their bare names are also ambiguous:
-# "Eddy" etc. exist identically-named in every language Eloquence supports,
-# so passing just "Eddy" to `say -v` doesn't reliably resolve to the pt_BR
-# one. Use the full stable identifier, not the display name, to sidestep
-# that entirely -- if you download a better-quality male pt_BR voice via
-# System Settings > Accessibility > Spoken Content, set TTS_VOICE to its
-# identifier the same way (see .env.example).
-TTS_VOICE = os.environ.get("TTS_VOICE", "com.apple.voice.compact.pt-BR.Luciana")
+# "Felipe (Aprimorada)" -- com.apple.voice.enhanced.pt-BR.Felipe -- is a
+# proper Enhanced-quality male pt_BR voice (downloaded via System Settings >
+# Accessibility > Spoken Content > System Voice; NOT preinstalled). Same
+# voice family/engine as "Luciana" (com.apple.voice.compact.pt-BR.Luciana,
+# the good-quality default female alternative), unlike the male-sounding
+# names macOS ships out of the box (Eddy, Flo, Grandpa, Reed, Rocko...),
+# which all run on the old, noticeably robotic "Eloquence" engine
+# (com.apple.eloquence.pt-BR.*). Siri voices (com.apple.siri.natural.*,
+# picked in the same Settings screen's separate "Siri Voice" picker) look
+# similar but are NOT usable here at all -- confirmed unreachable via `say`
+# and via AVSpeechSynthesisVoice directly, not just the CLI; Apple doesn't
+# expose them to third-party code.
+#
+# Using the full stable identifier, not the display name, is deliberate:
+# these persona-style names exist identically across every language
+# Eloquence supports, so passing just "Eddy" (or even "Felipe") to `say -v`
+# doesn't reliably resolve to the pt_BR one. Find installed identifiers with:
+#   python -c "from AVFoundation import AVSpeechSynthesisVoice as V; [print(v.name(), v.identifier(), v.quality()) for v in V.speechVoices() if v.language()=='pt-BR']"
+TTS_VOICE = os.environ.get("TTS_VOICE", "com.apple.voice.enhanced.pt-BR.Felipe")
 WAKE_WORD = "jarvis"
 STOP_PHRASES = ("tchau jarvis", "tchau, jarvis", "obrigado jarvis", "encerrar")
 
