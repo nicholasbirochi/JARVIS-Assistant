@@ -127,7 +127,11 @@ class Project(StrictModel):
 
 class Certification(StrictModel):
     name: str
-    hours: Optional[int] = None
+    # float, not int: real course certificates commonly report half-hour
+    # durations (4.5h, 7.5h) -- an int-only field would reject genuine,
+    # correctly-extracted data. Existing whole-number values still validate
+    # fine, so this is a pure widening, no migration needed.
+    hours: Optional[float] = None
     status: Literal["in_progress", "completed"] = "completed"
     date: Optional[str] = None  # completed date, or expected date if in_progress
     evidence: list[Evidence] = Field(default_factory=list)

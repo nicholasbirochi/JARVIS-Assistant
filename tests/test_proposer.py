@@ -2,7 +2,7 @@ from pathlib import Path
 
 from jarvis.indexing import proposer
 from jarvis.indexing.proposals import LLMProposalBatch, LLMProposedChange
-from jarvis.resume.schema import Bilingual, PersonalInfo, Resume
+from jarvis.resume.schema import Bilingual, Certification, PersonalInfo, Resume
 
 
 def make_resume() -> Resume:
@@ -51,7 +51,10 @@ def test_attach_evidence_no_conflict_when_value_matches(tmp_path):
     assert changes[0].conflict is False
 
 
-def test_attach_evidence_bad_field_path_yields_none_existing_value(tmp_path):
+def test_attach_evidence_drops_change_with_unresolvable_field_path(tmp_path):
+    # A field path that doesn't resolve at all (hallucinated by the model)
+    # can never be applied -- drop it instead of surfacing it for the human
+    # to reject by hand.
     resume = make_resume()
     batch = LLMProposalBatch(
         changes=[
@@ -61,8 +64,41 @@ def test_attach_evidence_bad_field_path_yields_none_existing_value(tmp_path):
 
     changes = proposer.attach_evidence(batch, tmp_path / "x.docx", resume)
 
-    assert changes[0].existing_value is None
-    assert changes[0].conflict is False
+    assert changes == []
+
+
+def test_attach_evidence_drops_update_with_wrong_shape_for_field(tmp_path):
+    # certifications.N.hours expects a number -- a value that can't coerce
+    # into one (garbage/placeholder text from the model) must not reach
+    # the human reviewer as if it were a real proposal.
+    resume = make_resume()
+    resume.certifications.append(Certification(name="Python", hours=10))
+    batch = LLMProposalBatch(
+        changes=[
+            LLMProposedChange(
+                kind="update_field", field_path="certifications.0.hours", value="Some value here"
+            )
+        ]
+    )
+
+    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", resume)
+
+    assert changes == []
+
+
+def test_attach_evidence_drops_new_item_missing_required_field(tmp_path):
+    # Certification.name is required -- an item missing it can never
+    # actually be appended, so don't propose it.
+    resume = make_resume()
+    batch = LLMProposalBatch(
+        changes=[
+            LLMProposedChange(kind="new_item", list_field="certifications", item={"hours": 5})
+        ]
+    )
+
+    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", resume)
+
+    assert changes == []
 
 
 def test_attach_evidence_new_item_embeds_evidence_in_proposed_value(tmp_path):
@@ -97,6 +133,7 @@ def test_attach_evidence_coerces_json_string_value_to_real_type(tmp_path):
 
 def test_attach_evidence_normalizes_bracket_notation_field_path(tmp_path):
     resume = make_resume()
+    resume.certifications.append(Certification(name="Python", hours=5))
     bracket_batch = LLMProposalBatch(
         changes=[LLMProposedChange(kind="update_field", field_path="certifications[0].hours", value="10")]
     )

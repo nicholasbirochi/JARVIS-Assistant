@@ -8,6 +8,9 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+
+from pydantic import ValidationError
 
 from jarvis.assistant.providers import get_provider
 from jarvis.indexing import scanner
@@ -84,6 +87,22 @@ def _normalize_field_path(field_path: str) -> str:
     return _BRACKET_INDEX_RE.sub(r".\1", field_path).replace("..", ".")
 
 
+def _update_field_would_apply(resume: Resume, field_path: str, value: Any) -> bool:
+    try:
+        store.update_field(resume, field_path, value)
+        return True
+    except (store.FieldPathError, ValidationError):
+        return False
+
+
+def _new_item_would_apply(resume: Resume, list_field: str, item: dict) -> bool:
+    try:
+        store.append_item(resume, list_field, item)
+        return True
+    except (store.FieldPathError, ValidationError):
+        return False
+
+
 def attach_evidence(batch: LLMProposalBatch, path: Path, resume: Resume) -> list[ProposedChange]:
     read_at = datetime.now(timezone.utc).isoformat()
     source_type = _SOURCE_TYPE_BY_SUFFIX[path.suffix.lower()]
@@ -110,10 +129,28 @@ def attach_evidence(batch: LLMProposalBatch, path: Path, resume: Resume) -> list
             except store.FieldPathError:
                 existing_value = None  # LLM hallucinated a bad path -- reviewer will reject
 
+        # The local model occasionally emits a value/item that doesn't
+        # actually fit the target field's shape (a nested object where a
+        # plain number is expected, a required field missing, even literal
+        # placeholder text like "some value here"). Rather than make the
+        # human reject obvious garbage by hand one entry at a time, drop
+        # anything that wouldn't even pass the same validation store.py
+        # applies at write time -- this doesn't touch `resume` (update_field
+        # / append_item always return a new object), it's a pure dry run.
         if change.kind == "update_field":
+            if not change.field_path:
+                continue
             proposed_value = store.coerce_value(change.value)
-        else:
+            if not _update_field_would_apply(resume, change.field_path, proposed_value):
+                continue
+        elif change.kind == "new_item":
+            if not change.list_field:
+                continue
             proposed_value = {**change.item, "evidence": [evidence.model_dump(mode="json")]}
+            if not _new_item_would_apply(resume, change.list_field, proposed_value):
+                continue
+        else:
+            continue
 
         conflict = (
             change.kind == "update_field"
