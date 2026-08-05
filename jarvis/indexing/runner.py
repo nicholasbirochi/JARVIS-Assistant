@@ -35,7 +35,20 @@ def run(resume: Resume | None = None, limit: int | None = None) -> Path | None:
     changes = []
     unreadable = []
     for path in to_process:
-        text = extract.extract_text(path)
+        try:
+            text = extract.extract_text(path)
+        except OSError:
+            # File couldn't be accessed at all (OneDrive placeholder not
+            # materialized, transient network issue, etc.) -- distinct from
+            # "read fine, no text layer". Flag it and skip straight to the
+            # next file without touching index_state, so it's retried on
+            # the next run instead of being recorded as permanently
+            # unreadable.
+            unreadable.append(
+                proposer.unreadable_file_entry(path, reason="falha de leitura (tentar novamente)")
+            )
+            continue
+
         already_flagged_unreadable = text is None
         if already_flagged_unreadable:
             unreadable.append(proposer.unreadable_file_entry(path))

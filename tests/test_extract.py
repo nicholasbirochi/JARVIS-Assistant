@@ -1,3 +1,4 @@
+import pytest
 import pypdf
 
 from jarvis.indexing import extract
@@ -71,3 +72,25 @@ def test_extract_text_corrupt_docx_returns_none_instead_of_raising(tmp_path):
     path = tmp_path / "corrupt.docx"
     path.write_bytes(b"not a real docx at all")
     assert extract.extract_text(path) is None
+
+
+def test_extract_text_propagates_oserror_instead_of_treating_as_no_text(tmp_path, monkeypatch):
+    # A file that can't be *read at all* (e.g. a OneDrive online-only
+    # placeholder timing out because the sync app isn't running) is a
+    # different situation than "read fine, no text layer" -- the caller
+    # needs to tell them apart to know whether to retry later or give up.
+    # Swallowing this into a plain None would silently relabel a transient
+    # I/O failure as "this file has no text", which is wrong and not
+    # retried on a later run.
+    path = tmp_path / "notes.txt"
+    path.write_text("conteúdo", encoding="utf-8")
+
+    from pathlib import Path as PathClass
+
+    def failing_read_text(self, *args, **kwargs):
+        raise TimeoutError(60, "Operation timed out")
+
+    monkeypatch.setattr(PathClass, "read_text", failing_read_text)
+
+    with pytest.raises(OSError):
+        extract.extract_text(path)

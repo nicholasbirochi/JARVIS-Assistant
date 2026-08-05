@@ -136,9 +136,9 @@ def attach_evidence(batch: LLMProposalBatch, path: Path, resume: Resume) -> list
     return out
 
 
-def unreadable_file_entry(path: Path) -> UnreadableFile:
+def unreadable_file_entry(path: Path, reason: str = "sem texto extraível") -> UnreadableFile:
     return UnreadableFile(
         path=scanner.normalize_path_key(path),
-        reason="sem texto extraível",
+        reason=reason,
         detected_at=datetime.now(timezone.utc).isoformat(),
     )

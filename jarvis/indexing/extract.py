@@ -1,7 +1,12 @@
-"""Text extraction dispatch for the indexer. Never raises -- returns None
-for anything unreadable (unsupported extension, corrupt file, a scanned-image
+"""Text extraction dispatch for the indexer. Returns None for anything
+genuinely unreadable (unsupported extension, corrupt file, a scanned-image
 PDF with no text layer) so the caller can flag it for manual review instead
-of crashing a whole indexing run over one bad file."""
+of crashing a whole indexing run over one bad file. OSError is the one
+exception NOT swallowed here -- it means the file itself couldn't be
+accessed (e.g. a OneDrive "online-only" placeholder that timed out because
+the sync app wasn't running), which is a transient I/O problem, not a
+verdict about the file's content. The caller (runner.py) retries those
+instead of recording a permanent "no text" result."""
 
 from __future__ import annotations
 
@@ -21,6 +26,8 @@ def extract_text(path: Path) -> str | None:
             text = path.read_text(encoding="utf-8", errors="ignore")
         else:
             return None
+    except OSError:
+        raise
     except Exception:
         return None
 

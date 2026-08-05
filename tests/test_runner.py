@@ -115,6 +115,36 @@ def test_run_handles_hash_timeout_after_successful_extraction(tmp_path, monkeypa
     assert state == {}  # never marked processed -- will be retried next run
 
 
+def test_run_retries_file_that_failed_to_read_instead_of_marking_no_text(tmp_path, monkeypatch):
+    # extract.extract_text raising OSError (OneDrive placeholder timeout,
+    # etc.) must not be recorded as a permanent "no text" verdict, and the
+    # file must not be marked processed in index_state -- so it's picked
+    # up again on the next run once the file is actually readable.
+    root = _setup_authorized_root(tmp_path)
+    monkeypatch.setattr(config, "AUTHORIZED_INDEX_ROOTS", [root])
+    monkeypatch.setattr(config, "EXCLUDED_INDEX_PATHS", [])
+    monkeypatch.setattr(config, "INDEX_STATE_PATH", tmp_path / "index_state.json")
+    monkeypatch.setattr(config, "PROPOSALS_DIR", tmp_path / "proposals")
+
+    from jarvis.indexing import extract as extract_module
+
+    def failing_extract(path):
+        raise TimeoutError(60, "Operation timed out")
+
+    monkeypatch.setattr(extract_module, "extract_text", failing_extract)
+
+    result_path = runner.run(resume=make_resume())
+
+    assert result_path is not None
+    data = json.loads(result_path.read_text(encoding="utf-8"))
+    assert data["changes"] == []
+    assert len(data["unreadable_files"]) == 1
+    assert "tentar novamente" in data["unreadable_files"][0]["reason"]
+
+    state = json.loads((tmp_path / "index_state.json").read_text(encoding="utf-8"))
+    assert state == {}  # never marked processed -- will be retried next run
+
+
 def test_run_respects_limit(tmp_path, monkeypatch):
     root = tmp_path / "authorized"
     root.mkdir()
