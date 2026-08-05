@@ -54,7 +54,12 @@ class ProposedChange(StrictModel):
     list_field: Optional[str] = None
     proposed_value: Any = None
     existing_value: Any = None
-    evidence: Evidence
+    # A list, not one Evidence: the same fact commonly shows up in several
+    # source files (e.g. a "Brasil" and an "International" résumé variant
+    # both mentioning the same phone number) -- runner.py's dedupe step
+    # merges those into one change backed by every corroborating source,
+    # instead of asking the reviewer to accept the same fact N times.
+    evidence: list[Evidence] = Field(default_factory=list)
     conflict: bool = False
     rationale: Optional[str] = None
 

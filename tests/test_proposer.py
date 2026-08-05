@@ -32,8 +32,8 @@ def test_attach_evidence_detects_conflict_on_differing_value(tmp_path):
     assert len(changes) == 1
     assert changes[0].conflict is True
     assert changes[0].existing_value == "+55 11 90000-0000"
-    assert changes[0].evidence.confidence == 0.8
-    assert changes[0].evidence.snippet == "telefone: (11) 99999-9999"
+    assert changes[0].evidence[0].confidence == 0.8
+    assert changes[0].evidence[0].snippet == "telefone: (11) 99999-9999"
 
 
 def test_attach_evidence_no_conflict_when_value_matches(tmp_path):
@@ -141,6 +141,81 @@ def test_attach_evidence_normalizes_bracket_notation_field_path(tmp_path):
     changes = proposer.attach_evidence(bracket_batch, tmp_path / "x.docx", resume)
 
     assert changes[0].field_path == "certifications.0.hours"
+
+
+def test_dedupe_update_field_changes_merges_identical_proposals(tmp_path):
+    # Same fact (personal_info.phone -> the same new number), proposed
+    # independently from two different résumé file variants.
+    resume = make_resume()
+    from_file_a = proposer.attach_evidence(
+        LLMProposalBatch(
+            changes=[
+                LLMProposedChange(
+                    kind="update_field", field_path="personal_info.phone", value="+55 11 91111-1111"
+                )
+            ]
+        ),
+        tmp_path / "brasil.docx",
+        resume,
+    )
+    from_file_b = proposer.attach_evidence(
+        LLMProposalBatch(
+            changes=[
+                LLMProposedChange(
+                    kind="update_field", field_path="personal_info.phone", value="+55 11 91111-1111"
+                )
+            ]
+        ),
+        tmp_path / "international.docx",
+        resume,
+    )
+
+    merged = proposer.dedupe_update_field_changes(from_file_a + from_file_b)
+
+    assert len(merged) == 1
+    assert len(merged[0].evidence) == 2
+    sources = {e.source_path for e in merged[0].evidence}
+    assert sources == {
+        str(tmp_path / "brasil.docx"),
+        str(tmp_path / "international.docx"),
+    }
+
+
+def test_dedupe_update_field_changes_keeps_different_values_separate(tmp_path):
+    resume = make_resume()
+    resume.certifications.append(Certification(name="Python", hours=10))
+    changes = proposer.attach_evidence(
+        LLMProposalBatch(
+            changes=[
+                LLMProposedChange(kind="update_field", field_path="certifications.0.hours", value="12"),
+                LLMProposedChange(kind="update_field", field_path="certifications.0.hours", value="15"),
+            ]
+        ),
+        tmp_path / "x.docx",
+        resume,
+    )
+
+    merged = proposer.dedupe_update_field_changes(changes)
+
+    assert len(merged) == 2  # genuinely different proposed values -- not merged
+
+
+def test_dedupe_update_field_changes_leaves_new_item_changes_alone(tmp_path):
+    resume = make_resume()
+    changes = proposer.attach_evidence(
+        LLMProposalBatch(
+            changes=[
+                LLMProposedChange(kind="new_item", list_field="certifications", item={"name": "A"}),
+                LLMProposedChange(kind="new_item", list_field="certifications", item={"name": "A"}),
+            ]
+        ),
+        tmp_path / "x.docx",
+        resume,
+    )
+
+    merged = proposer.dedupe_update_field_changes(changes)
+
+    assert len(merged) == 2  # new_item deduplication is out of scope
 
 
 class FakeProvider:

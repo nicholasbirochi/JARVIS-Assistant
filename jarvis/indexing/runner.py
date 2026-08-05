@@ -75,7 +75,7 @@ def run(resume: Resume | None = None, limit: int | None = None) -> Path | None:
     proposal = Proposal(
         created_at=datetime.now(timezone.utc).isoformat(),
         source_files=[scanner.normalize_path_key(p) for p in to_process],
-        changes=changes,
+        changes=proposer.dedupe_update_field_changes(changes),
         unreadable_files=unreadable,
     )
 

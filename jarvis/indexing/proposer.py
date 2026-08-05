@@ -165,7 +165,7 @@ def attach_evidence(batch: LLMProposalBatch, path: Path, resume: Resume) -> list
                 list_field=change.list_field,
                 proposed_value=proposed_value,
                 existing_value=existing_value,
-                evidence=evidence,
+                evidence=[evidence],
                 conflict=conflict,
                 rationale=change.rationale,
             )
@@ -179,3 +179,31 @@ def unreadable_file_entry(path: Path, reason: str = "sem texto extraível") -> U
         reason=reason,
         detected_at=datetime.now(timezone.utc).isoformat(),
     )
+
+
+def dedupe_update_field_changes(changes: list[ProposedChange]) -> list[ProposedChange]:
+    """Several source files commonly yield the identical update_field
+    proposal -- e.g. a "Brasil" and an "International" résumé variant both
+    reporting the same corrected phone number. Collapse exact duplicates
+    (same field_path + same proposed_value) into one change with every
+    source's evidence attached, instead of asking the reviewer to
+    accept/reject the same fact several times in a row.
+
+    new_item changes are deliberately left untouched: whether two items are
+    "the same" needs fuzzy matching (name similarity, overlapping dates...)
+    that exact-value comparison can't do safely -- getting it wrong risks
+    silently dropping a real, distinct item. Out of scope here."""
+    deduped: list[ProposedChange] = []
+    index_by_key: dict[tuple[str, str], int] = {}
+    for change in changes:
+        if change.kind != "update_field":
+            deduped.append(change)
+            continue
+        key = (change.field_path or "", json.dumps(change.proposed_value, sort_keys=True, default=str))
+        existing_index = index_by_key.get(key)
+        if existing_index is None:
+            index_by_key[key] = len(deduped)
+            deduped.append(change)
+        else:
+            deduped[existing_index].evidence.extend(change.evidence)
+    return deduped

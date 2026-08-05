@@ -41,9 +41,11 @@ def _print_change(change: ProposedChange, index: int, total: int) -> None:
     print(f"  valor proposto: {change.proposed_value!r}")
     if change.conflict:
         print("  ATENÇÃO: conflita com o valor atual registrado.")
-    print(f"  fonte: {change.evidence.source_path}")
-    if change.evidence.snippet:
-        print(f"  trecho: \"{change.evidence.snippet}\"")
+    label = "fontes" if len(change.evidence) > 1 else "fonte"
+    print(f"  {label}: {', '.join(Path(e.source_path).name for e in change.evidence)}")
+    for e in change.evidence:
+        if e.snippet:
+            print(f'  trecho ({Path(e.source_path).name}): "{e.snippet}"')
     if change.rationale:
         print(f"  motivo: {change.rationale}")
 
@@ -71,7 +73,7 @@ def review_interactive(proposal: Proposal, input_func=input) -> None:
                     field_path=change.field_path or f"{change.list_field}.new",
                     existing_value=change.existing_value,
                     proposed_value=change.proposed_value,
-                    sources=[change.evidence],
+                    sources=change.evidence,
                     detected_at=datetime.now(timezone.utc).isoformat(),
                     status=resolved_status,
                 ),

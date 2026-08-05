@@ -19,8 +19,8 @@ def seeded_resume(tmp_path, monkeypatch):
     return path
 
 
-def _evidence() -> Evidence:
-    return Evidence(source_path="/x.docx", source_type="docx", read_at="2026-01-01T00:00:00Z")
+def _evidence() -> list[Evidence]:
+    return [Evidence(source_path="/x.docx", source_type="docx", read_at="2026-01-01T00:00:00Z")]
 
 
 def test_accept_update_field_applies_and_saves(seeded_resume):
@@ -98,7 +98,7 @@ def test_accept_new_item_appends_and_confirms_evidence(seeded_resume):
                 proposed_value={
                     "name": "Curso",
                     "status": "completed",
-                    "evidence": [_evidence().model_dump(mode="json")],
+                    "evidence": [_evidence()[0].model_dump(mode="json")],
                 },
                 evidence=_evidence(),
             )

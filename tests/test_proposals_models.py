@@ -8,14 +8,16 @@ from jarvis.indexing.proposals import (
 from jarvis.resume.schema import Evidence
 
 
-def _make_evidence() -> Evidence:
-    return Evidence(
-        source_path="/x/cert.pdf",
-        source_type="pdf",
-        read_at="2026-01-01T00:00:00Z",
-        snippet="trecho",
-        confidence=0.9,
-    )
+def _make_evidence() -> list[Evidence]:
+    return [
+        Evidence(
+            source_path="/x/cert.pdf",
+            source_type="pdf",
+            read_at="2026-01-01T00:00:00Z",
+            snippet="trecho",
+            confidence=0.9,
+        )
+    ]
 
 
 def test_llm_proposed_change_round_trip():
