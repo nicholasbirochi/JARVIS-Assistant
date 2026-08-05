@@ -52,6 +52,15 @@ Para cada mudança, inclua também:
 Não invente informações que não estejam no documento. Não proponha mudanças \
 triviais ou irrelevantes (ex.: reformatar texto). Se o documento não \
 contiver nenhum fato profissional novo ou relevante, retorne uma lista vazia.
+
+Cuidado especial com "certifications": só proponha uma nova certificação se \
+o documento efetivamente descrever um curso/certificado concluído ou em \
+andamento (linguagem como "certificado", "curso", "concluí", carga \
+horária, plataforma de ensino). Um arquivo de código-fonte ou de \
+dependências (ex.: requirements.txt, package.json, imports) que apenas \
+menciona o nome de uma biblioteca/framework NÃO é evidência de certificação \
+-- nesse caso, no máximo é evidência de uso da tecnologia em um projeto \
+("list_field"="projects"), nunca de um curso feito.
 """
 
 
