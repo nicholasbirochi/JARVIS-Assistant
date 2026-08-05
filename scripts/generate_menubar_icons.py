@@ -71,12 +71,29 @@ def render_sf_symbol_to_png(symbol_name: str, output_path: Path) -> None:
     )
     bitmap.setSize_((RENDER_SIZE_PX, RENDER_SIZE_PX))
 
+    # SF Symbols aren't square -- speaker.wave.2.fill is noticeably wider
+    # than tall (the wave arcs extend sideways), while speaker.slash.fill
+    # is closer to square. Drawing straight into the full square canvas
+    # stretches non-square symbols to fill it, distorting the glyph.
+    # Aspect-fit into the canvas instead, centered, so nothing gets
+    # squashed in either direction.
+    symbol_size = symbol_image.size()
+    scale = min(RENDER_SIZE_PX / symbol_size.width, RENDER_SIZE_PX / symbol_size.height)
+    draw_width = symbol_size.width * scale
+    draw_height = symbol_size.height * scale
+    dest_rect = NSMakeRect(
+        (RENDER_SIZE_PX - draw_width) / 2,
+        (RENDER_SIZE_PX - draw_height) / 2,
+        draw_width,
+        draw_height,
+    )
+
     NSGraphicsContext.saveGraphicsState()
     try:
         context = NSGraphicsContext.graphicsContextWithBitmapImageRep_(bitmap)
         NSGraphicsContext.setCurrentContext_(context)
         symbol_image.drawInRect_fromRect_operation_fraction_(
-            NSMakeRect(0, 0, RENDER_SIZE_PX, RENDER_SIZE_PX),
+            dest_rect,
             NSZeroRect,
             NSCompositingOperationSourceOver,
             1.0,
