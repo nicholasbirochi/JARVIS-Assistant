@@ -44,14 +44,20 @@ def run_text_loop() -> None:
         print(f"JARVIS: {reply}")
 
 
-def _run_active_session(listener, record_utterance, transcribe, speak) -> None:
+def _run_active_session(
+    listener, record_utterance, transcribe, speak, stop_event: threading.Event | None = None
+) -> None:
     """One wake-word session's ACTIVE loop, with its dependencies passed in
     so it's testable without real audio/model/TTS. Always unloads the STT
     model on the way out -- whether the session ended via stop phrase or via
     the walk-away fallback below -- since this is the natural, instantaneous
     "session over" boundary: the model stays resident for the whole
     multi-turn conversation (no per-turn reload cost) and frees the moment
-    it ends, no idle-timeout thread needed."""
+    it ends, no idle-timeout thread needed.
+
+    `stop_event` is forwarded to every `speak()` call so "Desligar JARVIS"
+    (the menu bar's off-toggle) interrupts speech that's already in
+    progress instead of waiting for the current sentence to finish."""
     from jarvis.voice import stt
 
     messages: list[dict] = []
@@ -67,19 +73,19 @@ def _run_active_session(listener, record_utterance, transcribe, speak) -> None:
                 # without this, the loop would otherwise spin forever on empty
                 # transcriptions and stt.unload() below would never run.
                 if consecutive_empty >= MAX_CONSECUTIVE_EMPTY_TRANSCRIPTIONS:
-                    speak(GOODBYE)
+                    speak(GOODBYE, stop_event=stop_event)
                     return
                 continue
             consecutive_empty = 0
 
             if _is_stop_phrase(text):
-                speak(GOODBYE)
+                speak(GOODBYE, stop_event=stop_event)
                 return
 
             messages.append({"role": "user", "content": text})
             reply = send_turn(messages)
             if reply:
-                speak(reply)
+                speak(reply, stop_event=stop_event)
     finally:
         stt.unload()
 
@@ -88,7 +94,9 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
     """Runs until an unhandled exception, or (when `stop_event` is given, as
     the menu-bar app does) until it's set -- checked between wake-word
     sessions, so "off" takes effect immediately while idle, or as soon as
-    the current conversation naturally ends if one is in progress."""
+    the current conversation naturally ends if one is in progress. Speech
+    already in progress is cut short right away too -- see
+    `_run_active_session` and `tts.speak`."""
     from jarvis.voice import audio, stt, tts
     from jarvis.voice.wake_word import WakeWordListener
 
@@ -98,7 +106,9 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
             trigger = listener.wait(stop_event=stop_event)
             if trigger is None:
                 break
-            tts.speak(_GREETING_BY_TRIGGER[trigger])
-            _run_active_session(listener, audio.record_utterance, stt.transcribe, tts.speak)
+            tts.speak(_GREETING_BY_TRIGGER[trigger], stop_event=stop_event)
+            _run_active_session(
+                listener, audio.record_utterance, stt.transcribe, tts.speak, stop_event=stop_event
+            )
     finally:
         listener.close()
