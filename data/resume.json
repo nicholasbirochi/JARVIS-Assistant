@@ -2,7 +2,7 @@
   "meta": {
     "schema_version": "2.0",
     "canonical_language": "pt-BR",
-    "last_updated": "2026-07-30T03:59:24.728116+00:00",
+    "last_updated": "2026-08-05T02:55:14.654254+00:00",
     "source_documents": [
       "Currículo - DataBase - Brasil ATS.docx",
       "Currículo - DataBase - International ATS.docx"
@@ -15,7 +15,7 @@
       "state": "SP",
       "country": null
     },
-    "phone": "+55 11 98888-7777",
+    "phone": "+55 (11) 95827-5250",
     "email": "nicholas.birochi@gmail.com",
     "links": {
       "linkedin": "https://www.linkedin.com/in/nicholasbirochi/",
@@ -213,49 +213,49 @@
   "certifications": [
     {
       "name": "Comprehensive Data Analytics & Data Science Program",
-      "hours": 26,
+      "hours": 26.0,
       "status": "in_progress",
       "date": "Oct/2025",
       "evidence": []
     },
     {
       "name": "Clean Code with Python",
-      "hours": 13,
+      "hours": 13.0,
       "status": "completed",
       "date": "Sep/2025",
       "evidence": []
     },
     {
       "name": "R Programming Course",
-      "hours": 7,
+      "hours": 7.0,
       "status": "completed",
       "date": "Dec/2024",
       "evidence": []
     },
     {
       "name": "Advanced Probability & Statistics",
-      "hours": 3,
+      "hours": 3.0,
       "status": "completed",
       "date": "Dec/2024",
       "evidence": []
     },
     {
       "name": "Data Science for Beginners + Real Projects",
-      "hours": 4,
+      "hours": 4.0,
       "status": "completed",
       "date": "Aug/2024",
       "evidence": []
     },
     {
       "name": "Data Analysis in Python & Machine Learning",
-      "hours": 5,
+      "hours": 5.0,
       "status": "completed",
       "date": "Aug/2024",
       "evidence": []
     },
     {
       "name": "Power BI (Elective)",
-      "hours": 40,
+      "hours": 40.0,
       "status": "completed",
       "date": null,
       "evidence": []
@@ -386,7 +386,59 @@
       "detected_at": "2026-07-30T03:59:24.727858+00:00",
       "status": "open",
       "resolution_note": null
+    },
+    {
+      "id": "conflict-758224d8",
+      "field_path": "personal_info.phone",
+      "existing_value": "+55 11 98888-7777",
+      "proposed_value": "+55 (11) 95827-5250",
+      "sources": [
+        {
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Estudos/Projetos/34 - Insights at TechGrow/readme.md",
+          "source_type": "md",
+          "read_at": "2026-08-05T01:25:24.053236+00:00",
+          "snippet": null,
+          "confidence": 1.0,
+          "review_status": "pending"
+        },
+        {
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Estudos/Projetos/33 - DataClean/README.md",
+          "source_type": "md",
+          "read_at": "2026-08-05T01:31:41.670736+00:00",
+          "snippet": null,
+          "confidence": 1.0,
+          "review_status": "pending"
+        },
+        {
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Estudos/Projetos/50 - Chatbot Local/README.md",
+          "source_type": "md",
+          "read_at": "2026-08-05T01:32:22.924873+00:00",
+          "snippet": null,
+          "confidence": 1.0,
+          "review_status": "pending"
+        },
+        {
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Estudos/Projetos/51 - DNACharacter/COMMIT_HISTORY.md",
+          "source_type": "md",
+          "read_at": "2026-08-05T01:38:40.819629+00:00",
+          "snippet": null,
+          "confidence": 1.0,
+          "review_status": "pending"
+        }
+      ],
+      "detected_at": "2026-08-05T02:55:14.650675+00:00",
+      "status": "resolved_proposed",
+      "resolution_note": null
     }
   ],
-  "change_log": []
+  "change_log": [
+    {
+      "timestamp": "2026-08-05T02:55:14.653271+00:00",
+      "field_path": "personal_info.phone",
+      "old_value": "+55 11 98888-7777",
+      "new_value": "+55 (11) 95827-5250",
+      "source": "proposal_review",
+      "note": null
+    }
+  ]
 }

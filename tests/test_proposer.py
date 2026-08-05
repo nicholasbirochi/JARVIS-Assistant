@@ -26,8 +26,9 @@ def test_attach_evidence_detects_conflict_on_differing_value(tmp_path):
         ]
     )
     path = tmp_path / "cert.pdf"
+    text = "Contato -- telefone: (11) 99999-9999"
 
-    changes = proposer.attach_evidence(batch, path, resume)
+    changes = proposer.attach_evidence(batch, path, text, resume)
 
     assert len(changes) == 1
     assert changes[0].conflict is True
@@ -41,14 +42,52 @@ def test_attach_evidence_no_conflict_when_value_matches(tmp_path):
     batch = LLMProposalBatch(
         changes=[
             LLMProposedChange(
-                kind="update_field", field_path="personal_info.phone", value="+55 11 90000-0000"
+                kind="update_field",
+                field_path="personal_info.phone",
+                value="+55 11 90000-0000",
+                quote="+55 11 90000-0000",
             )
         ]
     )
 
-    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", resume)
+    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", "+55 11 90000-0000", resume)
 
     assert changes[0].conflict is False
+
+
+def test_attach_evidence_drops_change_without_a_quote(tmp_path):
+    # The model returning a value with no supporting quote at all is exactly
+    # the failure mode observed in practice: a real fact from a *different*
+    # file leaking into an unrelated document's proposal, at full
+    # confidence, with nothing in this document backing it up.
+    resume = make_resume()
+    batch = LLMProposalBatch(
+        changes=[LLMProposedChange(kind="update_field", field_path="personal_info.phone", value="+55 11 99999-9999")]
+    )
+
+    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", "documento sem nada relevante", resume)
+
+    assert changes == []
+
+
+def test_attach_evidence_drops_change_whose_quote_is_not_in_the_document(tmp_path):
+    # A quote that doesn't literally appear in the source text can't be a
+    # real excerpt from it -- the model fabricated or misattributed it.
+    resume = make_resume()
+    batch = LLMProposalBatch(
+        changes=[
+            LLMProposedChange(
+                kind="update_field",
+                field_path="personal_info.phone",
+                value="+55 11 99999-9999",
+                quote="telefone: (11) 99999-9999",
+            )
+        ]
+    )
+
+    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", "este documento fala de outra coisa", resume)
+
+    assert changes == []
 
 
 def test_attach_evidence_drops_change_with_unresolvable_field_path(tmp_path):
@@ -58,11 +97,11 @@ def test_attach_evidence_drops_change_with_unresolvable_field_path(tmp_path):
     resume = make_resume()
     batch = LLMProposalBatch(
         changes=[
-            LLMProposedChange(kind="update_field", field_path="not.a.real.path", value="x")
+            LLMProposedChange(kind="update_field", field_path="not.a.real.path", value="x", quote="algo")
         ]
     )
 
-    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", resume)
+    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", "documento com algo escrito", resume)
 
     assert changes == []
 
@@ -76,12 +115,15 @@ def test_attach_evidence_drops_update_with_wrong_shape_for_field(tmp_path):
     batch = LLMProposalBatch(
         changes=[
             LLMProposedChange(
-                kind="update_field", field_path="certifications.0.hours", value="Some value here"
+                kind="update_field",
+                field_path="certifications.0.hours",
+                value="Some value here",
+                quote="algum trecho",
             )
         ]
     )
 
-    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", resume)
+    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", "documento com algum trecho relevante", resume)
 
     assert changes == []
 
@@ -92,11 +134,13 @@ def test_attach_evidence_drops_new_item_missing_required_field(tmp_path):
     resume = make_resume()
     batch = LLMProposalBatch(
         changes=[
-            LLMProposedChange(kind="new_item", list_field="certifications", item={"hours": 5})
+            LLMProposedChange(
+                kind="new_item", list_field="certifications", item={"hours": 5}, quote="5 horas"
+            )
         ]
     )
 
-    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", resume)
+    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", "curso com carga de 5 horas", resume)
 
     assert changes == []
 
@@ -109,11 +153,12 @@ def test_attach_evidence_new_item_embeds_evidence_in_proposed_value(tmp_path):
                 kind="new_item",
                 list_field="certifications",
                 item={"name": "Curso X", "status": "completed"},
+                quote="Certificado do Curso X",
             )
         ]
     )
 
-    changes = proposer.attach_evidence(batch, tmp_path / "cert.pdf", resume)
+    changes = proposer.attach_evidence(batch, tmp_path / "cert.pdf", "Certificado do Curso X, concluído.", resume)
 
     assert changes[0].proposed_value["name"] == "Curso X"
     assert len(changes[0].proposed_value["evidence"]) == 1
@@ -123,10 +168,14 @@ def test_attach_evidence_new_item_embeds_evidence_in_proposed_value(tmp_path):
 def test_attach_evidence_coerces_json_string_value_to_real_type(tmp_path):
     resume = make_resume()
     batch = LLMProposalBatch(
-        changes=[LLMProposedChange(kind="update_field", field_path="experience", value="[]")]
+        changes=[
+            LLMProposedChange(
+                kind="update_field", field_path="experience", value="[]", quote="nenhuma experiência"
+            )
+        ]
     )
 
-    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", resume)
+    changes = proposer.attach_evidence(batch, tmp_path / "x.docx", "nenhuma experiência registrada", resume)
 
     assert changes[0].proposed_value == []
 
@@ -135,10 +184,14 @@ def test_attach_evidence_normalizes_bracket_notation_field_path(tmp_path):
     resume = make_resume()
     resume.certifications.append(Certification(name="Python", hours=5))
     bracket_batch = LLMProposalBatch(
-        changes=[LLMProposedChange(kind="update_field", field_path="certifications[0].hours", value="10")]
+        changes=[
+            LLMProposedChange(
+                kind="update_field", field_path="certifications[0].hours", value="10", quote="10 horas"
+            )
+        ]
     )
 
-    changes = proposer.attach_evidence(bracket_batch, tmp_path / "x.docx", resume)
+    changes = proposer.attach_evidence(bracket_batch, tmp_path / "x.docx", "curso de 10 horas", resume)
 
     assert changes[0].field_path == "certifications.0.hours"
 
@@ -151,22 +204,30 @@ def test_dedupe_update_field_changes_merges_identical_proposals(tmp_path):
         LLMProposalBatch(
             changes=[
                 LLMProposedChange(
-                    kind="update_field", field_path="personal_info.phone", value="+55 11 91111-1111"
+                    kind="update_field",
+                    field_path="personal_info.phone",
+                    value="+55 11 91111-1111",
+                    quote="+55 11 91111-1111",
                 )
             ]
         ),
         tmp_path / "brasil.docx",
+        "contato: +55 11 91111-1111",
         resume,
     )
     from_file_b = proposer.attach_evidence(
         LLMProposalBatch(
             changes=[
                 LLMProposedChange(
-                    kind="update_field", field_path="personal_info.phone", value="+55 11 91111-1111"
+                    kind="update_field",
+                    field_path="personal_info.phone",
+                    value="+55 11 91111-1111",
+                    quote="+55 11 91111-1111",
                 )
             ]
         ),
         tmp_path / "international.docx",
+        "phone: +55 11 91111-1111",
         resume,
     )
 
@@ -187,11 +248,16 @@ def test_dedupe_update_field_changes_keeps_different_values_separate(tmp_path):
     changes = proposer.attach_evidence(
         LLMProposalBatch(
             changes=[
-                LLMProposedChange(kind="update_field", field_path="certifications.0.hours", value="12"),
-                LLMProposedChange(kind="update_field", field_path="certifications.0.hours", value="15"),
+                LLMProposedChange(
+                    kind="update_field", field_path="certifications.0.hours", value="12", quote="12 horas"
+                ),
+                LLMProposedChange(
+                    kind="update_field", field_path="certifications.0.hours", value="15", quote="15 horas"
+                ),
             ]
         ),
         tmp_path / "x.docx",
+        "curso com 12 horas em uma versão e 15 horas em outra",
         resume,
     )
 
@@ -205,11 +271,16 @@ def test_dedupe_update_field_changes_leaves_new_item_changes_alone(tmp_path):
     changes = proposer.attach_evidence(
         LLMProposalBatch(
             changes=[
-                LLMProposedChange(kind="new_item", list_field="certifications", item={"name": "A"}),
-                LLMProposedChange(kind="new_item", list_field="certifications", item={"name": "A"}),
+                LLMProposedChange(
+                    kind="new_item", list_field="certifications", item={"name": "A"}, quote="Certificado A"
+                ),
+                LLMProposedChange(
+                    kind="new_item", list_field="certifications", item={"name": "A"}, quote="Certificado A"
+                ),
             ]
         ),
         tmp_path / "x.docx",
+        "Certificado A concluído.",
         resume,
     )
 

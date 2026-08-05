@@ -112,13 +112,36 @@ def _new_item_would_apply(resume: Resume, list_field: str, item: dict) -> bool:
         return False
 
 
-def attach_evidence(batch: LLMProposalBatch, path: Path, resume: Resume) -> list[ProposedChange]:
+def _normalize_for_grounding(s: str) -> str:
+    return " ".join(s.split()).casefold()
+
+
+def _is_grounded(quote: str | None, text: str) -> bool:
+    """The prompt tells the model "quote" must be a literal excerpt of the
+    document -- this checks it actually is one (modulo whitespace/case).
+    Found necessary in practice: the model sometimes proposes a real,
+    correct fact (one it genuinely read from a *different* file earlier in
+    the same run) against a file that has nothing to do with it, with
+    quote=None and full confidence. Requiring a literal, checkable quote
+    catches that class of fabrication that shape/type validation alone
+    can't, since a well-typed value with no textual basis is still wrong."""
+    if not quote or not quote.strip():
+        return False
+    return _normalize_for_grounding(quote) in _normalize_for_grounding(text)
+
+
+def attach_evidence(
+    batch: LLMProposalBatch, path: Path, text: str, resume: Resume
+) -> list[ProposedChange]:
     read_at = datetime.now(timezone.utc).isoformat()
     source_type = _SOURCE_TYPE_BY_SUFFIX[path.suffix.lower()]
     source_path = scanner.normalize_path_key(path)
 
     out: list[ProposedChange] = []
     for change in batch.changes:
+        if not _is_grounded(change.quote, text):
+            continue
+
         if change.field_path:
             change.field_path = _normalize_field_path(change.field_path)
 

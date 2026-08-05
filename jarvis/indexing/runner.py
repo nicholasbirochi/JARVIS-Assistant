@@ -54,7 +54,7 @@ def run(resume: Resume | None = None, limit: int | None = None) -> Path | None:
             unreadable.append(proposer.unreadable_file_entry(path))
         else:
             batch = proposer.propose_changes_for_file(path, text, resume)
-            changes.extend(proposer.attach_evidence(batch, path, resume))
+            changes.extend(proposer.attach_evidence(batch, path, text, resume))
 
         try:
             key = scanner.normalize_path_key(path)
