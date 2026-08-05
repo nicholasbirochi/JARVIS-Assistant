@@ -2,7 +2,7 @@
   "meta": {
     "schema_version": "2.0",
     "canonical_language": "pt-BR",
-    "last_updated": "2026-08-05T02:55:14.654254+00:00",
+    "last_updated": "2026-08-05T03:01:24.948899+00:00",
     "source_documents": [
       "Currículo - DataBase - Brasil ATS.docx",
       "Currículo - DataBase - International ATS.docx"
@@ -308,8 +308,8 @@
         }
       ],
       "detected_at": "2026-07-30T03:59:24.723231+00:00",
-      "status": "open",
-      "resolution_note": null
+      "status": "resolved_proposed",
+      "resolution_note": "Aplicado -- ver conflict-758224d8."
     },
     {
       "id": "conflict-29642c05",
@@ -365,8 +365,8 @@
         }
       ],
       "detected_at": "2026-07-30T03:59:24.727329+00:00",
-      "status": "open",
-      "resolution_note": null
+      "status": "resolved_proposed",
+      "resolution_note": "Aplicado -- ver conflict-758224d8."
     },
     {
       "id": "conflict-b0543fe4",
@@ -394,41 +394,25 @@
       "proposed_value": "+55 (11) 95827-5250",
       "sources": [
         {
-          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Estudos/Projetos/34 - Insights at TechGrow/readme.md",
-          "source_type": "md",
-          "read_at": "2026-08-05T01:25:24.053236+00:00",
-          "snippet": null,
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - International ATS.docx",
+          "source_type": "docx",
+          "read_at": "2026-07-30T03:57:16.007483+00:00",
+          "snippet": "+55 (11) 95827-5250",
           "confidence": 1.0,
-          "review_status": "pending"
+          "review_status": "confirmed"
         },
         {
-          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Estudos/Projetos/33 - DataClean/README.md",
-          "source_type": "md",
-          "read_at": "2026-08-05T01:31:41.670736+00:00",
-          "snippet": null,
+          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - Brasil ATS.docx",
+          "source_type": "docx",
+          "read_at": "2026-07-30T03:58:18.398436+00:00",
+          "snippet": "+55 (11) 95827-5250",
           "confidence": 1.0,
-          "review_status": "pending"
-        },
-        {
-          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Estudos/Projetos/50 - Chatbot Local/README.md",
-          "source_type": "md",
-          "read_at": "2026-08-05T01:32:22.924873+00:00",
-          "snippet": null,
-          "confidence": 1.0,
-          "review_status": "pending"
-        },
-        {
-          "source_path": "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Estudos/Projetos/51 - DNACharacter/COMMIT_HISTORY.md",
-          "source_type": "md",
-          "read_at": "2026-08-05T01:38:40.819629+00:00",
-          "snippet": null,
-          "confidence": 1.0,
-          "review_status": "pending"
+          "review_status": "confirmed"
         }
       ],
       "detected_at": "2026-08-05T02:55:14.650675+00:00",
       "status": "resolved_proposed",
-      "resolution_note": null
+      "resolution_note": "Corrigido: as 4 fontes originais (readmes/commit history de projetos sem relação) eram espúrias, geradas por um bug do indexador (proposta sem citação real do documento) já corrigido. O valor em si está correto -- substituído pelas 2 fontes genuínas, já confirmadas pelos conflitos conflict-9dc37642 e conflict-06d9929c."
     }
   ],
   "change_log": [

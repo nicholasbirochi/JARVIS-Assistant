@@ -44,7 +44,19 @@ LOCAL_MODEL = os.environ.get("JARVIS_MODEL", "qwen2.5:14b")
 GREETING = "Seja bem-vindo, Senhor Nicholas... vamos começar o trabalho!"
 CLAP_GREETING = "Olá, Nicolas, vamos começar o trabalho!"
 
-TTS_VOICE = os.environ.get("TTS_VOICE", "Eddy")  # pt_BR male voice; "Luciana" is the female alternative
+# "Luciana" (com.apple.voice.compact.pt-BR.Luciana) is the only good-quality
+# pt_BR voice installed by default on macOS. The male-sounding pt_BR options
+# (Eddy, Flo, Grandpa, Reed, Rocko...) all run on the old "Eloquence" engine
+# (com.apple.eloquence.pt-BR.*) -- noticeably robotic/broken-sounding
+# compared to Luciana's engine, confirmed via each voice's
+# AVSpeechSynthesisVoice identifier. Their bare names are also ambiguous:
+# "Eddy" etc. exist identically-named in every language Eloquence supports,
+# so passing just "Eddy" to `say -v` doesn't reliably resolve to the pt_BR
+# one. Use the full stable identifier, not the display name, to sidestep
+# that entirely -- if you download a better-quality male pt_BR voice via
+# System Settings > Accessibility > Spoken Content, set TTS_VOICE to its
+# identifier the same way (see .env.example).
+TTS_VOICE = os.environ.get("TTS_VOICE", "com.apple.voice.compact.pt-BR.Luciana")
 WAKE_WORD = "jarvis"
 STOP_PHRASES = ("tchau jarvis", "tchau, jarvis", "obrigado jarvis", "encerrar")
 
