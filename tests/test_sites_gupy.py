@@ -1,8 +1,14 @@
 import pytest
 
+from jarvis import config
 from jarvis.resume.schema import Bilingual, PersonalInfo, Resume
 from jarvis.sites.base import SiteProfileSnapshot
-from jarvis.sites.gupy import GupyAdapter, _map_resume_to_gupy_fields, _strip_country_code
+from jarvis.sites.gupy import (
+    GupyAdapter,
+    _is_authenticated,
+    _map_resume_to_gupy_fields,
+    _strip_country_code,
+)
 
 
 def make_resume(**personal_info_overrides) -> Resume:
@@ -161,6 +167,61 @@ def test_apply_changes_succeeds_trivially_with_no_changes_even_if_confirmed():
 
     assert result.applied is True
     assert result.changes_applied == []
+
+
+class FakeAuthPage:
+    def __init__(self, final_url: str, has_login_link: bool):
+        self.url = final_url
+        self._has_login_link = has_login_link
+        self.closed = False
+
+    def goto(self, url):
+        pass
+
+    def wait_for_load_state(self, state):
+        pass
+
+    def query_selector(self, selector):
+        return object() if self._has_login_link else None
+
+    def close(self):
+        self.closed = True
+
+
+class FakeAuthContext:
+    def __init__(self, page: FakeAuthPage):
+        self._page = page
+
+    def new_page(self):
+        return self._page
+
+
+def test_is_authenticated_true_when_no_login_link_and_no_redirect(monkeypatch):
+    monkeypatch.setattr(config, "GUPY_PORTAL_URL", "https://portal.gupy.io/")
+    monkeypatch.setattr(config, "GUPY_LOGIN_URL", "https://login.gupy.io/candidates/signin")
+    page = FakeAuthPage(final_url="https://portal.gupy.io/", has_login_link=False)
+
+    assert _is_authenticated(FakeAuthContext(page)) is True
+    assert page.closed is True  # page is cleaned up either way
+
+
+def test_is_authenticated_false_when_redirected_to_login(monkeypatch):
+    monkeypatch.setattr(config, "GUPY_PORTAL_URL", "https://portal.gupy.io/")
+    monkeypatch.setattr(config, "GUPY_LOGIN_URL", "https://login.gupy.io/candidates/signin")
+    page = FakeAuthPage(final_url="https://login.gupy.io/candidates/signin", has_login_link=False)
+
+    assert _is_authenticated(FakeAuthContext(page)) is False
+
+
+def test_is_authenticated_false_when_entrar_link_still_present(monkeypatch):
+    # The real bug this guards against: portal.gupy.io doesn't redirect an
+    # anonymous visitor away, so the URL alone looked "authenticated" even
+    # with no real session -- the "Entrar" link is the real tell.
+    monkeypatch.setattr(config, "GUPY_PORTAL_URL", "https://portal.gupy.io/")
+    monkeypatch.setattr(config, "GUPY_LOGIN_URL", "https://login.gupy.io/candidates/signin")
+    page = FakeAuthPage(final_url="https://portal.gupy.io/", has_login_link=True)
+
+    assert _is_authenticated(FakeAuthContext(page)) is False
 
 
 def test_apply_changes_raises_not_implemented_for_real_submission():

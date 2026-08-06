@@ -78,6 +78,28 @@ def _map_resume_to_gupy_fields(resume: Resume) -> dict[str, Any]:
     }
 
 
+def _is_authenticated(context) -> bool:
+    """Shared by check_session() and login()'s post-login verification --
+    portal.gupy.io itself is a public page and does NOT force-redirect an
+    anonymous visitor to the login page (verified live), so a URL-only
+    check silently reports "logged in" even for a session with no real
+    auth cookie in it (caught live -- see gupy.py's module docstring). The
+    real signal is whether the "Entrar" link (pointing at the login page)
+    is still present."""
+    from jarvis.config import GUPY_LOGIN_URL, GUPY_PORTAL_URL
+
+    page = context.new_page()
+    try:
+        page.goto(GUPY_PORTAL_URL)
+        page.wait_for_load_state("networkidle")
+        if "login.gupy.io" in page.url:
+            return False
+        login_link = page.query_selector(f'a[href="{GUPY_LOGIN_URL}"]')
+        return login_link is None
+    finally:
+        page.close()
+
+
 class GupyAdapter(SiteAdapter):
     site_name = SITE_NAME
 
@@ -85,38 +107,25 @@ class GupyAdapter(SiteAdapter):
         if not session.has_saved_session(self.site_name):
             return SessionStatus.NOT_LOGGED_IN
 
-        from jarvis.config import GUPY_LOGIN_URL, GUPY_PORTAL_URL, SITES_HEADLESS
+        from jarvis.config import SITES_HEADLESS
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
-            page = context.new_page()
-            page.goto(GUPY_PORTAL_URL)
-            page.wait_for_load_state("networkidle")
-            if "login.gupy.io" in page.url:
-                return SessionStatus.SESSION_EXPIRED
-            # portal.gupy.io itself is a public page and does NOT force-redirect
-            # an anonymous visitor to the login page (verified live) -- the
-            # real signal is whether it's still showing the "Entrar" link
-            # that points at the login page, vs. an authenticated account
-            # area. A URL-only check silently reported AUTHENTICATED even
-            # for a session with no real auth cookie in it (caught live).
-            login_link = page.query_selector(f'a[href="{GUPY_LOGIN_URL}"]')
-            if login_link is not None:
-                return SessionStatus.SESSION_EXPIRED
-            return SessionStatus.AUTHENTICATED
+            return SessionStatus.AUTHENTICATED if _is_authenticated(context) else SessionStatus.SESSION_EXPIRED
         except Exception:
             return SessionStatus.UNKNOWN_ERROR
         finally:
             context.close()
             p.stop()
 
-    def login(self) -> None:
+    def login(self) -> bool:
         """Not part of the SiteAdapter interface (check_session() never logs
         in itself, by design) -- this is the explicit, separate, one-time
-        manual step the CLI's `gupy-login` command calls."""
+        manual step the CLI's `gupy-login` command calls. Returns whether
+        the session actually verified as authenticated afterward."""
         from jarvis.config import GUPY_LOGIN_URL
 
-        session.login_interactively(self.site_name, GUPY_LOGIN_URL)
+        return session.login_interactively(self.site_name, GUPY_LOGIN_URL, verify_fn=_is_authenticated)
 
     def inspect_current_profile(self) -> SiteProfileSnapshot:
         from jarvis.config import GUPY_PROFILE_URL, SITES_HEADLESS

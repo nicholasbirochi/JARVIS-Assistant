@@ -42,12 +42,26 @@ def open_context(site_name: str, *, headless: bool) -> tuple[object, BrowserCont
     both (see `closing_context`). `playwright` is returned (not just the
     context) because it must stay alive for as long as the browser does --
     letting it get garbage-collected while the context is still in use
-    crashes the driver."""
+    crashes the driver.
+
+    Cleans up eagerly on a partial failure (browser launched but context
+    creation fails, etc.) instead of leaking a Playwright/browser process
+    that the caller never gets a handle to close."""
     p = sync_playwright().start()
-    browser = p.chromium.launch(headless=headless)
-    saved_state = state_path(site_name)
-    context = browser.new_context(storage_state=str(saved_state) if saved_state.exists() else None)
-    context.add_init_script(_HIDE_WEBDRIVER_FLAG)
+    try:
+        browser = p.chromium.launch(headless=headless)
+        try:
+            saved_state = state_path(site_name)
+            context = browser.new_context(
+                storage_state=str(saved_state) if saved_state.exists() else None
+            )
+            context.add_init_script(_HIDE_WEBDRIVER_FLAG)
+        except Exception:
+            browser.close()
+            raise
+    except Exception:
+        p.stop()
+        raise
     return p, context
 
 
@@ -58,14 +72,27 @@ def save_session(site_name: str, context: BrowserContext) -> None:
     context.storage_state(path=str(state_path(site_name)))
 
 
-def login_interactively(site_name: str, login_url: str, *, wait_for_enter=input) -> None:
+def login_interactively(
+    site_name: str, login_url: str, *, wait_for_enter=input, verify_fn=None
+) -> bool:
     """Opens a real, visible browser window at `login_url` and waits for the
     user to confirm (Enter) once they've finished logging in themselves --
     no fixed timeout, no guessing at a JS "is logged in" condition per site
     (fragile, and unverifiable without already having a live session).
-    Saves the resulting session on success. Never headless -- a human has
+    Saves the resulting session either way. Never headless -- a human has
     to be there to type their own credentials (and complete MFA/CAPTCHA if
-    the site asks for it). `wait_for_enter` is swappable for tests."""
+    the site asks for it). `wait_for_enter` is swappable for tests.
+
+    `verify_fn(context) -> bool`, if given, is checked right after saving --
+    found necessary in practice: a login can silently not actually finish
+    (an OAuth popup that didn't fully redirect back, a form that got
+    rejected without an error message) and pressing Enter anyway used to
+    print an unconditional "session saved, all set" that wasn't true. The
+    session is still saved either way -- real partial progress (e.g. an
+    OAuth flow that did set some cookies) shouldn't be thrown away -- but
+    the message now honestly reflects whether it actually worked. Returns
+    the verification result (True if verify_fn wasn't given, since there's
+    nothing to check)."""
     p = sync_playwright().start()
     try:
         browser = p.chromium.launch(headless=False)
@@ -76,7 +103,15 @@ def login_interactively(site_name: str, login_url: str, *, wait_for_enter=input)
         print(f"Faça login normalmente na janela que abriu ({login_url}).")
         wait_for_enter("Quando terminar de logar (perfil carregado), aperte Enter aqui... ")
         save_session(site_name, context)
-        print(f"Sessão salva para {site_name!r}. Não vai precisar logar de novo.")
+        verified = verify_fn(context) if verify_fn is not None else True
+        if verified:
+            print(f"Sessão salva para {site_name!r}. Não vai precisar logar de novo.")
+        else:
+            print(
+                f"Sessão salva, mas não parece autenticada de verdade -- o login pode não "
+                f"ter concluído. Rode de novo se algo continuar pedindo login."
+            )
         browser.close()
+        return verified
     finally:
         p.stop()
