@@ -6,8 +6,10 @@ themselves, Playwright's `storage_state` (cookies/localStorage) is saved to
 disk under SITES_STATE_DIR and reused on every later run, so login only
 happens once per site (until the site's own session naturally expires).
 
-State files are gitignored (data/sites/) -- they're live session credentials,
-not résumé data.
+State files live under LOCAL_STATE_DIR (jarvis/config.py), deliberately
+OUTSIDE the project folder and outside git -- they're live session
+credentials, not résumé data, and this whole project sits inside an
+actively-synced OneDrive folder, which is not an acceptable place for them.
 """
 
 from __future__ import annotations

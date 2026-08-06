@@ -1,12 +1,17 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from jarvis import config
 from jarvis.resume.schema import Bilingual, PersonalInfo, Resume
-from jarvis.sites.base import SiteProfileSnapshot
+from jarvis.sites import session
+from jarvis.sites.base import PlannedFieldChange, SiteProfileSnapshot, UpdatePlan
 from jarvis.sites.gupy import (
     GupyAdapter,
     _is_authenticated,
     _map_resume_to_gupy_fields,
+    _split_full_name,
     _strip_country_code,
 )
 
@@ -28,6 +33,14 @@ def test_strip_country_code():
     assert _strip_country_code("+55 11 90000-0000") == "11 90000-0000"
     assert _strip_country_code("+5511 90000-0000") == "11 90000-0000"
     assert _strip_country_code(None) is None
+
+
+def test_split_full_name():
+    # Verified live against the real account: "Nicholas Birochi" ->
+    # #name="Nicholas", #lastName="Birochi".
+    assert _split_full_name("Nicholas Birochi") == ("Nicholas", "Birochi")
+    assert _split_full_name("Nicholas Silva Birochi") == ("Nicholas", "Silva Birochi")
+    assert _split_full_name("Cher") == ("Cher", "")
 
 
 def test_map_resume_to_gupy_fields():
@@ -224,14 +237,225 @@ def test_is_authenticated_false_when_entrar_link_still_present(monkeypatch):
     assert _is_authenticated(FakeAuthContext(page)) is False
 
 
-def test_apply_changes_raises_not_implemented_for_real_submission():
-    # Submitting a real change hasn't been tested against the live site yet
-    # (see gupy.py's module docstring) -- must fail loudly, not silently
-    # pretend to have submitted something.
+def test_apply_changes_raises_not_implemented_for_email_change(monkeypatch):
+    # Email is deliberately excluded from real writes (it's also the login
+    # identifier -- see gupy.py's module docstring) -- and the check must
+    # happen BEFORE any browser session is opened, not after a failed write.
+    def _fail_open_context(site_name, *, headless):
+        raise AssertionError("should not open a browser session for an unsupported field")
+
+    monkeypatch.setattr(session, "open_context", _fail_open_context)
+
     adapter = GupyAdapter()
     resume = make_resume()
-    current = SiteProfileSnapshot(site_name="gupy", fields={"phone": "11 99999-9999"})
+    current = SiteProfileSnapshot(
+        site_name="gupy", fields={**_map_resume_to_gupy_fields(resume), "email": "old@example.com"}
+    )
     plan = adapter.build_update_plan(resume, current)
+    assert {c.site_field for c in plan.changes} == {"email"}
 
     with pytest.raises(NotImplementedError):
         adapter.apply_changes(plan, confirmed=True)
+
+
+def test_apply_changes_refuses_entire_plan_if_any_field_unsupported(monkeypatch):
+    # A plan mixing a supported field (phone) with an unsupported one
+    # (email) must refuse the whole thing, not silently write the phone and
+    # skip the email.
+    def _fail_open_context(site_name, *, headless):
+        raise AssertionError("should not open a browser session when any field is unsupported")
+
+    monkeypatch.setattr(session, "open_context", _fail_open_context)
+
+    adapter = GupyAdapter()
+    plan = UpdatePlan(
+        site_name="gupy",
+        changes=[
+            PlannedFieldChange(
+                site_field="phone",
+                current_value="11 90000-0000",
+                new_value="11 98888-8888",
+                resume_field_path="personal_info.phone",
+            ),
+            PlannedFieldChange(
+                site_field="email",
+                current_value="old@example.com",
+                new_value="new@example.com",
+                resume_field_path="personal_info.email",
+            ),
+        ],
+    )
+
+    with pytest.raises(NotImplementedError):
+        adapter.apply_changes(plan, confirmed=True)
+
+
+class FakeSaveButton:
+    def __init__(self):
+        self.clicked = False
+
+    def click(self):
+        self.clicked = True
+
+
+class FakeLocator:
+    def __init__(self):
+        self.blurred = False
+
+    def blur(self):
+        self.blurred = True
+
+
+class FakeApplyPage:
+    """Stand-in for a Playwright Page during apply_changes(). `fill()`
+    writes straight into the same `values` dict `input_value()`/scraping
+    reads from, so a successful fill+save round-trips exactly like the real
+    site does -- unless `apply_fills=False`, which simulates a site that
+    silently didn't persist the change (the failure case we must detect)."""
+
+    def __init__(self, values: dict[str, str], *, has_save_button: bool = True, apply_fills: bool = True):
+        self.values = dict(values)
+        self.has_save_button = has_save_button
+        self.apply_fills = apply_fills
+        self.save_button = FakeSaveButton()
+
+    def goto(self, url, wait_until=None, timeout=None):
+        pass
+
+    def wait_for_load_state(self, state, timeout=None):
+        pass
+
+    def fill(self, selector, value):
+        if self.apply_fills:
+            self.values[selector] = value
+
+    def input_value(self, selector):
+        return self.values[selector]
+
+    def locator(self, selector):
+        return FakeLocator()
+
+    def query_selector(self, selector):
+        if selector == '[data-testid="button-save"]':
+            return self.save_button if self.has_save_button else None
+        return None
+
+
+class FakeApplyContext:
+    def __init__(self, page):
+        self._page = page
+        self.closed = False
+
+    def new_page(self):
+        return self._page
+
+    def close(self):
+        self.closed = True
+
+
+class FakeApplyPlaywright:
+    def __init__(self):
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+
+
+def _base_profile_values(**overrides) -> dict[str, str]:
+    values = {
+        "#name": "Nicholas",
+        "#lastName": "Birochi",
+        "#input-with-button-email-input": "nicholas@example.com",
+        "#input-phone-mobileNumber": "11 90000-0000",
+    }
+    values.update(overrides)
+    return values
+
+
+def test_apply_changes_writes_phone_and_full_name_when_supported(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "SITES_EVIDENCE_DIR", tmp_path / "evidence")
+    resume = make_resume(full_name="Nicholas Silva", phone="+55 11 98888-8888")
+    current = SiteProfileSnapshot(
+        site_name="gupy",
+        fields={"full_name": "Nicholas Birochi", "phone": "11 90000-0000", "email": "nicholas@example.com"},
+    )
+    adapter = GupyAdapter()
+    plan = adapter.build_update_plan(resume, current)
+    assert {c.site_field for c in plan.changes} == {"full_name", "phone"}
+
+    page = FakeApplyPage(_base_profile_values())
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplyPlaywright(), FakeApplyContext(page))
+    )
+
+    result = adapter.apply_changes(plan, confirmed=True)
+
+    assert result.applied is True
+    assert {c.site_field for c in result.changes_applied} == {"full_name", "phone"}
+    assert page.save_button.clicked is True
+    assert page.values["#name"] == "Nicholas"
+    assert page.values["#lastName"] == "Silva"
+    assert page.values["#input-phone-mobileNumber"] == "11 98888-8888"
+    assert result.evidence_path is not None
+
+    # Evidence is a small JSON audit record, deliberately NOT a screenshot --
+    # the profile page also shows CPF/birth date, which a screenshot would
+    # capture incidentally even though the write itself never touches them.
+    evidence = json.loads(Path(result.evidence_path).read_text(encoding="utf-8"))
+    assert evidence["site_name"] == "gupy"
+    assert {c["field"] for c in evidence["changes"]} == {"full_name", "phone"}
+
+
+def test_apply_changes_reports_failure_if_site_does_not_reflect_change(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "SITES_EVIDENCE_DIR", tmp_path / "evidence")
+    resume = make_resume(phone="+55 11 98888-8888")
+    current = SiteProfileSnapshot(site_name="gupy", fields={**_map_resume_to_gupy_fields(resume), "phone": "11 90000-0000"})
+    adapter = GupyAdapter()
+    plan = adapter.build_update_plan(resume, current)
+
+    page = FakeApplyPage(_base_profile_values(), apply_fills=False)
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplyPlaywright(), FakeApplyContext(page))
+    )
+
+    result = adapter.apply_changes(plan, confirmed=True)
+
+    assert result.applied is False
+    assert "phone" in result.error
+    assert page.save_button.clicked is True  # it did try to save
+
+
+def test_apply_changes_reports_missing_save_button(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "SITES_EVIDENCE_DIR", tmp_path / "evidence")
+    resume = make_resume(phone="+55 11 98888-8888")
+    current = SiteProfileSnapshot(site_name="gupy", fields={**_map_resume_to_gupy_fields(resume), "phone": "11 90000-0000"})
+    adapter = GupyAdapter()
+    plan = adapter.build_update_plan(resume, current)
+
+    page = FakeApplyPage(_base_profile_values(), has_save_button=False)
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplyPlaywright(), FakeApplyContext(page))
+    )
+
+    result = adapter.apply_changes(plan, confirmed=True)
+
+    assert result.applied is False
+    assert "Salvar" in result.error
+
+
+def test_apply_changes_closes_context_and_stops_playwright_even_on_success(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "SITES_EVIDENCE_DIR", tmp_path / "evidence")
+    resume = make_resume(phone="+55 11 98888-8888")
+    current = SiteProfileSnapshot(site_name="gupy", fields={**_map_resume_to_gupy_fields(resume), "phone": "11 90000-0000"})
+    adapter = GupyAdapter()
+    plan = adapter.build_update_plan(resume, current)
+
+    page = FakeApplyPage(_base_profile_values())
+    fake_context = FakeApplyContext(page)
+    fake_p = FakeApplyPlaywright()
+    monkeypatch.setattr(session, "open_context", lambda site_name, *, headless: (fake_p, fake_context))
+
+    adapter.apply_changes(plan, confirmed=True)
+
+    assert fake_context.closed is True
+    assert fake_p.stopped is True

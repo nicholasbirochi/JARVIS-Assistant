@@ -12,6 +12,19 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
+# PROJECT_ROOT itself lives inside an actively-synced OneDrive folder (the
+# user's whole "Estudos/Projetos" tree is under OneDrive-<org>/). That's
+# fine for résumé data -- it's meant to end up in job-site profiles anyway,
+# and the schema deliberately excludes CPF/RG/address/birth date. It is NOT
+# fine for live site-adapter auth cookies or anything that can incidentally
+# show sensitive fields (a full profile-page screenshot) -- those must never
+# leave this machine, and OneDrive sync would silently defeat that. Anything
+# in that category goes under LOCAL_STATE_DIR instead, outside PROJECT_ROOT
+# and outside any cloud-sync tree, never DATA_DIR.
+LOCAL_STATE_DIR = Path(
+    os.environ.get("JARVIS_LOCAL_STATE_DIR", str(Path.home() / "Library" / "Application Support" / "JARVIS"))
+)
+
 # Quiet by design: this runs as a background listener, not a dev tool, so
 # library log/progress noise (huggingface_hub download bars, openwakeword's
 # "tried to import tflite runtime" notice, etc.) has nowhere useful to go.
@@ -116,12 +129,13 @@ PROPOSALS_DIR = DATA_DIR / "proposals"
 INDEX_MAX_FILES_PER_RUN = 20
 
 # Site adapters (jarvis/sites/) -- Playwright-driven, one persistent browser
-# session per site, saved under SITES_STATE_DIR (cookies -- never commit;
-# see .gitignore). Login is always a manual, one-time step in a real,
-# visible browser window (jarvis/sites/session.py) -- no password ever
-# passes through this code. Domains verified against Gupy's own public
-# pages (WebFetch), not guessed.
-SITES_STATE_DIR = DATA_DIR / "sites"
+# session per site, saved under SITES_STATE_DIR (cookies -- never commit,
+# and deliberately under LOCAL_STATE_DIR, NOT DATA_DIR -- see its comment
+# above: this directory must never sync to OneDrive). Login is always a
+# manual, one-time step in a real, visible browser window
+# (jarvis/sites/session.py) -- no password ever passes through this code.
+# Domains verified against Gupy's own public pages (WebFetch), not guessed.
+SITES_STATE_DIR = LOCAL_STATE_DIR / "sites"
 GUPY_LOGIN_URL = "https://login.gupy.io/candidates/signin"
 GUPY_PORTAL_URL = "https://portal.gupy.io/"
 # The actual contact-info edit form (name/email/phone/CPF) -- found by
@@ -132,3 +146,10 @@ GUPY_PROFILE_URL = "https://login.gupy.io/candidates/profile"
 # Headless by default so a normal `preview`/`apply` run doesn't pop a window;
 # `login` always forces headed regardless, since it needs a human present.
 SITES_HEADLESS = os.environ.get("SITES_HEADLESS", "true").lower() != "false"
+# Audit-trail record written right after a real apply_changes() submission
+# (which field changed, old/new value, when -- see gupy.py's _capture_evidence,
+# deliberately NOT a full-page screenshot: the same profile page also shows
+# CPF and birth date, and a screenshot would capture those incidentally even
+# though the write itself never touches them). Same LOCAL_STATE_DIR tree as
+# the session cookies, for the same reason.
+SITES_EVIDENCE_DIR = SITES_STATE_DIR / "evidence"

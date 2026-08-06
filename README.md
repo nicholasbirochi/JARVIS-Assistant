@@ -14,10 +14,12 @@ palmas -- o que vier primeiro.
 
 Estado atual: **Etapas 1-5 em andamento**. Diagnóstico, consolidação de dados + indexação
 incremental, voz totalmente local e app de menu bar estão completos. O primeiro adaptador
-de site (Gupy) tem a leitura do perfil real **verificada contra a conta ao vivo** --
-login persistente, comparação com o currículo local, *dry run*; falta só o envio real
-das mudanças (`apply_changes`), que exige um teste supervisionado à parte por tocar em
-campos sensíveis (CPF, data de nascimento) na mesma tela.
+de site (Gupy) já lê o perfil real, compara com o currículo local (*dry run*) e **grava
+de verdade** nome e telefone -- tudo **verificado contra a conta ao vivo**, inclusive o
+clique real em "Salvar". E-mail fica de fora por enquanto (é também o identificador de
+login, e mudá-lo pode disparar um fluxo de verificação nunca testado); o restante do
+currículo (experiência, formação, certificações) vive num sub-formulário da Gupy ainda
+não inspecionado.
 
 ## Arquitetura
 
@@ -43,8 +45,15 @@ campos sensíveis (CPF, data de nascimento) na mesma tela.
 - **`jarvis/sites/`** — `base.py` define a interface `SiteAdapter` (dry run sempre antes,
   `apply_changes` recusa sem `confirmed=True`, login sempre manual). `session.py` é a
   sessão Playwright persistente e reutilizável por qualquer site (login numa janela real
-  e visível, sessão salva em `data/sites/` -- git-ignorado, nunca a senha em si).
-  `gupy.py` é o primeiro adaptador real -- ver "Adaptador da Gupy" abaixo.
+  e visível). `gupy.py` é o primeiro adaptador real -- ver "Adaptador da Gupy" abaixo.
+  **Onde os dados de sessão ficam:** `~/Library/Application Support/JARVIS/sites/`
+  (`LOCAL_STATE_DIR` em `jarvis/config.py`), de propósito **fora** da pasta do projeto --
+  todo o projeto vive dentro de uma pasta sincronizada com o OneDrive, e cookies de login
+  reais (e, se algum dia houver, screenshots de evidência) nunca devem sair desta máquina
+  nem pra uma nuvem que já é "confiada" por outro motivo. `data/resume.json` pode
+  continuar em `data/` (dentro do projeto) porque o schema já exclui de propósito CPF/RG/
+  endereço/data de nascimento -- ver `.env.example` para trocar o caminho
+  (`JARVIS_LOCAL_STATE_DIR`).
 - **`jarvis/menubar.py`** — app de menu bar (macOS) com botão liga/desliga; roda o loop
   de voz em background thread, controlado por `VoiceLoopController`. Inicia **desligado**
   (ícone visível, mas não ouvindo até você clicar) e sem ícone no Dock/Cmd-Tab (política de
@@ -159,18 +168,32 @@ Aplicar de verdade (pede confirmação explícita antes de enviar):
 python -m jarvis gupy-apply
 ```
 
-**O que já está verificado contra o site real:** login persistente, leitura do perfil
-(nome/e-mail/telefone), comparação com o currículo local. **O que falta, de propósito:**
-o envio real de mudanças (`apply_changes` levanta `NotImplementedError`) -- a mesma tela
-de contato também tem CPF e data de nascimento, então escrever ali merece seu próprio
-teste supervisionado, não foi misturado com a verificação de leitura.
+**O que já está verificado contra o site real, incluindo o envio de verdade:** login
+persistente, leitura do perfil (nome/e-mail/telefone), comparação com o currículo local,
+e a gravação real de **nome** e **telefone** -- clique real em "Salvar", confirmado ao
+vivo (toast "Dados salvos com sucesso!", re-leitura do perfil depois do envio pra provar
+que a mudança realmente pegou, registro de auditoria em JSON -- campo/valor
+antigo/valor novo/quando, **não** um screenshot, já que a mesma tela também mostra CPF e
+data de nascimento -- salvo fora da pasta do projeto, ver a seção "Arquitetura" acima,
+`jarvis/sites/`, para onde exatamente). **O que falta, de propósito:** **e-mail** não é
+escrito -- é também o identificador de login, e mudar esse campo pode disparar um fluxo
+de verificação (código, confirmação por e-mail) que nunca foi observado; um plano que
+inclua uma mudança de e-mail faz `apply_changes` recusar o pacote inteiro
+(`NotImplementedError`) em vez de aplicar só parte dele. Experiência, formação e
+certificações também ficam de fora -- vivem num sub-formulário separado da Gupy
+("Meu currículo") ainda não inspecionado.
 
 ## Roadmap
 
-- Terminar `apply_changes` da Gupy (envio real, testado ao vivo e supervisionado).
+- E-mail na Gupy: testar ao vivo, supervisionado, se mudar o e-mail dispara algum fluxo
+  de verificação -- só então liberar em `_WRITABLE_FIELDS` (`jarvis/sites/gupy.py`).
+- Sub-formulário "Meu currículo" da Gupy (experiência, formação, certificações,
+  habilidades) -- inspeção ao vivo ainda não feita, hoje o adaptador só cobre a tela de
+  contato.
 - Adaptadores restantes (Catho, InfoJobs, Vagas.com, Indeed, Academia do Universitário) --
-  cada um precisa da mesma verificação ao vivo (domínios, seletores reais) feita para a
-  Gupy, não dá pra generalizar sem repetir esse processo por site.
+  cada um precisa da mesma verificação ao vivo (domínios, seletores reais, e depois o
+  envio real) feita para a Gupy, não dá pra generalizar sem repetir esse processo por
+  site.
 - MLXProvider como opção de menor latência.
 - Itens extras no menu bar (abrir logs/perfil, revisar propostas pendentes direto do
   menu -- hoje só tem liga/desliga).

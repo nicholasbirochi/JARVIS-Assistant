@@ -26,13 +26,22 @@ and _scrape_profile_fields() both normalize around that so the diff in
 build_update_plan() compares like with like instead of flagging a
 formatting difference as a real change.
 
-Deliberately NOT done yet: the "click Save" half of apply_changes(). The
-scrape path above is read-only and has been run against the real site;
-actually submitting a change to a form that also holds CPF and birth date
-is a materially bigger risk to get subtly wrong, and doing that needs its
-own explicit, live, human-supervised test run -- not bundled into the same
-pass as read-only verification. Raises NotImplementedError until that
-happens.
+Real submission (apply_changes) verified live, human-supervised, 2026-08-06:
+- Save button: `[data-testid="button-save"]`, never disabled by a dirty
+  check -- safe to click even for a no-op resubmission.
+- Clicking it fires (in order) a `POST .../validate-mobile-number` (only
+  when the phone field was touched) and then
+  `PATCH .../user-management/candidate/profile` (200) -- the real write --
+  plus a `PATCH .../curriculum-management/candidate/curriculum/status`
+  side effect. No navigation away from the page. Confirmed via a real,
+  visible-browser no-op resubmission of the already-correct phone number:
+  toast read "Dados salvos com sucesso!", value unchanged after reload.
+- Only `full_name` and `phone` are wired to real writes (_WRITABLE_FIELDS).
+  `email` is deliberately excluded -- it's also the login identifier, an
+  actual value change there could trigger its own verification flow that
+  has never been observed, so it stays untested and apply_changes() raises
+  NotImplementedError if a plan ever contains an email change, rather than
+  silently attempting it.
 """
 
 from __future__ import annotations
@@ -54,6 +63,11 @@ from jarvis.sites.base import (
 
 SITE_NAME = "gupy"
 
+# Only these site_field values have a real, live-verified write path (see
+# module docstring). Anything else in a plan makes apply_changes() refuse
+# the whole plan rather than silently writing part of it.
+_WRITABLE_FIELDS = {"full_name", "phone"}
+
 
 def _strip_country_code(phone: str | None) -> str | None:
     """Résumé phone numbers are stored as "+55 (11) 95827-5250"; Gupy's
@@ -63,6 +77,16 @@ def _strip_country_code(phone: str | None) -> str | None:
     if phone is None:
         return None
     return phone.removeprefix("+55").strip()
+
+
+def _split_full_name(full_name: str) -> tuple[str, str]:
+    """Gupy stores first/last name as two separate fields; the résumé keeps
+    one combined string. Splits on the first space -- verified live against
+    the real account ("Nicholas Birochi" -> #name="Nicholas",
+    #lastName="Birochi"). A name with no space becomes an empty last name
+    rather than raising; still a defensible mapping, not a crash."""
+    first, _, rest = full_name.partition(" ")
+    return first, rest
 
 
 def _map_resume_to_gupy_fields(resume: Resume) -> dict[str, Any]:
@@ -198,9 +222,105 @@ class GupyAdapter(SiteAdapter):
         if not plan.changes:
             return UpdateResult(site_name=self.site_name, applied=True, changes_applied=[])
 
-        raise NotImplementedError(
-            "O preenchimento real do formulário da Gupy (clicar Salvar) ainda não foi "
-            "testado contra o site real -- a leitura (inspect_current_profile) já foi "
-            "verificada ao vivo, mas escrever num formulário que também tem CPF e data "
-            "de nascimento merece seu próprio teste supervisionado antes de confiar nele."
-        )
+        unsupported = [c.site_field for c in plan.changes if c.site_field not in _WRITABLE_FIELDS]
+        if unsupported:
+            raise NotImplementedError(
+                f"Envio real ainda não coberto para: {', '.join(unsupported)}. Nome e "
+                "telefone já foram testados ao vivo (ver o docstring de gupy.py); email "
+                "é também o identificador de login e pode disparar um fluxo de "
+                "verificação separado nunca observado -- precisa do próprio teste "
+                "supervisionado antes de confiar nele."
+            )
+
+        from jarvis.config import GUPY_PROFILE_URL, SITES_HEADLESS
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            page = context.new_page()
+            page.goto(GUPY_PROFILE_URL, wait_until="domcontentloaded", timeout=60_000)
+            page.wait_for_load_state("networkidle", timeout=60_000)
+
+            for change in plan.changes:
+                self._fill_field(page, change.site_field, change.new_value)
+
+            save_btn = page.query_selector('[data-testid="button-save"]')
+            if save_btn is None:
+                return UpdateResult(
+                    site_name=self.site_name,
+                    applied=False,
+                    error="Botão Salvar não encontrado -- a página pode ter mudado desde "
+                    "a última verificação ao vivo.",
+                )
+            save_btn.click()
+            page.wait_for_load_state("networkidle", timeout=60_000)
+
+            evidence_path = self._record_evidence(plan)
+
+            fields_after = self._scrape_profile_fields(page)
+            failed = [c for c in plan.changes if fields_after.get(c.site_field) != c.new_value]
+            if failed:
+                return UpdateResult(
+                    site_name=self.site_name,
+                    applied=False,
+                    error="Clicou Salvar, mas o perfil não reflete a mudança em: "
+                    f"{', '.join(c.site_field for c in failed)} -- confira manualmente.",
+                    evidence_path=evidence_path,
+                )
+            return UpdateResult(
+                site_name=self.site_name,
+                applied=True,
+                changes_applied=plan.changes,
+                evidence_path=evidence_path,
+            )
+        finally:
+            context.close()
+            p.stop()
+
+    def _fill_field(self, page, site_field: str, value: Any) -> None:
+        if site_field == "full_name":
+            first, last = _split_full_name(value)
+            page.fill("#name", first)
+            page.fill("#lastName", last)
+        elif site_field == "phone":
+            page.fill("#input-phone-mobileNumber", value)
+            page.locator("#input-phone-mobileNumber").blur()
+            # Gupy fires its own async POST .../validate-mobile-number on
+            # blur (observed live) -- wait for the network to settle so
+            # Save isn't clicked mid-validation.
+            page.wait_for_load_state("networkidle", timeout=10_000)
+        else:  # pragma: no cover -- unreachable, apply_changes filters first
+            raise NotImplementedError(f"Campo não suportado para escrita: {site_field!r}")
+
+    def _record_evidence(self, plan: UpdatePlan) -> str | None:
+        """Audit-trail record for a real submission -- deliberately a small
+        JSON record of what changed (field/old/new/when), NOT a screenshot.
+        The profile page also displays CPF and birth date right next to the
+        fields we actually write; a full-page screenshot would capture those
+        incidentally even though the write itself never touches them.
+        Best-effort -- a failed write here shouldn't fail the whole apply,
+        the actual site write already happened by this point."""
+        import json
+
+        from jarvis.config import SITES_EVIDENCE_DIR
+
+        try:
+            SITES_EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            path = SITES_EVIDENCE_DIR / f"{self.site_name}_{stamp}.json"
+            record = {
+                "site_name": self.site_name,
+                "applied_at": datetime.now(timezone.utc).isoformat(),
+                "changes": [
+                    {
+                        "field": c.site_field,
+                        "old_value": c.current_value,
+                        "new_value": c.new_value,
+                        "resume_field_path": c.resume_field_path,
+                    }
+                    for c in plan.changes
+                ],
+            }
+            path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+            return str(path)
+        except Exception:
+            return None
