@@ -65,7 +65,7 @@ class GupyAdapter(SiteAdapter):
         if not session.has_saved_session(self.site_name):
             return SessionStatus.NOT_LOGGED_IN
 
-        from jarvis.config import GUPY_PORTAL_URL, SITES_HEADLESS
+        from jarvis.config import GUPY_LOGIN_URL, GUPY_PORTAL_URL, SITES_HEADLESS
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
@@ -73,6 +73,15 @@ class GupyAdapter(SiteAdapter):
             page.goto(GUPY_PORTAL_URL)
             page.wait_for_load_state("networkidle")
             if "login.gupy.io" in page.url:
+                return SessionStatus.SESSION_EXPIRED
+            # portal.gupy.io itself is a public page and does NOT force-redirect
+            # an anonymous visitor to the login page (verified live) -- the
+            # real signal is whether it's still showing the "Entrar" link
+            # that points at the login page, vs. an authenticated account
+            # area. A URL-only check silently reported AUTHENTICATED even
+            # for a session with no real auth cookie in it (caught live).
+            login_link = page.query_selector(f'a[href="{GUPY_LOGIN_URL}"]')
+            if login_link is not None:
                 return SessionStatus.SESSION_EXPIRED
             return SessionStatus.AUTHENTICATED
         except Exception:
