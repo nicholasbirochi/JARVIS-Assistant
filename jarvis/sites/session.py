@@ -16,6 +16,15 @@ from pathlib import Path
 
 from playwright.sync_api import BrowserContext, sync_playwright
 
+# Playwright's automated browser self-reports navigator.webdriver=True by
+# default -- a standard bot-detection signal some sites use to silently
+# reject a login (no CAPTCHA, no error message, the form just reloads
+# empty, observed live against Gupy's own login page). Hiding it here is
+# about not being falsely flagged as a bot while automating the user's OWN
+# account, the entire point of this feature -- not about attacking or
+# scraping a third party.
+_HIDE_WEBDRIVER_FLAG = "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+
 
 def state_path(site_name: str) -> Path:
     from jarvis.config import SITES_STATE_DIR  # live lookup -- monkeypatchable in tests
@@ -38,6 +47,7 @@ def open_context(site_name: str, *, headless: bool) -> tuple[object, BrowserCont
     browser = p.chromium.launch(headless=headless)
     saved_state = state_path(site_name)
     context = browser.new_context(storage_state=str(saved_state) if saved_state.exists() else None)
+    context.add_init_script(_HIDE_WEBDRIVER_FLAG)
     return p, context
 
 
@@ -60,6 +70,7 @@ def login_interactively(site_name: str, login_url: str, *, wait_for_enter=input)
     try:
         browser = p.chromium.launch(headless=False)
         context = browser.new_context()
+        context.add_init_script(_HIDE_WEBDRIVER_FLAG)
         page = context.new_page()
         page.goto(login_url)
         print(f"Faça login normalmente na janela que abriu ({login_url}).")
