@@ -124,6 +124,11 @@ INDEX_MAX_FILES_PER_RUN = 20
 SITES_STATE_DIR = DATA_DIR / "sites"
 GUPY_LOGIN_URL = "https://login.gupy.io/candidates/signin"
 GUPY_PORTAL_URL = "https://portal.gupy.io/"
+# The actual contact-info edit form (name/email/phone/CPF) -- found by
+# navigating a real logged-in session: portal.gupy.io's "Meu currículo"
+# link is a different page (experience/skills/diversity, no contact
+# fields); contact info lives under "Editar perfil" instead.
+GUPY_PROFILE_URL = "https://login.gupy.io/candidates/profile"
 # Headless by default so a normal `preview`/`apply` run doesn't pop a window;
 # `login` always forces headed regardless, since it needs a human present.
 SITES_HEADLESS = os.environ.get("SITES_HEADLESS", "true").lower() != "false"

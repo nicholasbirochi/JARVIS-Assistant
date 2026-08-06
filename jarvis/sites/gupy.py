@@ -3,23 +3,36 @@ Gupy was picked first (not LinkedIn) and the hard rules every adapter here
 follows (manual login only, apply_changes refuses without confirmed=True,
 dry-run always comes first).
 
-Two things are already verified against the real, live site (not guessed):
-- Domain/URLs: login.gupy.io/candidates/signin, portal.gupy.io -- confirmed
-  by fetching Gupy's own public pages.
-- check_session()'s logic: after loading a saved session, staying on
-  portal.gupy.io means authenticated; landing back on login.gupy.io means
-  the session expired.
+Verified against the real, live site (not guessed), via an actual logged-in
+session:
+- Domains/URLs: login.gupy.io/candidates/signin (login), portal.gupy.io
+  (public landing + "Meu currículo" experience/skills/diversity form),
+  login.gupy.io/candidates/profile (the *contact-info* edit form --
+  name/email/phone/CPF/birth date. Confusingly hosted under the "login"
+  subdomain, not "portal" -- found by clicking the account menu's "Editar
+  perfil" link from a real session, not guessed).
+- check_session()'s real signal: portal.gupy.io never redirects an
+  anonymous visitor to the login page (it's a public page) -- the actual
+  tell is whether its "Entrar" link (pointing at the login URL) is still
+  present.
+- _scrape_profile_fields()'s selectors (#name, #lastName,
+  #input-with-button-email-input, #input-phone-mobileNumber): read directly
+  off the live, authenticated profile page's DOM.
 
-Two things are NOT yet verified, on purpose, rather than guessed:
-- _scrape_profile_fields(): the actual DOM of the logged-in candidate
-  profile/résumé edit page. Raises NotImplementedError until this has
-  actually been inspected against a live, logged-in session -- shipping
-  fabricated CSS selectors that were never seen to work would silently
-  produce wrong data, which is worse than admitting the gap.
-- The "click submit" half of apply_changes() -- same reasoning.
+Gupy stores first/last name separately (no single "full name" field) and
+the phone field holds the local number only (country code is a separate
+selector next to it, defaulted to Brazil) -- _map_resume_to_gupy_fields()
+and _scrape_profile_fields() both normalize around that so the diff in
+build_update_plan() compares like with like instead of flagging a
+formatting difference as a real change.
 
-_map_resume_to_gupy_fields() and build_update_plan()/preview_changes() are
-real, tested logic already -- only the scrape/submit boundary is pending.
+Deliberately NOT done yet: the "click Save" half of apply_changes(). The
+scrape path above is read-only and has been run against the real site;
+actually submitting a change to a form that also holds CPF and birth date
+is a materially bigger risk to get subtly wrong, and doing that needs its
+own explicit, live, human-supervised test run -- not bundled into the same
+pass as read-only verification. Raises NotImplementedError until that
+happens.
 """
 
 from __future__ import annotations
@@ -42,19 +55,26 @@ from jarvis.sites.base import (
 SITE_NAME = "gupy"
 
 
+def _strip_country_code(phone: str | None) -> str | None:
+    """Résumé phone numbers are stored as "+55 (11) 95827-5250"; Gupy's
+    mobile-number field holds just "(11) 95827-5250" (country code is a
+    separate selector, defaulted to Brazil). Strip the prefix so the two
+    are compared on equal footing instead of always looking different."""
+    if phone is None:
+        return None
+    return phone.removeprefix("+55").strip()
+
+
 def _map_resume_to_gupy_fields(resume: Resume) -> dict[str, Any]:
-    """Canonical résumé -> Gupy's own field names. Only the fields a
-    candidate profile on a Brazilian ATS conventionally exposes for direct
-    editing (name/contact/summary) are mapped for now -- experience/
-    education/certifications on Gupy are usually structured sub-forms (add
-    one entry at a time) rather than flat fields, and mapping those needs
-    the same live-DOM verification as _scrape_profile_fields(); left out
-    rather than guessed."""
+    """Canonical résumé -> Gupy's own field names. Only the contact-info
+    fields verified on the real "Editar perfil" page are mapped --
+    experience/education/certifications live in a separate, structured
+    sub-form ("Meu currículo") not yet inspected; left out rather than
+    guessed."""
     return {
         "full_name": resume.personal_info.full_name,
-        "phone": resume.personal_info.phone,
+        "phone": _strip_country_code(resume.personal_info.phone),
         "email": resume.personal_info.email,
-        "summary": resume.summary.pt,
     }
 
 
@@ -99,12 +119,13 @@ class GupyAdapter(SiteAdapter):
         session.login_interactively(self.site_name, GUPY_LOGIN_URL)
 
     def inspect_current_profile(self) -> SiteProfileSnapshot:
-        from jarvis.config import GUPY_PORTAL_URL, SITES_HEADLESS
+        from jarvis.config import GUPY_PROFILE_URL, SITES_HEADLESS
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
             page = context.new_page()
-            page.goto(GUPY_PORTAL_URL)
+            page.goto(GUPY_PROFILE_URL)
+            page.wait_for_load_state("networkidle")
             fields = self._scrape_profile_fields(page)
         finally:
             context.close()
@@ -116,12 +137,13 @@ class GupyAdapter(SiteAdapter):
         )
 
     def _scrape_profile_fields(self, page) -> dict[str, Any]:
-        raise NotImplementedError(
-            "Selectors da página de perfil da Gupy ainda não foram verificados contra o "
-            "site real. Rode `python -m jarvis gupy-login` e faça login; o próximo passo "
-            "é inspecionar a página de perfil autenticada e preencher esta função com os "
-            "seletores reais antes de usar inspect_current_profile/apply_changes de verdade."
-        )
+        first_name = page.input_value("#name")
+        last_name = page.input_value("#lastName")
+        return {
+            "full_name": f"{first_name} {last_name}".strip(),
+            "email": page.input_value("#input-with-button-email-input"),
+            "phone": page.input_value("#input-phone-mobileNumber"),
+        }
 
     def build_update_plan(self, resume: Resume, current: SiteProfileSnapshot) -> UpdatePlan:
         desired = _map_resume_to_gupy_fields(resume)
@@ -129,7 +151,6 @@ class GupyAdapter(SiteAdapter):
             "full_name": "personal_info.full_name",
             "phone": "personal_info.phone",
             "email": "personal_info.email",
-            "summary": "summary.pt",
         }
         changes = [
             PlannedFieldChange(
@@ -169,6 +190,8 @@ class GupyAdapter(SiteAdapter):
             return UpdateResult(site_name=self.site_name, applied=True, changes_applied=[])
 
         raise NotImplementedError(
-            "O preenchimento real do formulário da Gupy ainda não foi verificado contra "
-            "o site real -- ver _scrape_profile_fields."
+            "O preenchimento real do formulário da Gupy (clicar Salvar) ainda não foi "
+            "testado contra o site real -- a leitura (inspect_current_profile) já foi "
+            "verificada ao vivo, mas escrever num formulário que também tem CPF e data "
+            "de nascimento merece seu próprio teste supervisionado antes de confiar nele."
         )
