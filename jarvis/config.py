@@ -114,3 +114,16 @@ EXCLUDED_DIR_NAMES = {
 INDEX_STATE_PATH = DATA_DIR / "index_state.json"
 PROPOSALS_DIR = DATA_DIR / "proposals"
 INDEX_MAX_FILES_PER_RUN = 20
+
+# Site adapters (jarvis/sites/) -- Playwright-driven, one persistent browser
+# session per site, saved under SITES_STATE_DIR (cookies -- never commit;
+# see .gitignore). Login is always a manual, one-time step in a real,
+# visible browser window (jarvis/sites/session.py) -- no password ever
+# passes through this code. Domains verified against Gupy's own public
+# pages (WebFetch), not guessed.
+SITES_STATE_DIR = DATA_DIR / "sites"
+GUPY_LOGIN_URL = "https://login.gupy.io/candidates/signin"
+GUPY_PORTAL_URL = "https://portal.gupy.io/"
+# Headless by default so a normal `preview`/`apply` run doesn't pop a window;
+# `login` always forces headed regardless, since it needs a human present.
+SITES_HEADLESS = os.environ.get("SITES_HEADLESS", "true").lower() != "false"

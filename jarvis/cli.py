@@ -5,11 +5,53 @@ by typing instead of speaking -- no mic, wake-word engine, or TTS needed.
 `python -m jarvis review-proposals` reviews the most recent proposal;
 `python -m jarvis menubar` runs the macOS menu-bar on/off toggle;
 `python -m jarvis calibrate-claps` prints live mic peak amplitude to help
-tune CLAP_PEAK_THRESHOLD."""
+tune CLAP_PEAK_THRESHOLD; `python -m jarvis gupy-login` / `gupy-preview` /
+`gupy-apply` drive the Gupy site adapter (jarvis/sites/gupy.py)."""
 
 from __future__ import annotations
 
 import argparse
+
+
+def _run_gupy(apply_changes: bool) -> None:
+    from jarvis.resume import store
+    from jarvis.sites.base import SessionStatus
+    from jarvis.sites.gupy import GupyAdapter
+
+    adapter = GupyAdapter()
+    status = adapter.check_session()
+    if status != SessionStatus.AUTHENTICATED:
+        print(f"Sessão da Gupy: {status.value}. Rode `python -m jarvis gupy-login` primeiro.")
+        return
+
+    try:
+        current = adapter.inspect_current_profile()
+    except NotImplementedError as exc:
+        print(f"Ainda não: {exc}")
+        return
+
+    plan = adapter.build_update_plan(store.load(), current)
+    preview = adapter.preview_changes(plan)
+    print(preview.summary_text)
+
+    if not apply_changes or not plan.changes:
+        return
+
+    answer = input("Aplicar essas mudanças na Gupy de verdade? [s/N] ").strip().lower()
+    if not answer.startswith("s"):
+        print("Cancelado -- nada foi enviado.")
+        return
+
+    try:
+        result = adapter.apply_changes(plan, confirmed=True)
+    except NotImplementedError as exc:
+        print(f"Ainda não: {exc}")
+        return
+
+    if result.applied:
+        print(f"Aplicado: {len(result.changes_applied)} mudança(s).")
+    else:
+        print(f"Falhou: {result.error}")
 
 
 def main() -> None:
@@ -28,6 +70,13 @@ def main() -> None:
     subparsers.add_parser(
         "calibrate-claps",
         help="Mostra o pico de amplitude de cada som captado, para ajustar CLAP_PEAK_THRESHOLD.",
+    )
+    subparsers.add_parser("gupy-login", help="Abre um navegador para login manual (uma vez só) na Gupy.")
+    subparsers.add_parser(
+        "gupy-preview", help="Mostra (sem aplicar) o que mudaria no perfil da Gupy vs. o currículo local."
+    )
+    subparsers.add_parser(
+        "gupy-apply", help="Aplica de verdade as mudanças no perfil da Gupy, após confirmação explícita."
     )
     args = parser.parse_args()
 
@@ -58,6 +107,16 @@ def main() -> None:
         from jarvis.voice.calibrate import run as calibrate_run
 
         calibrate_run()
+        return
+
+    if args.command == "gupy-login":
+        from jarvis.sites.gupy import GupyAdapter
+
+        GupyAdapter().login()
+        return
+
+    if args.command in ("gupy-preview", "gupy-apply"):
+        _run_gupy(apply_changes=args.command == "gupy-apply")
         return
 
     from jarvis.assistant.conversation import run_text_loop, run_voice_loop
