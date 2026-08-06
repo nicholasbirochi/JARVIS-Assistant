@@ -12,10 +12,12 @@ serviço em nuvem. O reconhecimento de voz (wake word + transcrição) também �
 inteiramente local e não exige conta de nenhum tipo. Ativa por "Hey Jarvis" ou por duas
 palmas -- o que vier primeiro.
 
-Estado atual: **Etapas 1-4 completas** (diagnóstico, consolidação de dados + indexação
-incremental, voz totalmente local, app de menu bar). A implementação real do primeiro
-adaptador de site (**Etapa 5**, já com design e recomendação prontos) fica para uma
-próxima rodada.
+Estado atual: **Etapas 1-5 em andamento**. Diagnóstico, consolidação de dados + indexação
+incremental, voz totalmente local e app de menu bar estão completos. O primeiro adaptador
+de site (Gupy) tem a leitura do perfil real **verificada contra a conta ao vivo** --
+login persistente, comparação com o currículo local, *dry run*; falta só o envio real
+das mudanças (`apply_changes`), que exige um teste supervisionado à parte por tocar em
+campos sensíveis (CPF, data de nascimento) na mesma tela.
 
 ## Arquitetura
 
@@ -38,8 +40,11 @@ próxima rodada.
   adaptador opcional que exige `PICOVOICE_ACCESS_KEY`). `stt.py` (faster-whisper) carrega
   o modelo só quando necessário e libera a memória (`unload()`) ao fim de cada sessão de
   conversa.
-- **`jarvis/sites/base.py`** — interface `SiteAdapter` (design pronto, nenhum adaptador
-  implementado ainda). Ver seção "Próximo adaptador de site" abaixo.
+- **`jarvis/sites/`** — `base.py` define a interface `SiteAdapter` (dry run sempre antes,
+  `apply_changes` recusa sem `confirmed=True`, login sempre manual). `session.py` é a
+  sessão Playwright persistente e reutilizável por qualquer site (login numa janela real
+  e visível, sessão salva em `data/sites/` -- git-ignorado, nunca a senha em si).
+  `gupy.py` é o primeiro adaptador real -- ver "Adaptador da Gupy" abaixo.
 - **`jarvis/menubar.py`** — app de menu bar (macOS) com botão liga/desliga; roda o loop
   de voz em background thread, controlado por `VoiceLoopController`. Inicia **desligado**
   (ícone visível, mas não ouvindo até você clicar) e sem ícone no Dock/Cmd-Tab (política de
@@ -59,11 +64,17 @@ cp .env.example .env   # opcional -- ver abaixo
 brew install ollama
 brew services start ollama
 ollama pull qwen2.5:14b   # ~9GB, baixa uma vez
+
+# Só necessário se for usar os adaptadores de site (jarvis/sites/) -- baixa o Chromium
+# que o Playwright controla (não é o seu navegador normal, ~150MB, uma vez só)
+playwright install chromium
 ```
 
 Nenhuma chave é obrigatória por padrão. `.env` só é necessário se você quiser usar o
 Porcupine como motor de wake word (`WAKE_WORD_ENGINE=porcupine` + `PICOVOICE_ACCESS_KEY`)
-em vez do openWakeWord padrão, ou apontar para um Ollama/modelo diferente.
+em vez do openWakeWord padrão, apontar para um Ollama/modelo diferente, ou trocar a voz
+do TTS (`TTS_VOICE` -- ver `.env.example` para como achar uma boa voz masculina, já que
+as que o macOS instala por padrão são de baixa qualidade).
 
 ## Uso
 
@@ -120,27 +131,46 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.SEUUSUARIO.jarvis.me
 `RunAtLoad` liga sozinho no login; sem `KeepAlive`, então "Sair" no menu realmente encerra
 até o próximo login (não fica sendo religado). Logs em `~/Library/Logs/JARVIS/menubar.log`.
 
-## Próximo adaptador de site
+## Adaptador da Gupy
 
-Recomendação: **Gupy primeiro, não LinkedIn.** O LinkedIn tem infraestrutura de
+Recomendação seguida: **Gupy primeiro, não LinkedIn.** O LinkedIn tem infraestrutura de
 anti-automação bem documentada e agressiva (impressão digital comportamental/de
 dispositivo, rate limiting, CAPTCHA, e termos de uso explícitos contra automatizar edição
 de perfil) — risco real de restrição de conta desproporcional a automatizar algumas
 edições pontuais. A Gupy é um ATS brasileiro voltado a candidatos, com perfil editável
-como ação de usuário esperada e de primeira classe — mais próximo de um CRUD de
-formulário comum do que um alvo adversarial. Ainda assim, isso é um julgamento
-comparativo, não um fato verificado — validar com uma sessão lenta e de baixo volume
-contra a conta real antes de investir engenharia de verdade. A interface `SiteAdapter`
-(`jarvis/sites/base.py`) já está pronta: sessão persistente via Playwright (login manual
-único, sem senha armazenada), leitura do perfil atual, plano de atualização, *dry run*
-com diff, confirmação explícita antes de qualquer envio real.
+como ação de usuário esperada e de primeira classe.
+
+Login (uma vez só -- abre uma janela real de navegador, você loga normalmente, a sessão
+fica salva):
+
+```bash
+python -m jarvis gupy-login
+```
+
+Ver o que mudaria no perfil da Gupy vs. o currículo local, sem aplicar nada:
+
+```bash
+python -m jarvis gupy-preview
+```
+
+Aplicar de verdade (pede confirmação explícita antes de enviar):
+
+```bash
+python -m jarvis gupy-apply
+```
+
+**O que já está verificado contra o site real:** login persistente, leitura do perfil
+(nome/e-mail/telefone), comparação com o currículo local. **O que falta, de propósito:**
+o envio real de mudanças (`apply_changes` levanta `NotImplementedError`) -- a mesma tela
+de contato também tem CPF e data de nascimento, então escrever ali merece seu próprio
+teste supervisionado, não foi misturado com a verificação de leitura.
 
 ## Roadmap
 
-- **Etapa 5**: implementar o primeiro adaptador real (Gupy, ver acima) seguindo a
-  interface já definida em `jarvis/sites/base.py`.
-- Depois: adaptadores restantes (Catho, InfoJobs, Vagas.com, Indeed, Academia do
-  Universitário) + mapeamento de campos por site; MLXProvider como opção de menor
-  latência; detecção de duplicatas entre propostas do indexador; itens extras no menu
-  bar (abrir logs/perfil, revisar propostas pendentes direto do menu -- hoje só tem
-  liga/desliga).
+- Terminar `apply_changes` da Gupy (envio real, testado ao vivo e supervisionado).
+- Adaptadores restantes (Catho, InfoJobs, Vagas.com, Indeed, Academia do Universitário) --
+  cada um precisa da mesma verificação ao vivo (domínios, seletores reais) feita para a
+  Gupy, não dá pra generalizar sem repetir esse processo por site.
+- MLXProvider como opção de menor latência.
+- Itens extras no menu bar (abrir logs/perfil, revisar propostas pendentes direto do
+  menu -- hoje só tem liga/desliga).
