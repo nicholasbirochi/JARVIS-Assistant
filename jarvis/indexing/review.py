@@ -17,12 +17,28 @@ from jarvis.resume import store
 from jarvis.resume.schema import Conflict
 
 
-def latest_proposal_path() -> Path | None:
+def _reviewed_dir() -> Path:
+    from jarvis.config import PROPOSALS_DIR  # live lookup -- monkeypatchable in tests
+
+    return PROPOSALS_DIR / "reviewed"
+
+
+def pending_proposal_paths() -> list[Path]:
+    """Proposal files not yet reviewed, oldest first. Reviewed ones get
+    moved into PROPOSALS_DIR/reviewed/ by review_interactive() below, so
+    they naturally drop out of this list -- otherwise `review-proposals`
+    would re-prompt every change again on a second run, and anything
+    checking "is there something pending" (the proactive briefing) would
+    never see a proposal as resolved."""
     from jarvis.config import PROPOSALS_DIR  # live lookup -- monkeypatchable in tests
 
     if not PROPOSALS_DIR.exists():
-        return None
-    candidates = sorted(PROPOSALS_DIR.glob("proposal_*.json"))
+        return []
+    return sorted(PROPOSALS_DIR.glob("proposal_*.json"))
+
+
+def latest_proposal_path() -> Path | None:
+    candidates = pending_proposal_paths()
     return candidates[-1] if candidates else None
 
 
@@ -50,7 +66,13 @@ def _print_change(change: ProposedChange, index: int, total: int) -> None:
         print(f"  motivo: {change.rationale}")
 
 
-def review_interactive(proposal: Proposal, input_func=input) -> None:
+def review_interactive(proposal: Proposal, proposal_path: Path | None = None, input_func=input) -> None:
+    """Walks every change in `proposal`, prompting accept/reject/skip. If
+    `proposal_path` is given, the file is moved to PROPOSALS_DIR/reviewed/
+    once every change has been handled -- regardless of how each one was
+    decided -- so re-running `review-proposals` doesn't re-prompt the same
+    changes again, and pending_proposal_paths() (used by the proactive
+    briefing) correctly stops counting it."""
     resume = store.load()
 
     for i, change in enumerate(proposal.changes, start=1):
@@ -109,14 +131,27 @@ def review_interactive(proposal: Proposal, input_func=input) -> None:
             if accepted:
                 print("  aplicado.")
 
+    if proposal_path is not None:
+        reviewed_dir = _reviewed_dir()
+        reviewed_dir.mkdir(parents=True, exist_ok=True)
+        proposal_path.rename(reviewed_dir / proposal_path.name)
 
-def main() -> None:
-    path = latest_proposal_path()
-    if path is None:
-        print("Nenhuma proposta encontrada em data/proposals/. Rode `python -m jarvis index` primeiro.")
+
+def main(input_func=input) -> None:
+    """Reviews every pending proposal, oldest first -- not just the most
+    recent one. A real, still-unreviewed proposal from 2026-07-30 (14
+    changes) was found silently invisible on disk: this used to only ever
+    look at latest_proposal_path(), so a newer proposal file simply hid any
+    older ones from view instead of queueing behind them. Each file is
+    moved to reviewed/ as it's finished (see review_interactive), so a
+    second run only shows what's left."""
+    paths = pending_proposal_paths()
+    if not paths:
+        print("Nenhuma proposta pendente em data/proposals/. Rode `python -m jarvis index` primeiro.")
         return
-    print(f"Revisando {path.name}")
-    review_interactive(load_proposal(path))
+    for i, path in enumerate(paths, start=1):
+        print(f"\nRevisando {path.name} ({i}/{len(paths)})")
+        review_interactive(load_proposal(path), proposal_path=path, input_func=input_func)
 
 
 if __name__ == "__main__":

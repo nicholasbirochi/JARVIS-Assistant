@@ -37,6 +37,24 @@ def test_proposed_change_conflict_default_false():
     assert change.conflict is False
 
 
+def test_proposed_change_accepts_legacy_single_evidence_dict():
+    # Proposal files written before evidence became a list stored a single
+    # Evidence dict here -- a real one from 2026-07-30 was found still
+    # sitting on disk, unreadable, until this backward-compat coercion.
+    single = _make_evidence()[0].model_dump(mode="json")
+    change = ProposedChange.model_validate(
+        {"kind": "update_field", "field_path": "x", "proposed_value": "y", "evidence": single}
+    )
+    assert change.evidence == [Evidence.model_validate(single)]
+
+
+def test_proposed_change_still_accepts_evidence_list():
+    change = ProposedChange.model_validate(
+        {"kind": "update_field", "field_path": "x", "proposed_value": "y", "evidence": _make_evidence()}
+    )
+    assert change.evidence == _make_evidence()
+
+
 def test_proposal_round_trip_with_unreadable_files():
     proposal = Proposal(
         created_at="2026-01-01T00:00:00Z",

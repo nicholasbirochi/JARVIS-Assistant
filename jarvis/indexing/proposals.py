@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from jarvis.resume.schema import Evidence, StrictModel
 
@@ -62,6 +62,18 @@ class ProposedChange(StrictModel):
     evidence: list[Evidence] = Field(default_factory=list)
     conflict: bool = False
     rationale: Optional[str] = None
+
+    @field_validator("evidence", mode="before")
+    @classmethod
+    def _coerce_legacy_single_evidence(cls, value: Any) -> Any:
+        """Proposal files written before evidence became a list (a real,
+        unreviewed one from 2026-07-30 was found still on disk) stored a
+        single Evidence dict here instead. Accept the old shape too rather
+        than making a pre-existing, never-reviewed proposal permanently
+        unloadable."""
+        if isinstance(value, dict):
+            return [value]
+        return value
 
 
 class UnreadableFile(StrictModel):
