@@ -178,10 +178,15 @@ roda nesta máquina mesmo). O executável só chama o `.venv` do projeto, igual 
 instâncias tentando pegar o microfone ao mesmo tempo causa exatamente o tipo de falha
 silenciosa que já vimos antes.
 
-Se o ícone não aparecer na barra de menu depois de abrir, **não é bug** -- confira se você
-tem algum organizador de ícones instalado (ex: [Ice](https://github.com/jordanbaird/Ice),
-Bartender) escondendo ícones novos por padrão; foi exatamente essa a causa quando isso
-aconteceu aqui. Abra as preferências dele e marque o JARVIS como visível.
+**Primeira vez que for abrir, um passo manual é obrigatório:** clique com o botão direito
+(ou Control-clique) em `JARVIS.app` → **Abrir** → confirme no aviso. Isso não é bug --
+`build_app.py` já assina o app com uma assinatura ad-hoc (`codesign --sign -`, gratuita,
+sem conta de desenvolvedor), mas isso sozinho não satisfaz o Gatekeeper do macOS pra um
+duplo-clique direto normal em Apple Silicon; sem clicar em "Abrir" uma vez, o clique
+simplesmente **não faz nada visível, sem erro nenhum** (`spctl --assess` mostra
+`rejected`). Depois desse primeiro "Abrir" confirmado, duplo-clique normal funciona
+para sempre. `spctl --add` (que permitiria liberar isso via terminal, sem esse passo
+manual) foi descontinuado pelo próprio macOS -- não tem como pular essa etapa.
 
 ## Voz clonada (XTTS-v2)
 

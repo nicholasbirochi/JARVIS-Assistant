@@ -14,12 +14,25 @@ or handed to someone else).
 Run once (`python scripts/build_app.py`); safe to rerun any time (e.g.
 after regenerating the icon, or if the project ever moves) -- rebuilds
 from scratch rather than patching in place.
+
+Ad-hoc signs the bundle after building (`codesign --sign -`) -- found
+live that without ANY signature at all, Apple Silicon's Gatekeeper
+rejects the app outright (`spctl --assess` returns "rejected", and a
+Finder double-click does nothing visible, no error dialog). Ad-hoc
+signing doesn't fully satisfy Gatekeeper on its own either (no Apple
+Developer ID, no notarization -- `spctl --add` to force an override no
+longer exists on current macOS, Apple removed it) -- the one remaining
+manual step is real and unavoidable for a locally-built, unsigned app:
+right-click (or Control-click) JARVIS.app -> "Abrir" -> confirm in the
+dialog, once. After that first confirmed launch, plain double-clicks
+work normally from then on.
 """
 
 from __future__ import annotations
 
 import plistlib
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -81,6 +94,8 @@ def build(target_dir: Path) -> Path:
             file=sys.stderr,
         )
 
+    subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(app_path)], check=True)
+
     return app_path
 
 
@@ -93,6 +108,11 @@ def main() -> None:
         target_dir.mkdir(parents=True, exist_ok=True)
         app_path = build(target_dir)
     print(f"JARVIS.app criado em: {app_path}")
+    print(
+        'Primeira vez: clique com o botão direito (ou Control-clique) no JARVIS.app -> '
+        '"Abrir" -> confirme no aviso -- é a única vez que precisa disso. '
+        "Depois disso, dois cliques normais funcionam."
+    )
 
 
 if __name__ == "__main__":
