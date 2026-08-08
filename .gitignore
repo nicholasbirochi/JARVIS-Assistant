@@ -5,7 +5,10 @@ __pycache__/
 data/backups/
 data/proposals/
 data/index_state.json
-data/sites/  # legacy path -- session state now defaults outside the repo (see jarvis/config.py LOCAL_STATE_DIR); kept as a safety net
+# legacy path -- session state now defaults outside the repo (see jarvis/config.py LOCAL_STATE_DIR); kept as a safety net
+data/sites/
 .pytest_cache/
 *.egg-info/
 Completed courses/
+# scripts/generate_app_icon.py's intermediate .iconset -- the committed output is jarvis/assets/AppIcon.icns
+build/

@@ -163,6 +163,26 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.SEUUSUARIO.jarvis.me
 `RunAtLoad` liga sozinho no login; sem `KeepAlive`, então "Sair" no menu realmente encerra
 até o próximo login (não fica sendo religado). Logs em `~/Library/Logs/JARVIS/menubar.log`.
 
+**Ou como um app de verdade**, pra abrir pelo Launchpad/Spotlight/Finder em vez do terminal:
+
+```bash
+python scripts/generate_app_icon.py   # gera jarvis/assets/AppIcon.icns -- só precisa rodar uma vez
+python scripts/build_app.py           # cria /Applications/JARVIS.app
+```
+
+`JARVIS.app` é um wrapper fino, não um build congelado (`py2app`/`PyInstaller` foram
+descartados de propósito -- a árvore de dependências, torch/playwright/PyObjC WebKit, é
+grande e frágil demais pra congelar com confiança, e não tem benefício real já que isso só
+roda nesta máquina mesmo). O executável só chama o `.venv` do projeto, igual o LaunchAgent
+-- **não rode os dois ao mesmo tempo** (o app manual E o LaunchAgent automático), duas
+instâncias tentando pegar o microfone ao mesmo tempo causa exatamente o tipo de falha
+silenciosa que já vimos antes.
+
+Se o ícone não aparecer na barra de menu depois de abrir, **não é bug** -- confira se você
+tem algum organizador de ícones instalado (ex: [Ice](https://github.com/jordanbaird/Ice),
+Bartender) escondendo ícones novos por padrão; foi exatamente essa a causa quando isso
+aconteceu aqui. Abra as preferências dele e marque o JARVIS como visível.
+
 ## Voz clonada (XTTS-v2)
 
 `jarvis/voice/xtts_engine.py` clona uma voz a partir de um clipe curto de referência (em
