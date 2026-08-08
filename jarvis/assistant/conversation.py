@@ -128,14 +128,21 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
 
     from jarvis.assistant.briefing import build_briefing
     from jarvis.visualizer import state as visualizer_state
-    from jarvis.voice import audio, stt, tts, xtts_engine
+    from jarvis.voice import audio, stt, tts
     from jarvis.voice.wake_word import WakeWordListener
 
-    # Fires (and no-ops if there's no reference clip yet) as early as
-    # possible so its very slow first load -- see xtts_engine.py's
-    # docstring -- overlaps with the user just having JARVIS on, instead of
-    # ever blocking a wake-word activation.
-    xtts_engine.preload_in_background()
+    # xtts_engine.preload_in_background() is deliberately NOT called here
+    # anymore. Found live: it made torchcodec dlopen the Homebrew-installed
+    # FFmpeg's shared libraries into this same process -- which already has
+    # faster-whisper's own bundled FFmpeg (via PyAV) loaded -- and macOS's
+    # ObjC runtime logged a real class collision (AVFFrameReceiver/
+    # AVFAudioReceiver defined in both), warning of "spurious casting
+    # failures and mysterious crashes". Wake-word/clap detection stopped
+    # firing entirely right after this was wired in, with no exception or
+    # error anywhere -- consistent with silently corrupted audio capture,
+    # not a coincidence. Needs XTTS synthesis to run in a genuinely
+    # separate process before it's safe to preload in-process again;
+    # tracked as a real follow-up, not shipped half-safe in the meantime.
 
     listener = WakeWordListener()
     try:

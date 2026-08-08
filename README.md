@@ -162,6 +162,10 @@ até o próximo login (não fica sendo religado). Logs em `~/Library/Logs/JARVIS
 
 ## Voz clonada (XTTS-v2)
 
+⚠️ **Atualmente desligada da conversa de voz de verdade** -- veja "O problema real" logo
+abaixo antes de tentar religar. O que segue documenta o que já foi construído e verificado
+isoladamente, não o estado ao vivo hoje.
+
 `jarvis/voice/xtts_engine.py` clona uma voz a partir de um clipe curto de referência (em
 vez de usar uma das vozes prontas do macOS). É o motor padrão (`TTS_ENGINE=xtts`), mas só
 entra em ação se as duas condições abaixo forem verdadeiras -- **sem elas, `speak()` cai
@@ -195,6 +199,16 @@ depois de instalar o FFmpeg:**
 - **Confirmado ao vivo com o clipe de referência real, ouvindo o resultado.**
 - Enquanto o modelo ainda não carregou (ou não há clipe de referência), `speak()` usa a voz
   padrão normalmente -- nunca trava esperando.
+
+**O problema real, achado ao vivo:** `preload_in_background()` chamado de dentro do loop de
+voz faz o `torchcodec` carregar o FFmpeg do Homebrew no mesmo processo que já tem a própria
+cópia do FFmpeg do `faster-whisper` (via PyAV) carregada -- e o macOS registrou uma colisão
+de classe Objective-C real (`AVFFrameReceiver`/`AVFAudioReceiver` definidas nas duas cópias).
+A detecção de wake word e de palmas parou de disparar por completo, silenciosamente, logo
+depois disso -- sem exceção, sem erro no log, só silêncio. `xtts_engine.preload_in_background()`
+foi **removido** da chamada em `conversation.py`'s `run_voice_loop` por causa disso -- o
+resto do módulo está pronto e testado, só falta rodar a síntese num processo genuinamente
+separado antes de religar isso com segurança.
 
 ## Adaptador da Gupy
 
@@ -241,9 +255,10 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
 
 ## Roadmap
 
-- Voz clonada: confirmada ao vivo, funcionando (ver "Voz clonada (XTTS-v2)" acima) --
-  clipe de referência real testado, dois testes gerados e ouvidos. Ainda vale ficar de
-  olho se o carregamento lento (15-17min) que aconteceu uma vez volta a se repetir.
+- Voz clonada: a síntese em si funciona e foi confirmada ao vivo isoladamente, mas está
+  **desligada da conversa de voz real** por causa de uma colisão de FFmpeg que quebrou a
+  detecção de wake word (ver "Voz clonada (XTTS-v2)" acima). Precisa rodar a síntese num
+  processo separado antes de religar o `preload_in_background()`.
 - E-mail na Gupy: testar ao vivo, supervisionado, se mudar o e-mail dispara algum fluxo
   de verificação -- só então liberar em `_WRITABLE_FIELDS` (`jarvis/sites/gupy.py`).
 - Sub-formulário "Meu currículo" da Gupy (experiência, formação, certificações,

@@ -27,6 +27,18 @@ shape the design here, not assumptions:
   has an efficient MPS kernel; per-op CPU fallback overhead can lose to
   just using CPU outright. device is hardcoded to "cpu" below for that
   reason, not auto-detected.
+
+CURRENTLY NOT WIRED INTO THE LIVE VOICE LOOP: found live that
+preload_in_background(), when called from conversation.py's
+run_voice_loop, made torchcodec dlopen the Homebrew-installed FFmpeg into
+the same process that already has faster-whisper's own bundled FFmpeg
+(via PyAV) loaded -- macOS logged a real ObjC class collision
+(AVFFrameReceiver/AVFAudioReceiver defined in both libavdevice copies),
+and wake-word/clap detection stopped firing entirely, silently, right
+after. See conversation.py's run_voice_loop docstring. This module is
+otherwise complete and tested; it just needs XTTS synthesis to run in a
+genuinely separate process before it's safe to preload alongside the
+microphone listener again.
 """
 
 from __future__ import annotations

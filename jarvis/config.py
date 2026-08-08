@@ -79,24 +79,21 @@ TTS_VOICE = os.environ.get("TTS_VOICE", "com.apple.voice.enhanced.pt-BR.Felipe")
 
 # Voice cloning (jarvis/voice/xtts_engine.py), via XTTS-v2 -- an alternate
 # TTS engine that clones a voice from a short user-supplied reference clip,
-# instead of using one of macOS's built-in voices. Chosen as the DEFAULT
-# engine, confirmed working live with a real reference clip: ~13s to load
-# the model, generation at ~real-time to faster-than-real-time (measured
-# 7.8s for a 7s reply, 21.3s for a 29.7s reply -- 0.72x). One earlier,
-# isolated run (before the real reference clip existed, using a built-in
-# preset voice) took 15-17 minutes to load for reasons never identified and
-# never reproduced since -- the engine still loads on a background thread
-# started as soon as the voice loop comes up (preload_in_background()) as a
-# precaution, so even a repeat of that wouldn't block a wake-word
-# activation. CPU beat MPS in that same earlier comparison (3.4s vs 11.4s
-# for an identical short sentence) -- a real per-machine finding, not a
-# guess, which is why the engine hardcodes "cpu" rather than "mps"/"auto".
-# tts.py only ever uses this engine once TTS_XTTS_SPEAKER_WAV_PATH actually
-# exists AND the background preload has finished -- otherwise it
-# transparently keeps using TTS_VOICE above, so setting this as default is
-# safe even before that file exists. Also needs FFmpeg installed on the
-# system (`brew install ffmpeg`) -- torchaudio's audio decoder loads its
-# shared libraries at runtime, not a Python dependency.
+# instead of using one of macOS's built-in voices. Confirmed working live
+# with a real reference clip, with good numbers (~13s to load the model,
+# generation at real-time to faster-than-real-time) -- BUT its
+# preload_in_background() call is currently NOT wired into run_voice_loop
+# (see conversation.py's docstring): it made torchcodec dlopen the
+# Homebrew-installed FFmpeg into the same process that already has
+# faster-whisper's own bundled FFmpeg (via PyAV) loaded, and macOS logged a
+# real ObjC class collision -- wake-word/clap detection stopped firing
+# entirely, silently, right after. This engine currently only runs if
+# something explicitly calls xtts_engine.preload_in_background() itself
+# (nothing in the live voice loop does), so leaving TTS_ENGINE defaulted to
+# "xtts" here is inert/safe in practice right now -- tts.py's speak()
+# always falls back to TTS_VOICE above since xtts_engine.is_ready() can
+# never become true on its own. Needs XTTS synthesis moved to a genuinely
+# separate process before that preload call is safe to restore.
 TTS_ENGINE = os.environ.get("TTS_ENGINE", "xtts")
 TTS_XTTS_LANGUAGE = "pt"
 # Deliberately NOT under DATA_DIR -- same reasoning as LOCAL_STATE_DIR
