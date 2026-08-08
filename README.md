@@ -61,11 +61,14 @@ não inspecionado.
   automaticamente no login via LaunchAgent -- ver "Iniciar automaticamente" abaixo. O botão
   "Visualizar Interação" abre o HUD de `jarvis/visualizer/` -- ver seção própria abaixo.
 - **`jarvis/visualizer/`** — HUD visual (círculo azul animado, estilo painel futurista) que
-  reflete o estado real do JARVIS (em espera/ouvindo/falando) e o texto sendo ouvido/falado.
-  `state.py` é um pub/sub em memória que `conversation.py`/`tts.py` publicam a cada
-  transição real; `server.py` é um servidor HTTP local (só `127.0.0.1`, stdlib puro, sem
-  dependência nova) que expõe `page.html` e um stream de eventos (Server-Sent Events) pra
-  qualquer aba de navegador aberta nele.
+  reflete o estado real do JARVIS (desligado/em espera/ouvindo/falando) e o texto sendo
+  ouvido/falado. `state.py` é um pub/sub em memória que `conversation.py`/`tts.py`/
+  `menubar.py` publicam a cada transição real; `server.py` é um servidor HTTP local (só
+  `127.0.0.1`, stdlib puro, sem dependência nova) que expõe `page.html` e um stream de
+  eventos (Server-Sent Events). `native_window.py` abre isso numa janela nativa de verdade
+  (WKWebView via PyObjC -- o mesmo motor do Safari) em vez de uma aba de navegador --
+  tentamos primeiro abrir o Chromium do Playwright em modo app (`--app=`), mas ele mostrava
+  um aviso "atualize o Chrome" por cima da página, o que não é problema com WebKit direto.
 
 ## Setup
 
@@ -138,9 +141,9 @@ seu microfone/ambiente antes de ajustar `CLAP_PEAK_THRESHOLD` no `.env`:
 python -m jarvis calibrate-claps
 ```
 
-App de menu bar (mesma coisa, com um ícone e botão liga/desliga -- e um segundo botão,
-"Visualizar Interação", que abre o HUD visual numa aba do navegador, independente de
-JARVIS estar ligado ou não):
+App de menu bar (mesma coisa, com um ícone e botão liga/desliga -- e, acima dele, um botão
+"Visualizar Interação" que abre o HUD visual numa janela própria, sem navegador nenhum
+envolvido, independente de JARVIS estar ligado ou não):
 
 ```bash
 python -m jarvis menubar

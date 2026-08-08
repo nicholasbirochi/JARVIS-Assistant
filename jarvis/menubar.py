@@ -9,12 +9,13 @@ scripts/generate_menubar_icons.py) -- macOS tints them to match every other
 native menu-bar icon (monochrome, adapts to light/dark) instead of showing
 a colored emoji.
 
-"Visualizar Interação" opens jarvis/visualizer/'s live HUD in its own
-chrome-less window (jarvis/visualizer/launcher.py) -- works independently
-of the on/off toggle above, since it's just a window onto whatever state
-is currently published (including "off" itself, published here -- see
-toggle() and _sync_with_reality() -- since jarvis/assistant/conversation.py
-only ever knows "idle/listening/speaking", never that it was stopped).
+"Visualizar Interação" opens jarvis/visualizer/'s live HUD in a real
+native window (jarvis/visualizer/native_window.py, WKWebView -- no
+browser process involved at all) -- works independently of the on/off
+toggle above, since it's just a window onto whatever state is currently
+published (including "off" itself, published here -- see toggle() and
+_sync_with_reality() -- since jarvis/assistant/conversation.py only ever
+knows "idle/listening/speaking", never that it was stopped).
 """
 
 from __future__ import annotations
@@ -114,11 +115,11 @@ class JarvisMenuBarApp(rumps.App):
     def open_visualizer(self, _sender: rumps.MenuItem) -> None:
         # Works whether or not JARVIS is currently listening -- the HUD
         # just shows "Desligado" until a real state is published. Safe to
-        # click repeatedly -- launcher.open_window() won't stack up
-        # duplicate windows.
-        from jarvis.visualizer import launcher
+        # click repeatedly -- open_window() brings the existing window
+        # forward instead of stacking up duplicates.
+        from jarvis.visualizer import native_window
 
-        launcher.open_window()
+        native_window.open_window()
 
 
 def main() -> None:
