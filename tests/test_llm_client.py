@@ -91,6 +91,32 @@ def test_send_turn_unknown_tool_name_reports_error_without_raising():
     assert "desconhecida" in tool_result_msg["content"].lower()
 
 
+def test_send_turn_reports_tool_call_errors_instead_of_raising():
+    # Real, observed failure: the model hallucinated an argument
+    # (read_resume(path=...) -- read_resume takes none) -- this used to
+    # propagate a TypeError all the way out of send_turn(), which
+    # run_voice_loop misdiagnosed as a mic problem and silently dropped
+    # the user's whole turn.
+    provider = ScriptedProvider(
+        [
+            ProviderResponse(
+                content="",
+                tool_calls=[ToolCallRequest(name="read_resume", arguments={"path": "x"})],
+            ),
+            ProviderResponse(content="Desculpe, tive um problema -- pode repetir?"),
+        ]
+    )
+    llm_client._provider = provider
+
+    messages = [{"role": "user", "content": "me mostra o currículo"}]
+    reply = llm_client.send_turn(messages)  # must not raise
+
+    assert reply == "Desculpe, tive um problema -- pode repetir?"
+    tool_result_msg = messages[-2]
+    assert tool_result_msg["role"] == "tool"
+    assert "erro" in tool_result_msg["content"].lower()
+
+
 def test_send_turn_stops_after_max_iterations():
     always_tool_call = ProviderResponse(
         content="", tool_calls=[ToolCallRequest(name="list_supported_sites", arguments={})]

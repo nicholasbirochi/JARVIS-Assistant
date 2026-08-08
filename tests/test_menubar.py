@@ -1,7 +1,10 @@
+import os
+import subprocess
 import threading
 import time
 
-from jarvis.menubar import VoiceLoopController
+from jarvis import config
+from jarvis.menubar import VoiceLoopController, _acquire_singleton_lock, _pid_is_alive
 
 
 def _cooperative_target(stop_event: threading.Event) -> None:
@@ -76,3 +79,52 @@ def test_restart_after_stop_runs_again():
 
     assert _wait_until(lambda: controller.is_running)
     controller.stop()
+
+
+# ---- singleton lock -- guards against the real bug this session found:
+# two real instances (LaunchAgent + a manually-opened JARVIS.app) running
+# at once, both fighting over the microphone ----
+
+
+def test_pid_is_alive_true_for_this_process():
+    assert _pid_is_alive(os.getpid()) is True
+
+
+def test_pid_is_alive_false_for_a_pid_that_does_not_exist():
+    # A PID vanishingly unlikely to be in use.
+    assert _pid_is_alive(2**30) is False
+
+
+def test_acquire_singleton_lock_succeeds_when_no_lock_file_exists(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "LOCAL_STATE_DIR", tmp_path)
+
+    assert _acquire_singleton_lock() is True
+    assert (tmp_path / "jarvis.pid").read_text().strip() == str(os.getpid())
+
+
+def test_acquire_singleton_lock_fails_when_another_live_process_holds_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "LOCAL_STATE_DIR", tmp_path)
+    # A real, definitely-alive process that isn't us.
+    proc = subprocess.Popen(["sleep", "30"])
+    try:
+        (tmp_path / "jarvis.pid").write_text(str(proc.pid), encoding="utf-8")
+
+        assert _acquire_singleton_lock() is False
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+
+def test_acquire_singleton_lock_succeeds_when_lock_is_stale(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "LOCAL_STATE_DIR", tmp_path)
+    (tmp_path / "jarvis.pid").write_text(str(2**30), encoding="utf-8")  # dead PID
+
+    assert _acquire_singleton_lock() is True
+    assert (tmp_path / "jarvis.pid").read_text().strip() == str(os.getpid())
+
+
+def test_acquire_singleton_lock_succeeds_when_file_is_corrupt(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "LOCAL_STATE_DIR", tmp_path)
+    (tmp_path / "jarvis.pid").write_text("not-a-pid", encoding="utf-8")
+
+    assert _acquire_singleton_lock() is True

@@ -79,7 +79,18 @@ def send_turn(messages: list[dict]) -> str:
             if function is None:
                 output = f"Ferramenta desconhecida: {call.name}"
             else:
-                output = function(**call.arguments)
+                # A real, observed failure: the local model hallucinated an
+                # argument that doesn't exist (read_resume(path=...) --
+                # read_resume takes none) -- TypeError propagated all the
+                # way out of send_turn(), which run_voice_loop's broad
+                # exception handler then misdiagnosed as a mic problem and
+                # "recovered" from, silently dropping the user's turn with
+                # no reply at all. A bad tool call is the model's mistake to
+                # see and correct, not a reason to blow up the whole turn.
+                try:
+                    output = function(**call.arguments)
+                except Exception as exc:
+                    output = f"Erro ao executar {call.name}: {exc}"
             messages.append({"role": "tool", "content": str(output), "tool_name": call.name})
 
     return "Desculpe, Senhor Nicholas, me perdi tentando executar essa ação. Pode repetir?"

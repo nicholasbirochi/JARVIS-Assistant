@@ -16,10 +16,19 @@ toggle above, since it's just a window onto whatever state is currently
 published (including "off" itself, published here -- see toggle() and
 _sync_with_reality() -- since jarvis/assistant/conversation.py only ever
 knows "idle/listening/speaking", never that it was stopped).
+
+main() refuses to start a second instance (a PID lock file under
+LOCAL_STATE_DIR) -- found live that two real instances (the LaunchAgent's
++ a manually-opened JARVIS.app) ended up running at once, both fighting
+over the microphone, which is exactly the kind of confusing, silent
+failure this project has chased down more than once already.
 """
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Callable
@@ -32,6 +41,59 @@ from jarvis.assistant.conversation import run_voice_loop
 _ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 ICON_OFF = str(_ASSETS_DIR / "icon_off.png")
 ICON_ON = str(_ASSETS_DIR / "icon_on.png")
+
+
+def _pid_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just owned by someone else -- still alive
+    return True
+
+
+def _acquire_singleton_lock() -> bool:
+    """Returns True if this process should proceed (no other JARVIS
+    instance currently holds the lock), False if one already does --
+    caller must exit immediately in that case, not start a second
+    wake-word listener/mic stream. A lock left behind by a hard-killed
+    previous instance is harmless: its PID is checked for being alive,
+    not just present, so a stale file never blocks a fresh start."""
+    from jarvis.config import LOCAL_STATE_DIR
+
+    lock_path = LOCAL_STATE_DIR / "jarvis.pid"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if lock_path.exists():
+        try:
+            existing_pid = int(lock_path.read_text().strip())
+        except ValueError:
+            existing_pid = None
+        if existing_pid is not None and existing_pid != os.getpid() and _pid_is_alive(existing_pid):
+            return False
+
+    lock_path.write_text(str(os.getpid()), encoding="utf-8")
+    return True
+
+
+def _notify_already_running() -> None:
+    # No rumps.App/NSApplication exists yet at this point (we're refusing
+    # to create one) -- osascript's own notification mechanism works
+    # standalone, so a second double-click gives real feedback instead of
+    # silently doing nothing (again).
+    try:
+        subprocess.run(
+            [
+                "osascript",
+                "-e",
+                'display notification "Já tem uma instância rodando." with title "JARVIS"',
+            ],
+            check=False,
+            timeout=5,
+        )
+    except Exception:
+        pass
 
 
 class VoiceLoopController:
@@ -123,6 +185,10 @@ class JarvisMenuBarApp(rumps.App):
 
 
 def main() -> None:
+    if not _acquire_singleton_lock():
+        print("[jarvis] outra instância já está rodando -- encerrando esta.", file=sys.stderr)
+        _notify_already_running()
+        return
     JarvisMenuBarApp().run()
 
 
