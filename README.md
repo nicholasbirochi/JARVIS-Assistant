@@ -175,17 +175,26 @@ até o próximo login (não fica sendo religado). Logs em `~/Library/Logs/JARVIS
 **Ou como um app de verdade**, pra abrir pelo Launchpad/Spotlight/Finder em vez do terminal:
 
 ```bash
-python scripts/generate_app_icon.py   # gera jarvis/assets/AppIcon.icns -- só precisa rodar uma vez
-python scripts/build_app.py           # cria /Applications/JARVIS.app
+.venv/bin/pip install -e '.[packaging]'   # só a primeira vez -- instala o py2app
+python scripts/generate_app_icon.py       # gera jarvis/assets/AppIcon.icns -- só precisa rodar uma vez
+python scripts/build_app.py               # cria /Applications/JARVIS.app
 ```
 
-`JARVIS.app` é um wrapper fino, não um build congelado (`py2app`/`PyInstaller` foram
-descartados de propósito -- a árvore de dependências, torch/playwright/PyObjC WebKit, é
-grande e frágil demais pra congelar com confiança, e não tem benefício real já que isso só
-roda nesta máquina mesmo). O executável só chama o `.venv` do projeto, igual o LaunchAgent
--- **não rode os dois ao mesmo tempo** (o app manual E o LaunchAgent automático), duas
-instâncias tentando pegar o microfone ao mesmo tempo causa exatamente o tipo de falha
-silenciosa que já vimos antes.
+`JARVIS.app` é construído com o modo "alias" do `py2app` (`packaging/setup.py`) -- não é
+um build congelado, continua rodando direto do `.venv`/código-fonte deste projeto (nada de
+dependência empacotada junto). Um wrapper de bash simples foi tentado primeiro e não
+funcionava de verdade: o `python@3.12` do Homebrew é um build "framework" do macOS, e o
+próprio interpretador reexecuta silenciosamente pra dentro de
+`.../Resources/Python.app/Contents/MacOS/Python` sempre que não é executado já como esse
+binário exato -- isso troca a identidade do processo de `com.nicholasbirochi.jarvis` pra
+`org.python.python`, e foi exatamente isso que quebrava o ícone da barra de menu (o processo
+ficava vivo, sem erro nenhum no Python, e o ícone nunca aparecia -- só visível pelo
+Console.app: `AppKit:StatusBar] scene activation failed`). O modo alias do py2app usa um
+stub compilado próprio que embute o interpretador via API C em vez de reexecutar o binário
+do Python, então esse problema nunca acontece. **Não rode o app manual e o LaunchAgent
+automático ao mesmo tempo** -- duas instâncias tentando pegar o microfone ao mesmo tempo
+causa exatamente o tipo de falha silenciosa que já vimos antes (o JARVIS já tem uma trava
+própria contra isso, mas é melhor nem depender dela).
 
 **Primeira vez que for abrir, um passo manual é obrigatório:** clique com o botão direito
 (ou Control-clique) em `JARVIS.app` → **Abrir** → confirme no aviso. Isso não é bug --

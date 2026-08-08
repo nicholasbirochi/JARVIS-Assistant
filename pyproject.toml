@@ -37,6 +37,23 @@ voice-cloning = [
     "torchaudio>=2.11.0",
     "transformers>=4.57,<5",
 ]
+# Only for scripts/build_app.py, never imported at runtime. py2app's "alias
+# mode" (-A) is the actual fix for a real bug: Homebrew's python@3.12 is a
+# macOS "framework" build, and CPython's own C startup code silently
+# re-execs itself into .../Resources/Python.app/Contents/MacOS/Python
+# whenever it isn't already running as that exact binary (confirmed via
+# `strings` on the interpreter itself -- this is unconditional, compiled
+# in, not something an env var can disable). That swap changes the running
+# process's bundle identity from com.nicholasbirochi.jarvis to the generic
+# org.python.python, which is exactly what was breaking NSStatusItem (the
+# menu bar icon never appeared -- confirmed live via Console.app: "AppKit:
+# StatusBar] scene activation failed" on every real double-click launch).
+# Alias mode builds a real .app whose own compiled stub owns that identity
+# from the start, while still running straight from this project's live
+# source/venv -- no freezing, no bundling of dependencies, matching the
+# same "don't freeze the fragile heavy dependency tree" reasoning that
+# ruled out a full py2app/PyInstaller build elsewhere in this project.
+packaging = ["py2app>=0.28"]
 
 [build-system]
 requires = ["setuptools>=68"]
