@@ -54,6 +54,8 @@
   }
   body[data-state="listening"] #status { color: var(--blue-listening); text-shadow: 0 0 12px rgba(47,182,232,0.6); }
   body[data-state="speaking"] #status { color: var(--blue-speaking); text-shadow: 0 0 16px rgba(127,227,255,0.85); }
+  body[data-state="off"] #status { color: #4a4f58; }
+  body[data-state="off"] #brand, body[data-state="off"] #clock { color: #363a42; }
 
   #transcript {
     margin-top: 14px;
@@ -89,13 +91,13 @@
   #brand b { color: var(--blue-listening); }
 </style>
 </head>
-<body data-state="idle">
+<body data-state="off">
   <div id="brand">J·A·R·V·I·S</div>
   <div id="clock">--:--:--</div>
   <div id="stage">
     <canvas id="orb"></canvas>
   </div>
-  <div id="status">Em espera</div>
+  <div id="status">Desligado</div>
   <div id="transcript"></div>
 
 <script>
@@ -114,14 +116,15 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-const STATE_LABEL = { idle: "Em espera", listening: "Ouvindo...", speaking: "Falando" };
+const STATE_LABEL = { off: "Desligado", idle: "Em espera", listening: "Ouvindo...", speaking: "Falando" };
 const STATE_COLOR = {
+  off:       { core: [58, 64, 74], glow: 0.12 },
   idle:      { core: [31, 126, 168], glow: 0.35 },
   listening: { core: [47, 182, 232], glow: 0.65 },
   speaking:  { core: [127, 227, 255], glow: 1.0 },
 };
 
-let currentState = "idle";
+let currentState = "off";
 let stateSince = performance.now();
 // Smooth noise for the "speaking" waveform -- sum of a few slow sines with
 // independent phases, not randomness, so it reads as alive rather than jittery.
@@ -143,10 +146,11 @@ function draw(now) {
   const c = STATE_COLOR[currentState];
   const [r, g, b] = c.core;
 
-  // Breathing pulse -- slow when idle, brisker when listening/speaking.
-  const pulseSpeed = currentState === "idle" ? 0.6 : currentState === "listening" ? 1.1 : 1.8;
+  // Breathing pulse -- inert when off, slow when idle, brisker when listening/speaking.
+  const pulseSpeed = currentState === "off" ? 0.12 : currentState === "idle" ? 0.6 : currentState === "listening" ? 1.1 : 1.8;
   const pulse = 0.5 + 0.5 * Math.sin(t * pulseSpeed);
-  const coreR = R * (0.34 + 0.05 * pulse * (currentState === "idle" ? 0.5 : 1));
+  const pulseStrength = currentState === "off" ? 0.15 : currentState === "idle" ? 0.5 : 1;
+  const coreR = R * (0.34 + 0.05 * pulse * pulseStrength);
 
   // Outer faint dashed ring, slow rotation.
   ctx.save();

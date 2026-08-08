@@ -6,17 +6,28 @@ from jarvis.visualizer import state
 @pytest.fixture(autouse=True)
 def _reset(monkeypatch):
     monkeypatch.setattr(state, "_subscribers", [])
-    monkeypatch.setattr(state, "_current", state.StateEvent(state="idle"))
+    monkeypatch.setattr(state, "_current", state.StateEvent(state="off"))
 
 
-def test_current_defaults_to_idle():
-    assert state.current() == state.StateEvent(state="idle")
+def test_current_defaults_to_off():
+    # "off", not "idle" -- idle specifically means the voice loop is
+    # running and waiting for the wake word; before anything ever
+    # publishes, JARVIS hasn't been turned on at all.
+    assert state.current() == state.StateEvent(state="off")
 
 
 def test_publish_updates_current():
     state.publish("listening")
 
     assert state.current() == state.StateEvent(state="listening", text="")
+
+
+def test_publish_accepts_off():
+    state.publish("listening")  # move away from the reset baseline first
+
+    state.publish("off")
+
+    assert state.current() == state.StateEvent(state="off", text="")
 
 
 def test_publish_rejects_unknown_state():

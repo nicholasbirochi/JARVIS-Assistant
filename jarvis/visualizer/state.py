@@ -11,9 +11,9 @@ import threading
 from dataclasses import dataclass
 from typing import Literal
 
-State = Literal["idle", "listening", "speaking"]
+State = Literal["off", "idle", "listening", "speaking"]
 
-_VALID_STATES = ("idle", "listening", "speaking")
+_VALID_STATES = ("off", "idle", "listening", "speaking")
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,14 @@ class StateEvent:
 
 _lock = threading.Lock()
 _subscribers: list[queue.Queue] = []
-_current = StateEvent(state="idle")
+# "off" (not "idle") by default -- before the menu bar's toggle has ever
+# been clicked, or once it's turned off, JARVIS genuinely isn't listening
+# for anything. "idle" specifically means the voice loop IS running and
+# waiting for the wake word -- run_voice_loop only ever publishes "idle",
+# never "off"; only the menu bar (jarvis/menubar.py) publishes "off",
+# since it's the only thing that actually knows the loop was stopped
+# rather than just between wake-word sessions.
+_current = StateEvent(state="off")
 
 
 def current() -> StateEvent:

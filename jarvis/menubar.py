@@ -9,15 +9,17 @@ scripts/generate_menubar_icons.py) -- macOS tints them to match every other
 native menu-bar icon (monochrome, adapts to light/dark) instead of showing
 a colored emoji.
 
-"Visualizar Interação" opens jarvis/visualizer/'s live HUD page (a local,
-127.0.0.1-only browser tab) -- works independently of the on/off toggle
-above, since it's just a window onto whatever state is currently published.
+"Visualizar Interação" opens jarvis/visualizer/'s live HUD in its own
+chrome-less window (jarvis/visualizer/launcher.py) -- works independently
+of the on/off toggle above, since it's just a window onto whatever state
+is currently published (including "off" itself, published here -- see
+toggle() and _sync_with_reality() -- since jarvis/assistant/conversation.py
+only ever knows "idle/listening/speaking", never that it was stopped).
 """
 
 from __future__ import annotations
 
 import threading
-import webbrowser
 from pathlib import Path
 from typing import Callable
 
@@ -73,9 +75,9 @@ class JarvisMenuBarApp(rumps.App):
         NSApplication.sharedApplication().setActivationPolicy_(
             NSApplicationActivationPolicyAccessory
         )
-        self._toggle_item = rumps.MenuItem("Ligar JARVIS", callback=self.toggle)
         self._visualizer_item = rumps.MenuItem("Visualizar Interação", callback=self.open_visualizer)
-        self.menu = [self._toggle_item, self._visualizer_item]
+        self._toggle_item = rumps.MenuItem("Ligar", callback=self.toggle)
+        self.menu = [self._visualizer_item, self._toggle_item]
         self._controller = VoiceLoopController()  # starts OFF -- see module docstring
         # run_voice_loop now survives most failures on its own (see its
         # docstring), but if it ever does die unrecovered, this is what
@@ -84,27 +86,39 @@ class JarvisMenuBarApp(rumps.App):
         rumps.Timer(self._sync_with_reality, 5).start()
 
     def _sync_with_reality(self, _timer: rumps.Timer) -> None:
-        if self._toggle_item.title == "Desligar JARVIS" and not self._controller.is_running:
+        if self._toggle_item.title == "Desligar" and not self._controller.is_running:
             self.icon = ICON_OFF
-            self._toggle_item.title = "Ligar JARVIS"
+            self._toggle_item.title = "Ligar"
+            self._publish_off()
 
     def toggle(self, _sender: rumps.MenuItem) -> None:
         if self._controller.is_running:
             self._controller.stop()
             self.icon = ICON_OFF
-            self._toggle_item.title = "Ligar JARVIS"
+            self._toggle_item.title = "Ligar"
+            self._publish_off()
         else:
             self._controller.start()
             self.icon = ICON_ON
-            self._toggle_item.title = "Desligar JARVIS"
+            self._toggle_item.title = "Desligar"
+            # No explicit "listening"/"idle" publish here -- run_voice_loop
+            # itself publishes "idle" within its first loop iteration,
+            # moments after the thread starts.
+
+    @staticmethod
+    def _publish_off() -> None:
+        from jarvis.visualizer import state
+
+        state.publish("off")
 
     def open_visualizer(self, _sender: rumps.MenuItem) -> None:
-        # Works whether or not JARVIS is currently listening -- the page
-        # just shows "Em espera" (idle) until a real state is published.
-        # Safe to click repeatedly: server.start() no-ops past the first call.
-        from jarvis.visualizer import server
+        # Works whether or not JARVIS is currently listening -- the HUD
+        # just shows "Desligado" until a real state is published. Safe to
+        # click repeatedly -- launcher.open_window() won't stack up
+        # duplicate windows.
+        from jarvis.visualizer import launcher
 
-        webbrowser.open(server.url())
+        launcher.open_window()
 
 
 def main() -> None:

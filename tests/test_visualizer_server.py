@@ -70,6 +70,12 @@ def test_events_endpoint_streams_subsequent_publishes():
 
 
 def test_url_returns_a_reachable_localhost_address():
+    # Pre-seed with an ephemeral port -- url()'s own start() call is
+    # idempotent and will just reuse this, avoiding a collision with
+    # start()'s real default port (8765) if something else on the machine
+    # (e.g. the actual running menu-bar app) already has it bound.
+    server.start(port=0)
+
     result = server.url()
 
     assert result.startswith("http://127.0.0.1:")
