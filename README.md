@@ -26,7 +26,10 @@ não inspecionado.
 - **`jarvis/assistant/providers.py`** — abstração `LocalLLMProvider`; hoje só existe
   `OllamaProvider`, mas qualquer chamador (conversa, importação, indexador) passa por essa
   interface, não por `ollama` diretamente — trocar para MLX no futuro não deve exigir
-  tocar em nenhum desses chamadores.
+  tocar em nenhum desses chamadores. Manda `keep_alive` em toda chamada (`OLLAMA_KEEP_ALIVE`,
+  padrão 30min) -- o padrão do próprio Ollama (5min) foi a causa real de respostas lentas
+  medida na prática: qualquer intervalo maior entre ativações do JARVIS forçava um recarregamento
+  frio do modelo (~30s) na resposta seguinte.
 - **`jarvis/resume/schema.py`** — currículo canônico com procedência: cada item
   (experiência, certificação, projeto...) carrega uma lista de `Evidence` (arquivo de
   origem, tipo, data de leitura, trecho, confiança, status de revisão). Conflitos entre
@@ -82,7 +85,7 @@ cp .env.example .env   # opcional -- ver abaixo
 # Modelo local (Ollama) -- roda como serviço em background, gerenciado pelo Homebrew
 brew install ollama
 brew services start ollama
-ollama pull qwen2.5:14b   # ~9GB, baixa uma vez
+ollama pull qwen2.5:7b   # ~4.7GB, baixa uma vez -- ~4x mais rápido que o 14b uma vez "aquecido"
 
 # Só necessário se for usar os adaptadores de site (jarvis/sites/) -- baixa o Chromium
 # que o Playwright controla (não é o seu navegador normal, ~150MB, uma vez só)

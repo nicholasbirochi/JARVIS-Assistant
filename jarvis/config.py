@@ -48,7 +48,20 @@ REVIEW_DIR = DATA_DIR / "review"
 # only "ollama" exists today, kept configurable so a future MLXProvider slots in cleanly.
 LLM_PROVIDER = os.environ.get("JARVIS_LLM_PROVIDER", "ollama")
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-LOCAL_MODEL = os.environ.get("JARVIS_MODEL", "qwen2.5:14b")
+# qwen2.5:7b, not 14b -- measured live: once warm, the 7b model answered the
+# same simple prompt in 1.1s vs 14b's 4.7s (roughly 4x), and still correctly
+# drove a real tool call (résumé field update) in a separate live test.
+# Ollama's default keep-alive is only 5 minutes, so without OLLAMA_KEEP_ALIVE
+# below, "warm" rarely holds between JARVIS activations spaced by normal
+# gaps -- the two fixes matter together, not either alone.
+LOCAL_MODEL = os.environ.get("JARVIS_MODEL", "qwen2.5:7b")
+# How long Ollama keeps the model resident in memory after the last request
+# -- passed on every chat call (providers.py), not a server-side setting, so
+# it works regardless of how the Ollama service itself was started. 30
+# minutes comfortably covers normal gaps between JARVIS activations during a
+# work session without holding the model in RAM indefinitely if left idle
+# for a long stretch.
+OLLAMA_KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
 
 # Spoken the instant a trigger fires, before the model is ever invoked -- an
 # LLM asked to "say this greeting" could paraphrase or drop the punctuation,

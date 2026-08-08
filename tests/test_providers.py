@@ -85,3 +85,34 @@ def test_ollama_provider_structured_chat_parses_json():
 
     assert result == {"a": 1}
     assert fake_client.last_call_kwargs["options"] == {"temperature": 0}
+
+
+def test_ollama_provider_passes_keep_alive_on_chat():
+    # Ollama's own default keep-alive (5 minutes) was found to be the real
+    # cost behind slow replies in practice -- any gap between JARVIS
+    # activations longer than that forces a full cold model reload. This
+    # must be sent on every request, not assumed to be a server setting.
+    fake_client = FakeClient(FakeMessage(content="olá", tool_calls=[]))
+    provider = OllamaProvider(model="qwen2.5:7b", host="http://x", client=fake_client, keep_alive="30m")
+
+    provider.chat(messages=[{"role": "user", "content": "oi"}], tool_specs=[])
+
+    assert fake_client.last_call_kwargs["keep_alive"] == "30m"
+
+
+def test_ollama_provider_passes_keep_alive_on_structured_chat():
+    fake_client = FakeClient(FakeMessage(content="{}"))
+    provider = OllamaProvider(model="qwen2.5:7b", host="http://x", client=fake_client, keep_alive="30m")
+
+    provider.structured_chat(messages=[{"role": "user", "content": "x"}], json_schema={"type": "object"})
+
+    assert fake_client.last_call_kwargs["keep_alive"] == "30m"
+
+
+def test_get_provider_passes_keep_alive_from_config(monkeypatch):
+    monkeypatch.setattr(config, "LLM_PROVIDER", "ollama")
+    monkeypatch.setattr(config, "OLLAMA_KEEP_ALIVE", "1h")
+
+    provider = get_provider()
+
+    assert provider._keep_alive == "1h"

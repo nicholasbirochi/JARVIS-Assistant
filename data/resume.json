@@ -2,7 +2,7 @@
   "meta": {
     "schema_version": "2.0",
     "canonical_language": "pt-BR",
-    "last_updated": "2026-08-05T03:01:24.948899+00:00",
+    "last_updated": "2026-08-08T06:10:51.450091+00:00",
     "source_documents": [
       "Currículo - DataBase - Brasil ATS.docx",
       "Currículo - DataBase - International ATS.docx"
@@ -423,6 +423,22 @@
       "new_value": "+55 (11) 95827-5250",
       "source": "proposal_review",
       "note": null
+    },
+    {
+      "timestamp": "2026-08-08T06:10:24.261949+00:00",
+      "field_path": "personal_info.phone",
+      "old_value": "+55 (11) 95827-5250",
+      "new_value": "+55 11 98888-7777",
+      "source": "voice",
+      "note": null
+    },
+    {
+      "timestamp": "2026-08-08T06:10:51.449084+00:00",
+      "field_path": "personal_info.phone",
+      "old_value": "+55 11 98888-7777",
+      "new_value": "+55 (11) 95827-5250",
+      "source": "manual_review",
+      "note": "Revertendo valor de teste inserido por engano durante teste de tool-calling do assistente (não era um pedido real do usuário)."
     }
   ]
 }
