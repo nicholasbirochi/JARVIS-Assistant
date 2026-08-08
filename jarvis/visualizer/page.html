@@ -148,12 +148,15 @@ for (let i = 0; i < NUM_PARTICLES; i++) {
 }
 
 // Per-state motion profile: how fast the sphere spins, how far particles
-// wander in/out, how bright/large they read, overall.
+// wander in/out, how bright/large they read, overall -- and `connect`,
+// how strongly nearby particles link up with constellation lines (0 =
+// none). Only listening/speaking connect, as requested -- idle/off stay
+// as loose, unconnected dots.
 const STATE_MOTION = {
-  off:       { rotSpeed: 0.015, jitterAmp: 0.02, alpha: 0.30, sizeMul: 0.65, chaos: 0 },
-  idle:      { rotSpeed: 0.07,  jitterAmp: 0.05, alpha: 0.65, sizeMul: 0.9,  chaos: 0 },
-  listening: { rotSpeed: 0.16,  jitterAmp: 0.09, alpha: 0.88, sizeMul: 1.05, chaos: 0.02 },
-  speaking:  { rotSpeed: 0.32,  jitterAmp: 0.17, alpha: 1.0,  sizeMul: 1.25, chaos: 0.06 },
+  off:       { rotSpeed: 0.015, jitterAmp: 0.02, alpha: 0.30, sizeMul: 0.65, chaos: 0,    connect: 0 },
+  idle:      { rotSpeed: 0.07,  jitterAmp: 0.05, alpha: 0.65, sizeMul: 0.9,  chaos: 0,    connect: 0 },
+  listening: { rotSpeed: 0.16,  jitterAmp: 0.09, alpha: 0.88, sizeMul: 1.05, chaos: 0.02, connect: 0.5 },
+  speaking:  { rotSpeed: 0.32,  jitterAmp: 0.17, alpha: 1.0,  sizeMul: 1.25, chaos: 0.06, connect: 0.85 },
 };
 
 let rotation = 0;
@@ -211,6 +214,32 @@ function draw(now) {
     });
   }
   projected.sort((a, b2) => a.z - b2.z);
+
+  // Constellation lines -- only while actively listening/speaking, between
+  // nearby front-facing particles. Drawn before the dots so the dots sit
+  // on top of the lines, not under them.
+  if (m.connect > 0) {
+    const maxDist = R * 0.34;
+    ctx.lineWidth = 0.6 * dpr;
+    for (let i = 0; i < projected.length; i++) {
+      const a = projected[i];
+      if (a.z < 0) continue; // front-facing half only -- keeps it legible, not a tangle
+      for (let j = i + 1; j < projected.length; j++) {
+        const b2 = projected[j];
+        if (b2.z < 0) continue;
+        const dx = a.x - b2.x, dy = a.y - b2.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist >= maxDist) continue;
+        const depth = ((a.z + b2.z) / 2 + 1) / 2; // 0..1, average of both points' front/back-ness
+        const alpha = m.connect * (1 - dist / maxDist) * (0.3 + 0.7 * depth);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b2.x, b2.y);
+        ctx.stroke();
+      }
+    }
+  }
 
   for (const pt of projected) {
     const depth = (pt.z + 1) / 2; // 0 = far side, 1 = near side
