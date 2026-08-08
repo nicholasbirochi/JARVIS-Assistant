@@ -6,24 +6,27 @@ into the overall speak() fallback chain.
 
 Real, measured findings on this machine (M5, 24GB RAM, MPS available) that
 shape the design here, not assumptions:
-- Loading the ~1.87GB model took 15-17 minutes even reading purely from
-  local disk (already downloaded, no network involved) -- unexplained (not
-  a macOS quarantine scan, `xattr` showed no com.apple.quarantine flag).
-  Whatever the cause, it means the model must be loaded exactly ONCE per
-  JARVIS process and kept resident for the process's whole lifetime --
-  reloading per-conversation (like stt.py does) would be unusable.
-  preload_in_background() is meant to be called once, as early as
-  possible (JARVIS startup, not first speak()), so this cost overlaps with
-  the user just having JARVIS on rather than blocking their first
-  activation.
-- Generation speed measured CPU as faster than MPS for this specific model
-  (3.4s vs 11.4s to generate the same short sentence) -- MPS being
-  "available" doesn't mean every op in this model has an efficient MPS
-  kernel; per-op CPU fallback overhead can lose to just using CPU
-  outright. device is hardcoded to "cpu" below for that reason, not
-  auto-detected.
-- Even on CPU, generation is NOT real-time (~1.5x slower measured) -- callers
-  must treat this as a genuinely slow operation, never assume it's cheap.
+- Confirmed live with a real reference clip: loading takes ~13s, and
+  generation runs at roughly real-time to faster (7.8s for a 7s reply,
+  21.3s for a 29.7s reply -- 0.72x). Needs FFmpeg installed on the system
+  (`brew install ffmpeg`) -- torchaudio's decoder loads its shared
+  libraries at runtime; without it, synthesis fails with a clear
+  "Could not load libtorchcodec" error.
+- One earlier, isolated run -- before the real reference clip existed, using
+  one of the model's own built-in preset voices -- took 15-17 minutes to
+  load, for a reason never identified and never reproduced since. As a
+  precaution the model still loads exactly ONCE per process on a background
+  thread rather than being reloaded per-conversation (like stt.py does):
+  preload_in_background() is meant to be called once, as early as possible
+  (JARVIS startup, not first speak()), so even a repeat of that slow case
+  would overlap with the user just having JARVIS on rather than blocking
+  their first activation.
+- That same earlier (pre-real-clip) comparison measured CPU as faster than
+  MPS for this specific model (3.4s vs 11.4s to generate the same short
+  sentence) -- MPS being "available" doesn't mean every op in this model
+  has an efficient MPS kernel; per-op CPU fallback overhead can lose to
+  just using CPU outright. device is hardcoded to "cpu" below for that
+  reason, not auto-detected.
 """
 
 from __future__ import annotations

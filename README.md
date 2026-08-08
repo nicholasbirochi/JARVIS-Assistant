@@ -79,8 +79,10 @@ ollama pull qwen2.5:14b   # ~9GB, baixa uma vez
 playwright install chromium
 
 # Só necessário para a voz clonada (jarvis/voice/xtts_engine.py) -- ~4GB de
-# dependências (torch/coqui-tts), veja "Voz clonada (XTTS-v2)" abaixo antes
-# de instalar: os números reais medidos aqui são pesados.
+# dependências (torch/coqui-tts) + FFmpeg do sistema (não é pacote Python,
+# é lib nativa que o torchaudio carrega em runtime pra decodificar o
+# clipe de referência). Ver "Voz clonada (XTTS-v2)" abaixo.
+brew install ffmpeg
 pip install -e ".[voice-cloning]"
 ```
 
@@ -159,19 +161,28 @@ de volta pra voz padrão (`TTS_VOICE`, ex: Felipe) automaticamente, sem erro nen
    projeto** (que é sincronizada com o OneDrive) e **nunca baixado por mim/pelo JARVIS**:
    é dado biométrico de voz, você quem coloca esse arquivo lá.
 
-**Números reais medidos neste Mac (M5, 24GB RAM, MPS disponível) antes de decidir usar
-mesmo assim:**
-- Carregar o modelo (`~1.87GB`, já em disco local, sem rede) levou **15-17 minutos** --
-  inconsistente entre execuções, causa ainda não identificada (não é quarentena do
-  macOS -- conferido via `xattr`). Por isso o carregamento roda uma vez só, numa thread em
-  segundo plano, iniciada assim que o loop de voz sobe (`preload_in_background()`) -- nunca
-  bloqueia uma ativação por wake word esperando o modelo carregar.
-- Gerar fala é **mais lento que tempo real** mesmo depois de carregado -- e, contra o
-  esperado, **CPU venceu MPS** (3,4s vs 11,4s pra gerar a mesma frase curta): nem toda
-  operação do modelo tem kernel MPS eficiente, então o motor força `device="cpu"` sempre,
-  em vez de detectar automaticamente.
+Também precisa do FFmpeg instalado no sistema (`brew install ffmpeg`) -- não é dependência
+Python, é a lib nativa que o `torchcodec` (leitor de áudio do torchaudio) carrega em tempo
+de execução para decodificar o clipe de referência; sem ela, a síntese falha com um erro
+claro (`Could not load libtorchcodec`) apontando exatamente pra isso.
+
+**Números reais medidos neste Mac (M5, 24GB RAM) com o clipe de referência de verdade,
+depois de instalar o FFmpeg:**
+- Carregar o modelo: consistentemente **~13s** nos testes reais. Numa rodada isolada
+  anterior (antes do clipe de referência existir, com uma voz pronta do próprio modelo)
+  chegou a levar 15-17 minutos, de forma inconsistente e sem causa identificada -- não
+  reproduzido desde então. Por precaução o carregamento continua rodando numa thread em
+  segundo plano, iniciada assim que o loop de voz sobe (`preload_in_background()`), então
+  mesmo se aquilo se repetir um dia, nenhuma ativação por wake word fica travada esperando.
+- Gerar fala: **7,8s para uma frase de ~7s** (quase tempo real) e **21,3s para uma fala de
+  29,7s** (0,72x -- mais rápido que tempo real). Roda em `device="cpu"`, não `mps`: numa
+  comparação anterior (com voz pronta do modelo, antes do clipe real) CPU bateu MPS
+  (3,4s vs 11,4s pra mesma frase) -- nem toda operação do modelo tem kernel MPS eficiente
+  nesta versão do torch/coqui-tts, então o motor força CPU em vez de detectar
+  automaticamente.
+- **Confirmado ao vivo com o clipe de referência real, ouvindo o resultado.**
 - Enquanto o modelo ainda não carregou (ou não há clipe de referência), `speak()` usa a voz
-  padrão normalmente -- nunca trava esperando os 15+ minutos.
+  padrão normalmente -- nunca trava esperando.
 
 ## Adaptador da Gupy
 
@@ -218,10 +229,9 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
 
 ## Roadmap
 
-- Voz clonada: ainda falta um clipe de referência de verdade pra testar a clonagem em si
-  (o motor/fallback já está implementado e testado, mas nunca rodou com um clipe real --
-  ver "Voz clonada (XTTS-v2)" acima). Também vale investigar a causa dos 15-17 minutos de
-  carregamento -- não identificada ainda.
+- Voz clonada: confirmada ao vivo, funcionando (ver "Voz clonada (XTTS-v2)" acima) --
+  clipe de referência real testado, dois testes gerados e ouvidos. Ainda vale ficar de
+  olho se o carregamento lento (15-17min) que aconteceu uma vez volta a se repetir.
 - E-mail na Gupy: testar ao vivo, supervisionado, se mudar o e-mail dispara algum fluxo
   de verificação -- só então liberar em `_WRITABLE_FIELDS` (`jarvis/sites/gupy.py`).
 - Sub-formulário "Meu currículo" da Gupy (experiência, formação, certificações,

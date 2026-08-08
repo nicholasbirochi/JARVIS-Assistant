@@ -80,16 +80,23 @@ TTS_VOICE = os.environ.get("TTS_VOICE", "com.apple.voice.enhanced.pt-BR.Felipe")
 # Voice cloning (jarvis/voice/xtts_engine.py), via XTTS-v2 -- an alternate
 # TTS engine that clones a voice from a short user-supplied reference clip,
 # instead of using one of macOS's built-in voices. Chosen as the DEFAULT
-# engine per an explicit decision to accept its real, measured downsides on
-# this machine: loading the model took 15-17 minutes even from local disk
-# (unexplained -- not macOS quarantine-scan, still under investigation),
-# and generation itself is slower than real-time (measured ~1.5x on CPU,
-# ~5x on MPS -- CPU actually wins here despite MPS being available, a
-# real per-machine finding, not a guess, which is why the engine hardcodes
-# "cpu" rather than "mps"/"auto"). tts.py only ever uses this engine once
-# TTS_XTTS_SPEAKER_WAV_PATH actually exists AND the (very slow) background
-# preload has finished -- otherwise it transparently keeps using TTS_VOICE
-# above, so setting this as default is safe even before that file exists.
+# engine, confirmed working live with a real reference clip: ~13s to load
+# the model, generation at ~real-time to faster-than-real-time (measured
+# 7.8s for a 7s reply, 21.3s for a 29.7s reply -- 0.72x). One earlier,
+# isolated run (before the real reference clip existed, using a built-in
+# preset voice) took 15-17 minutes to load for reasons never identified and
+# never reproduced since -- the engine still loads on a background thread
+# started as soon as the voice loop comes up (preload_in_background()) as a
+# precaution, so even a repeat of that wouldn't block a wake-word
+# activation. CPU beat MPS in that same earlier comparison (3.4s vs 11.4s
+# for an identical short sentence) -- a real per-machine finding, not a
+# guess, which is why the engine hardcodes "cpu" rather than "mps"/"auto".
+# tts.py only ever uses this engine once TTS_XTTS_SPEAKER_WAV_PATH actually
+# exists AND the background preload has finished -- otherwise it
+# transparently keeps using TTS_VOICE above, so setting this as default is
+# safe even before that file exists. Also needs FFmpeg installed on the
+# system (`brew install ffmpeg`) -- torchaudio's audio decoder loads its
+# shared libraries at runtime, not a Python dependency.
 TTS_ENGINE = os.environ.get("TTS_ENGINE", "xtts")
 TTS_XTTS_LANGUAGE = "pt"
 # Deliberately NOT under DATA_DIR -- same reasoning as LOCAL_STATE_DIR
