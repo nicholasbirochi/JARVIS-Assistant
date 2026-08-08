@@ -1,14 +1,17 @@
 """One-off script: renders JARVIS.app's icon -- a dark rounded-square
-background with a glowing blue orb, matching the visualizer HUD's own
-look (jarvis/visualizer/page.html's core sphere) -- at every size macOS's
-.icns format needs, then packs them into an .iconset and converts via
-`iconutil` (built into macOS, no dependency). Generated once and
-committed as a static asset in jarvis/assets/ -- no need to re-render at
-build time.
+background with the visualizer HUD's own particle-sphere look
+(jarvis/visualizer/page.html's constellation of connected dots), frozen
+at one fixed, pleasing rotation since an icon can't animate -- at every
+size macOS's .icns format needs, then packs them into an .iconset and
+converts via `iconutil` (built into macOS, no dependency). Generated once
+and committed as a static asset in jarvis/assets/ -- no need to
+re-render at build time.
 """
 
 from __future__ import annotations
 
+import math
+import random
 import subprocess
 import sys
 from pathlib import Path
@@ -49,6 +52,31 @@ SIZES = [
     ("icon_512x512@2x.png", 1024),
 ]
 
+# Same sphere-distribution idea as the HUD's canvas (theta/phi uniform over
+# a sphere surface), but far fewer points and a single frozen rotation --
+# a still image with 260 dots would just read as noise, especially at
+# 16-32px sizes where most of these are actually seen day to day (Dock,
+# Finder list view, menu bar "About" panel).
+_rng = random.Random(7)  # fixed seed -- same icon every time this script runs
+PARTICLES = [
+    (_rng.uniform(0, 2 * math.pi), math.acos(2 * _rng.uniform(0, 1) - 1)) for _ in range(70)
+]
+ROTATION = 0.5  # radians -- picked by eye for a balanced-looking frozen pose
+
+
+def _project(size: int) -> list[tuple[float, float, float]]:
+    R = size * 0.30
+    cx = cy = size / 2
+    points = []
+    for theta, phi in PARTICLES:
+        t = theta + ROTATION
+        x3 = math.sin(phi) * math.cos(t)
+        y3 = math.cos(phi)
+        z3 = math.sin(phi) * math.sin(t)
+        points.append((cx + x3 * R, cy + y3 * R * 0.94, z3))
+    points.sort(key=lambda p: p[2])  # back-to-front
+    return points
+
 
 def draw_icon(size: int, output_path: Path) -> None:
     bitmap = NSBitmapImageRep.alloc().initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel_(
@@ -69,14 +97,14 @@ def draw_icon(size: int, output_path: Path) -> None:
         bg_path = NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(bg_rect, corner_radius, corner_radius)
         NSColor.colorWithSRGBRed_green_blue_alpha_(0.012, 0.027, 0.067, 1.0).setFill()
         bg_path.fill()
-        bg_path.addClip()  # keep the glow/orb from spilling past the rounded corners
+        bg_path.addClip()  # keep the glow/dots from spilling past the rounded corners
 
         center = NSMakePoint(size / 2, size / 2)
 
-        # Soft ambient glow behind the orb.
+        # Soft ambient glow behind the sphere.
         glow = NSGradient.alloc().initWithColors_atLocations_colorSpace_(
             [
-                NSColor.colorWithSRGBRed_green_blue_alpha_(0.18, 0.71, 0.91, 0.55),
+                NSColor.colorWithSRGBRed_green_blue_alpha_(0.18, 0.71, 0.91, 0.5),
                 NSColor.colorWithSRGBRed_green_blue_alpha_(0.18, 0.71, 0.91, 0.0),
             ],
             [0.0, 1.0],
@@ -84,21 +112,39 @@ def draw_icon(size: int, output_path: Path) -> None:
         )
         glow.drawFromCenter_radius_toCenter_radius_options_(center, 0, center, size * 0.46, 0)
 
-        # The orb itself -- bright white-blue center fading to the state
-        # blue at the rim, same palette as the HUD's core sphere, with an
-        # off-center highlight for a bit of dimensionality.
-        orb_radius = size * 0.30
-        orb_center = NSMakePoint(size / 2 - orb_radius * 0.18, size / 2 + orb_radius * 0.18)
-        orb_gradient = NSGradient.alloc().initWithColors_atLocations_colorSpace_(
-            [
-                NSColor.colorWithSRGBRed_green_blue_alpha_(1.0, 1.0, 1.0, 1.0),
-                NSColor.colorWithSRGBRed_green_blue_alpha_(0.5, 0.89, 1.0, 1.0),
-                NSColor.colorWithSRGBRed_green_blue_alpha_(0.12, 0.45, 0.66, 1.0),
-            ],
-            [0.0, 0.45, 1.0],
-            rgb,
-        )
-        orb_gradient.drawFromCenter_radius_toCenter_radius_options_(orb_center, 0, center, orb_radius, 0)
+        points = _project(size)
+        max_dist = size * 0.16
+
+        # Constellation lines between nearby front-facing dots, drawn
+        # before the dots themselves so dots sit on top.
+        for i in range(len(points)):
+            ax, ay, az = points[i]
+            if az < 0:
+                continue
+            for j in range(i + 1, len(points)):
+                bx, by, bz = points[j]
+                if bz < 0:
+                    continue
+                dist = math.hypot(ax - bx, ay - by)
+                if dist >= max_dist:
+                    continue
+                depth = ((az + bz) / 2 + 1) / 2
+                alpha = (1 - dist / max_dist) * (0.15 + 0.35 * depth)
+                line = NSBezierPath.bezierPath()
+                line.moveToPoint_((ax, ay))
+                line.lineToPoint_((bx, by))
+                line.setLineWidth_(max(0.6, size * 0.0025))
+                NSColor.colorWithSRGBRed_green_blue_alpha_(0.35, 0.82, 1.0, alpha).setStroke()
+                line.stroke()
+
+        # The dots themselves -- brighter/bigger toward the front (higher z).
+        for x, y, z in points:
+            depth = (z + 1) / 2
+            dot_r = size * (0.010 + 0.018 * depth)
+            NSColor.colorWithSRGBRed_green_blue_alpha_(
+                0.55 + 0.45 * depth, 0.85 + 0.15 * depth, 1.0, 0.55 + 0.45 * depth
+            ).setFill()
+            NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(x - dot_r, y - dot_r, dot_r * 2, dot_r * 2)).fill()
     finally:
         NSGraphicsContext.restoreGraphicsState()
 
