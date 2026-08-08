@@ -58,7 +58,14 @@ não inspecionado.
   de voz em background thread, controlado por `VoiceLoopController`. Inicia **desligado**
   (ícone visível, mas não ouvindo até você clicar) e sem ícone no Dock/Cmd-Tab (política de
   ativação "accessory"). Pode ser iniciado manualmente (`python -m jarvis menubar`) ou
-  automaticamente no login via LaunchAgent -- ver "Iniciar automaticamente" abaixo.
+  automaticamente no login via LaunchAgent -- ver "Iniciar automaticamente" abaixo. O botão
+  "Visualizar Interação" abre o HUD de `jarvis/visualizer/` -- ver seção própria abaixo.
+- **`jarvis/visualizer/`** — HUD visual (círculo azul animado, estilo painel futurista) que
+  reflete o estado real do JARVIS (em espera/ouvindo/falando) e o texto sendo ouvido/falado.
+  `state.py` é um pub/sub em memória que `conversation.py`/`tts.py` publicam a cada
+  transição real; `server.py` é um servidor HTTP local (só `127.0.0.1`, stdlib puro, sem
+  dependência nova) que expõe `page.html` e um stream de eventos (Server-Sent Events) pra
+  qualquer aba de navegador aberta nele.
 
 ## Setup
 
@@ -131,7 +138,9 @@ seu microfone/ambiente antes de ajustar `CLAP_PEAK_THRESHOLD` no `.env`:
 python -m jarvis calibrate-claps
 ```
 
-App de menu bar (mesma coisa, com um ícone e botão liga/desliga):
+App de menu bar (mesma coisa, com um ícone e botão liga/desliga -- e um segundo botão,
+"Visualizar Interação", que abre o HUD visual numa aba do navegador, independente de
+JARVIS estar ligado ou não):
 
 ```bash
 python -m jarvis menubar

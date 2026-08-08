@@ -10,6 +10,11 @@ the greeting, a proactive briefing (jarvis/assistant/briefing.py) speaks up
 only if there's something pending (a résumé proposal to review, an open
 conflict) -- also code-derived, never the model's own words, same reasoning
 as the greeting.
+
+Each state transition (idle/listening; "speaking" fires from tts.speak()
+itself, see jarvis/voice/tts.py) is published to jarvis/visualizer/state.py
+-- purely a live visual aid (the menu bar's "Visualizar Interação" button),
+never read back by anything here.
 """
 
 from __future__ import annotations
@@ -67,12 +72,14 @@ def _run_active_session(
     `stop_event` is forwarded to every `speak()` call so "Desligar JARVIS"
     (the menu bar's off-toggle) interrupts speech that's already in
     progress instead of waiting for the current sentence to finish."""
+    from jarvis.visualizer import state as visualizer_state
     from jarvis.voice import stt
 
     messages: list[dict] = []
     consecutive_empty = 0
     try:
         while True:
+            visualizer_state.publish("listening")
             pcm = record_utterance(listener)
             text = transcribe(pcm)
 
@@ -107,6 +114,7 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
     already in progress is cut short right away too -- see
     `_run_active_session` and `tts.speak`."""
     from jarvis.assistant.briefing import build_briefing
+    from jarvis.visualizer import state as visualizer_state
     from jarvis.voice import audio, stt, tts, xtts_engine
     from jarvis.voice.wake_word import WakeWordListener
 
@@ -119,6 +127,7 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
     listener = WakeWordListener()
     try:
         while stop_event is None or not stop_event.is_set():
+            visualizer_state.publish("idle")
             trigger = listener.wait(stop_event=stop_event)
             if trigger is None:
                 break

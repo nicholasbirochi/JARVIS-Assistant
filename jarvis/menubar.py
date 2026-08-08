@@ -8,11 +8,16 @@ Icons are template PNGs rendered from SF Symbols (see
 scripts/generate_menubar_icons.py) -- macOS tints them to match every other
 native menu-bar icon (monochrome, adapts to light/dark) instead of showing
 a colored emoji.
+
+"Visualizar Interação" opens jarvis/visualizer/'s live HUD page (a local,
+127.0.0.1-only browser tab) -- works independently of the on/off toggle
+above, since it's just a window onto whatever state is currently published.
 """
 
 from __future__ import annotations
 
 import threading
+import webbrowser
 from pathlib import Path
 from typing import Callable
 
@@ -69,7 +74,8 @@ class JarvisMenuBarApp(rumps.App):
             NSApplicationActivationPolicyAccessory
         )
         self._toggle_item = rumps.MenuItem("Ligar JARVIS", callback=self.toggle)
-        self.menu = [self._toggle_item]
+        self._visualizer_item = rumps.MenuItem("Visualizar Interação", callback=self.open_visualizer)
+        self.menu = [self._toggle_item, self._visualizer_item]
         self._controller = VoiceLoopController()  # starts OFF -- see module docstring
 
     def toggle(self, _sender: rumps.MenuItem) -> None:
@@ -81,6 +87,14 @@ class JarvisMenuBarApp(rumps.App):
             self._controller.start()
             self.icon = ICON_ON
             self._toggle_item.title = "Desligar JARVIS"
+
+    def open_visualizer(self, _sender: rumps.MenuItem) -> None:
+        # Works whether or not JARVIS is currently listening -- the page
+        # just shows "Em espera" (idle) until a real state is published.
+        # Safe to click repeatedly: server.start() no-ops past the first call.
+        from jarvis.visualizer import server
+
+        webbrowser.open(server.url())
 
 
 def main() -> None:

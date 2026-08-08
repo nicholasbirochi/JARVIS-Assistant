@@ -102,6 +102,10 @@ def speak(text: str, stop_event: threading.Event | None = None) -> None:
     off-toggle sets it) and fires while this is talking, playback is killed
     immediately -- "Desligar JARVIS" cuts him off right away instead of
     finishing the current sentence first."""
+    from jarvis.visualizer import state as visualizer_state
+
+    visualizer_state.publish("speaking", text=text)
+
     if TTS_ENGINE == "xtts" and _speak_via_xtts(text, stop_event):
         return
 

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>J.A.R.V.I.S.</title>
+<style>
+  :root {
+    --bg: #030711;
+    --ring-dim: #0d3a52;
+    --blue-idle: #1f7ea8;
+    --blue-listening: #2fb6e8;
+    --blue-speaking: #7fe3ff;
+    --text-dim: #4f8fae;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: radial-gradient(ellipse at center, #061323 0%, var(--bg) 70%);
+    overflow: hidden;
+    font-family: "SF Mono", "Menlo", "Monaco", ui-monospace, monospace;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    color: var(--blue-listening);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #stage {
+    position: relative;
+    width: min(70vh, 70vw);
+    height: min(70vh, 70vw);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #status {
+    margin-top: 28px;
+    font-size: 13px;
+    letter-spacing: 0.45em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    transition: color 0.4s ease, text-shadow 0.4s ease;
+  }
+  body[data-state="listening"] #status { color: var(--blue-listening); text-shadow: 0 0 12px rgba(47,182,232,0.6); }
+  body[data-state="speaking"] #status { color: var(--blue-speaking); text-shadow: 0 0 16px rgba(127,227,255,0.85); }
+
+  #transcript {
+    margin-top: 14px;
+    max-width: 640px;
+    min-height: 1.6em;
+    padding: 0 24px;
+    text-align: center;
+    font-size: 16px;
+    line-height: 1.5;
+    color: #cdeeff;
+    text-shadow: 0 0 10px rgba(127,227,255,0.35);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  #transcript.visible { opacity: 1; }
+
+  #clock {
+    position: fixed;
+    top: 22px;
+    right: 28px;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+  }
+  #brand {
+    position: fixed;
+    top: 22px;
+    left: 28px;
+    font-size: 12px;
+    letter-spacing: 0.35em;
+    color: var(--text-dim);
+  }
+  #brand b { color: var(--blue-listening); }
+</style>
+</head>
+<body data-state="idle">
+  <div id="brand">J·A·R·V·I·S</div>
+  <div id="clock">--:--:--</div>
+  <div id="stage">
+    <canvas id="orb"></canvas>
+  </div>
+  <div id="status">Em espera</div>
+  <div id="transcript"></div>
+
+<script>
+const canvas = document.getElementById("orb");
+const ctx = canvas.getContext("2d");
+const statusEl = document.getElementById("status");
+const transcriptEl = document.getElementById("transcript");
+const body = document.body;
+
+let dpr = Math.max(1, window.devicePixelRatio || 1);
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+}
+window.addEventListener("resize", resize);
+resize();
+
+const STATE_LABEL = { idle: "Em espera", listening: "Ouvindo...", speaking: "Falando" };
+const STATE_COLOR = {
+  idle:      { core: [31, 126, 168], glow: 0.35 },
+  listening: { core: [47, 182, 232], glow: 0.65 },
+  speaking:  { core: [127, 227, 255], glow: 1.0 },
+};
+
+let currentState = "idle";
+let stateSince = performance.now();
+// Smooth noise for the "speaking" waveform -- sum of a few slow sines with
+// independent phases, not randomness, so it reads as alive rather than jittery.
+function noise(t, seed) {
+  return (
+    Math.sin(t * 1.7 + seed) * 0.5 +
+    Math.sin(t * 3.1 + seed * 2.3) * 0.3 +
+    Math.sin(t * 5.3 + seed * 0.7) * 0.2
+  );
+}
+
+function draw(now) {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2;
+  const R = Math.min(w, h) * 0.38;
+  const t = now / 1000;
+  const elapsed = (now - stateSince) / 1000;
+  const c = STATE_COLOR[currentState];
+  const [r, g, b] = c.core;
+
+  // Breathing pulse -- slow when idle, brisker when listening/speaking.
+  const pulseSpeed = currentState === "idle" ? 0.6 : currentState === "listening" ? 1.1 : 1.8;
+  const pulse = 0.5 + 0.5 * Math.sin(t * pulseSpeed);
+  const coreR = R * (0.34 + 0.05 * pulse * (currentState === "idle" ? 0.5 : 1));
+
+  // Outer faint dashed ring, slow rotation.
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(t * 0.08);
+  ctx.strokeStyle = `rgba(${r},${g},${b},0.18)`;
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.setLineDash([2 * dpr, 10 * dpr]);
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 1.28, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Middle ring with tick marks, counter-rotating.
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-t * 0.15);
+  ctx.strokeStyle = `rgba(${r},${g},${b},0.35)`;
+  ctx.lineWidth = 1 * dpr;
+  const ticks = 48;
+  for (let i = 0; i < ticks; i++) {
+    const a = (i / ticks) * Math.PI * 2;
+    const len = i % 4 === 0 ? 10 * dpr : 4 * dpr;
+    const rr = R * 1.08;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    ctx.lineTo(Math.cos(a) * (rr + len), Math.sin(a) * (rr + len));
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Speaking waveform ring -- procedurally animated, not real audio.
+  if (currentState === "speaking") {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.8)`;
+    ctx.lineWidth = 2 * dpr;
+    ctx.shadowColor = `rgba(${r},${g},${b},0.9)`;
+    ctx.shadowBlur = 14 * dpr;
+    const bars = 96;
+    ctx.beginPath();
+    for (let i = 0; i <= bars; i++) {
+      const a = (i / bars) * Math.PI * 2;
+      // Seeded from the angle itself (periodic over 0..2π), not the raw
+      // index -- keeps the closed loop seamless where i=bars meets i=0.
+      const n = noise(t * 2, Math.cos(a) * 3 + Math.sin(a * 2) * 2);
+      const rr = R * 0.72 + n * R * 0.10;
+      const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  // Listening ring -- gentle single pulse expanding outward.
+  if (currentState === "listening") {
+    const p = (elapsed % 2) / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = `rgba(${r},${g},${b},${0.5 * (1 - p)})`;
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.arc(0, 0, R * (0.55 + p * 0.6), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Core glow.
+  ctx.save();
+  ctx.translate(cx, cy);
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, coreR * 1.6);
+  grad.addColorStop(0, `rgba(${r},${g},${b},${0.9 * c.glow})`);
+  grad.addColorStop(0.5, `rgba(${r},${g},${b},${0.35 * c.glow})`);
+  grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, coreR * 1.6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Inner sphere itself as a gradient (hot white-blue center fading to the
+  // state color at the rim), not a flat fill -- reads as a glowing orb
+  // instead of a solid disc.
+  const innerR = coreR * 0.55 * (0.92 + 0.08 * pulse);
+  const sphere = ctx.createRadialGradient(-innerR * 0.25, -innerR * 0.3, 0, 0, 0, innerR);
+  sphere.addColorStop(0, `rgba(255,255,255,${0.95 * c.glow})`);
+  sphere.addColorStop(0.35, `rgba(${Math.min(255, r + 70)},${Math.min(255, g + 70)},${Math.min(255, b + 50)},${0.92 * c.glow})`);
+  sphere.addColorStop(0.75, `rgba(${r},${g},${b},${0.85 * c.glow})`);
+  sphere.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = sphere;
+  ctx.shadowColor = `rgba(${r},${g},${b},1)`;
+  ctx.shadowBlur = 26 * dpr;
+  ctx.beginPath();
+  ctx.arc(0, 0, innerR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+function setState(newState, text) {
+  if (newState !== currentState) {
+    currentState = newState;
+    stateSince = performance.now();
+    body.setAttribute("data-state", newState);
+    statusEl.textContent = STATE_LABEL[newState] || newState;
+  }
+  if (text) {
+    transcriptEl.textContent = text;
+    transcriptEl.classList.add("visible");
+  } else if (newState === "idle") {
+    transcriptEl.classList.remove("visible");
+  }
+}
+
+function connect() {
+  const es = new EventSource("/events");
+  es.onmessage = (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      setState(data.state, data.text);
+    } catch (e) { /* ignore malformed/keepalive lines */ }
+  };
+  es.onerror = () => {
+    // Browser auto-retries EventSource on its own; nothing to do here.
+  };
+}
+connect();
+
+function tickClock() {
+  const now = new Date();
+  document.getElementById("clock").textContent = now.toLocaleTimeString("pt-BR", { hour12: false });
+}
+tickClock();
+setInterval(tickClock, 1000);
+</script>
+</body>
+</html>
