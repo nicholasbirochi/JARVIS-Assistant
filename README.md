@@ -77,13 +77,19 @@ ollama pull qwen2.5:14b   # ~9GB, baixa uma vez
 # Só necessário se for usar os adaptadores de site (jarvis/sites/) -- baixa o Chromium
 # que o Playwright controla (não é o seu navegador normal, ~150MB, uma vez só)
 playwright install chromium
+
+# Só necessário para a voz clonada (jarvis/voice/xtts_engine.py) -- ~4GB de
+# dependências (torch/coqui-tts), veja "Voz clonada (XTTS-v2)" abaixo antes
+# de instalar: os números reais medidos aqui são pesados.
+pip install -e ".[voice-cloning]"
 ```
 
 Nenhuma chave é obrigatória por padrão. `.env` só é necessário se você quiser usar o
 Porcupine como motor de wake word (`WAKE_WORD_ENGINE=porcupine` + `PICOVOICE_ACCESS_KEY`)
-em vez do openWakeWord padrão, apontar para um Ollama/modelo diferente, ou trocar a voz
-do TTS (`TTS_VOICE` -- ver `.env.example` para como achar uma boa voz masculina, já que
-as que o macOS instala por padrão são de baixa qualidade).
+em vez do openWakeWord padrão, apontar para um Ollama/modelo diferente, trocar a voz
+do TTS padrão (`TTS_VOICE` -- ver `.env.example` para como achar uma boa voz masculina, já
+que as que o macOS instala por padrão são de baixa qualidade), ou desligar a voz clonada
+(`TTS_ENGINE=say`).
 
 ## Uso
 
@@ -140,6 +146,33 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.SEUUSUARIO.jarvis.me
 `RunAtLoad` liga sozinho no login; sem `KeepAlive`, então "Sair" no menu realmente encerra
 até o próximo login (não fica sendo religado). Logs em `~/Library/Logs/JARVIS/menubar.log`.
 
+## Voz clonada (XTTS-v2)
+
+`jarvis/voice/xtts_engine.py` clona uma voz a partir de um clipe curto de referência (em
+vez de usar uma das vozes prontas do macOS). É o motor padrão (`TTS_ENGINE=xtts`), mas só
+entra em ação se as duas condições abaixo forem verdadeiras -- **sem elas, `speak()` cai
+de volta pra voz padrão (`TTS_VOICE`, ex: Felipe) automaticamente, sem erro nenhum**:
+
+1. `pip install -e ".[voice-cloning]"` rodado (~4GB: torch + coqui-tts).
+2. Um clipe de referência salvo em `~/Library/Application Support/JARVIS/voice/jarvis_reference.wav`
+   (`TTS_XTTS_SPEAKER_WAV_PATH` em `jarvis/config.py`) -- **de propósito fora da pasta do
+   projeto** (que é sincronizada com o OneDrive) e **nunca baixado por mim/pelo JARVIS**:
+   é dado biométrico de voz, você quem coloca esse arquivo lá.
+
+**Números reais medidos neste Mac (M5, 24GB RAM, MPS disponível) antes de decidir usar
+mesmo assim:**
+- Carregar o modelo (`~1.87GB`, já em disco local, sem rede) levou **15-17 minutos** --
+  inconsistente entre execuções, causa ainda não identificada (não é quarentena do
+  macOS -- conferido via `xattr`). Por isso o carregamento roda uma vez só, numa thread em
+  segundo plano, iniciada assim que o loop de voz sobe (`preload_in_background()`) -- nunca
+  bloqueia uma ativação por wake word esperando o modelo carregar.
+- Gerar fala é **mais lento que tempo real** mesmo depois de carregado -- e, contra o
+  esperado, **CPU venceu MPS** (3,4s vs 11,4s pra gerar a mesma frase curta): nem toda
+  operação do modelo tem kernel MPS eficiente, então o motor força `device="cpu"` sempre,
+  em vez de detectar automaticamente.
+- Enquanto o modelo ainda não carregou (ou não há clipe de referência), `speak()` usa a voz
+  padrão normalmente -- nunca trava esperando os 15+ minutos.
+
 ## Adaptador da Gupy
 
 Recomendação seguida: **Gupy primeiro, não LinkedIn.** O LinkedIn tem infraestrutura de
@@ -185,6 +218,10 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
 
 ## Roadmap
 
+- Voz clonada: ainda falta um clipe de referência de verdade pra testar a clonagem em si
+  (o motor/fallback já está implementado e testado, mas nunca rodou com um clipe real --
+  ver "Voz clonada (XTTS-v2)" acima). Também vale investigar a causa dos 15-17 minutos de
+  carregamento -- não identificada ainda.
 - E-mail na Gupy: testar ao vivo, supervisionado, se mudar o e-mail dispara algum fluxo
   de verificação -- só então liberar em `_WRITABLE_FIELDS` (`jarvis/sites/gupy.py`).
 - Sub-formulário "Meu currículo" da Gupy (experiência, formação, certificações,

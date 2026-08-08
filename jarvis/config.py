@@ -76,6 +76,28 @@ CLAP_GREETING = "Olá, Nicolas, vamos começar o trabalho!"
 # doesn't reliably resolve to the pt_BR one. Find installed identifiers with:
 #   python -c "from AVFoundation import AVSpeechSynthesisVoice as V; [print(v.name(), v.identifier(), v.quality()) for v in V.speechVoices() if v.language()=='pt-BR']"
 TTS_VOICE = os.environ.get("TTS_VOICE", "com.apple.voice.enhanced.pt-BR.Felipe")
+
+# Voice cloning (jarvis/voice/xtts_engine.py), via XTTS-v2 -- an alternate
+# TTS engine that clones a voice from a short user-supplied reference clip,
+# instead of using one of macOS's built-in voices. Chosen as the DEFAULT
+# engine per an explicit decision to accept its real, measured downsides on
+# this machine: loading the model took 15-17 minutes even from local disk
+# (unexplained -- not macOS quarantine-scan, still under investigation),
+# and generation itself is slower than real-time (measured ~1.5x on CPU,
+# ~5x on MPS -- CPU actually wins here despite MPS being available, a
+# real per-machine finding, not a guess, which is why the engine hardcodes
+# "cpu" rather than "mps"/"auto"). tts.py only ever uses this engine once
+# TTS_XTTS_SPEAKER_WAV_PATH actually exists AND the (very slow) background
+# preload has finished -- otherwise it transparently keeps using TTS_VOICE
+# above, so setting this as default is safe even before that file exists.
+TTS_ENGINE = os.environ.get("TTS_ENGINE", "xtts")
+TTS_XTTS_LANGUAGE = "pt"
+# Deliberately NOT under DATA_DIR -- same reasoning as LOCAL_STATE_DIR
+# above: this file is voice-identity data (arguably more sensitive than a
+# session cookie), and this project sits inside a synced OneDrive folder.
+# The reference clip itself is never fetched by JARVIS/Claude -- the user
+# supplies it directly at this exact path.
+TTS_XTTS_SPEAKER_WAV_PATH = LOCAL_STATE_DIR / "voice" / "jarvis_reference.wav"
 WAKE_WORD = "jarvis"
 STOP_PHRASES = ("tchau jarvis", "tchau, jarvis", "obrigado jarvis", "encerrar")
 

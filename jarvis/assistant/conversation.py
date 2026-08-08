@@ -107,8 +107,14 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
     already in progress is cut short right away too -- see
     `_run_active_session` and `tts.speak`."""
     from jarvis.assistant.briefing import build_briefing
-    from jarvis.voice import audio, stt, tts
+    from jarvis.voice import audio, stt, tts, xtts_engine
     from jarvis.voice.wake_word import WakeWordListener
+
+    # Fires (and no-ops if there's no reference clip yet) as early as
+    # possible so its very slow first load -- see xtts_engine.py's
+    # docstring -- overlaps with the user just having JARVIS on, instead of
+    # ever blocking a wake-word activation.
+    xtts_engine.preload_in_background()
 
     listener = WakeWordListener()
     try:

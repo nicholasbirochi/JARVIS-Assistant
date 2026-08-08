@@ -1,13 +1,20 @@
-"""Text-to-speech via the macOS `say` command -- offline, free, no setup."""
+"""Text-to-speech. Default is the macOS `say` command -- offline, free, no
+setup. When TTS_ENGINE="xtts" and a reference clip + loaded model are both
+available (see jarvis/voice/xtts_engine.py), speak() clones a voice from
+that clip instead; otherwise it transparently falls back to `say` below, so
+flipping TTS_ENGINE never breaks anything even before the reference clip
+exists or while the (very slow) model is still loading."""
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
-from jarvis.config import TTS_VOICE
+from jarvis.config import TTS_ENGINE, TTS_VOICE
 
 # Bundled by macOS itself (com.apple.voice.compact.*), never requires a
 # separate download -- the last-resort fallback if TTS_VOICE isn't available
@@ -42,11 +49,62 @@ def _speak_interruptible(voice: str, text: str, stop_event: threading.Event) -> 
     return process.returncode == 0
 
 
+def _play_file_uninterruptible(path: str) -> bool:
+    return subprocess.run(["afplay", path]).returncode == 0
+
+
+def _play_file_interruptible(path: str, stop_event: threading.Event) -> bool:
+    process = subprocess.Popen(["afplay", path])
+    while process.poll() is None:
+        if stop_event.is_set():
+            process.terminate()
+            process.wait()
+            return True
+        time.sleep(_POLL_SECONDS)
+    return process.returncode == 0
+
+
+def _speak_via_xtts(text: str, stop_event: threading.Event | None) -> bool:
+    """Returns True if xtts handled it (including "generation/playback was
+    interrupted on purpose" -- that's not a failure, and must NOT fall
+    through to the say-based voice repeating the same text). Returns False
+    to tell the caller to use the say-based path instead -- either xtts
+    isn't ready yet (no reference clip, or the model is still in its
+    15+ minute load), or generation itself failed."""
+    from jarvis.voice import xtts_engine
+
+    if not xtts_engine.has_reference_audio() or not xtts_engine.is_ready():
+        return False
+
+    fd, out_path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    try:
+        xtts_engine.synthesize_to_file(text, out_path)
+    except Exception as exc:
+        print(f"[tts] XTTS falhou ({exc}), usando voz de fallback", file=sys.stderr)
+        os.unlink(out_path)
+        return False
+
+    try:
+        if stop_event is not None and stop_event.is_set():
+            # Told to shut up while audio was still generating -- don't
+            # play stale speech after the fact.
+            return True
+        if stop_event is not None:
+            return _play_file_interruptible(out_path, stop_event)
+        return _play_file_uninterruptible(out_path)
+    finally:
+        os.unlink(out_path)
+
+
 def speak(text: str, stop_event: threading.Event | None = None) -> None:
     """Speaks `text` aloud. If `stop_event` is given (the menu bar's
-    off-toggle sets it) and fires while this is talking, the `say` process
-    is killed immediately -- "Desligar JARVIS" cuts him off right away
-    instead of finishing the current sentence first."""
+    off-toggle sets it) and fires while this is talking, playback is killed
+    immediately -- "Desligar JARVIS" cuts him off right away instead of
+    finishing the current sentence first."""
+    if TTS_ENGINE == "xtts" and _speak_via_xtts(text, stop_event):
+        return
+
     if stop_event is not None:
         ok = _speak_interruptible(TTS_VOICE, text, stop_event)
     else:
