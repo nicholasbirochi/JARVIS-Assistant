@@ -139,9 +139,12 @@ python -m jarvis
 
 Ao ativar, o JARVIS pode falar um briefing curto antes de ouvir o pedido: mudanças de
 currículo pendentes de revisão, conflitos em aberto, e -- no máximo uma vez por dia -- uma
-ou duas manchetes reais do dia (RSS público do G1, `jarvis/assistant/news.py`; nenhum dado
-seu é enviado a lugar nenhum, é só leitura de manchetes). Se não houver nada pendente nem
-notícia nova, ele fica quieto e não diz nada, como manda a regra de "fala só o necessário".
+ou duas manchetes reais do dia sobre dados e IA (RSS público do Olhar Digital, categorias
+Inteligência Artificial e Big Data, `jarvis/assistant/news.py`; nenhum dado seu é enviado a
+lugar nenhum, é só leitura de manchetes). Cada manchete ainda passa por um filtro de tópico
+no código antes de ser falada, então mesmo que o feed traga algo fora do assunto, o JARVIS
+não fala sobre isso. Se não houver nada pendente nem notícia no tema, ele fica quieto e não
+diz nada, como manda a regra de "fala só o necessário".
 O JARVIS também conhece as habilidades e certificações reais do currículo (Python, R, SQL,
 Power BI, estatística, etc.) e comenta sobre dados com entusiasmo quando o assunto surge --
 grounded no `data/resume.json`, não inventado (`jarvis/assistant/llm_client.py`).
