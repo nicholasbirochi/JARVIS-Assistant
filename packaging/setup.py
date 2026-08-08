@@ -52,6 +52,17 @@ OPTIONS = {
             "LSUIElement": True,
             "LSMinimumSystemVersion": "13.0",
             "NSHighResolutionCapable": True,
+            # Without this key, macOS's TCC can silently refuse
+            # microphone access to a never-before-seen ad-hoc-signed
+            # binary -- no prompt, no error, PvRecorder's stream just
+            # never receives real audio. A real bug hit switching to this
+            # app bundle (voice worked fine launched from Terminal before,
+            # where TCC piggybacks on Terminal's own long-since-granted
+            # access; a fresh standalone .app binary gets no such
+            # inheritance and needs its own explicit request).
+            "NSMicrophoneUsageDescription": (
+                "O JARVIS usa o microfone para ouvir a palavra de ativação e seus pedidos."
+            ),
         },
     }
 }
