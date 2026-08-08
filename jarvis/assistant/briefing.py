@@ -14,10 +14,18 @@ opens a real (headless) browser and navigates a live page, which costs
 real seconds; doing that on every single activation would make greeting
 JARVIS noticeably slower for a check that's rarely actionable in the
 moment. Left for a later, explicitly-throttled version if it's wanted.
+
+Also folds in an occasional daily news headline (jarvis/assistant/news.py)
+-- unlike the rest of this module, that ISN'T purely code-derived from
+local files (it's real headline text from a public RSS feed), so it's
+kept as its own separate sentence rather than joined into the "você tem
+X pendente" list below, and news.py itself throttles it to once per
+calendar day.
 """
 
 from __future__ import annotations
 
+from jarvis.assistant import news
 from jarvis.indexing import review
 from jarvis.resume import store
 
@@ -53,6 +61,13 @@ def build_briefing() -> str | None:
     elif len(open_conflicts) > 1:
         parts.append(f"{len(open_conflicts)} conflitos em aberto no currículo")
 
-    if not parts:
+    pending_sentence = None
+    if parts:
+        pending_sentence = "Antes de começarmos: você tem " + " e ".join(parts) + "."
+
+    news_sentence = news.build_news_briefing()
+
+    sentences = [s for s in (pending_sentence, news_sentence) if s]
+    if not sentences:
         return None
-    return "Antes de começarmos: você tem " + " e ".join(parts) + "."
+    return " ".join(sentences)

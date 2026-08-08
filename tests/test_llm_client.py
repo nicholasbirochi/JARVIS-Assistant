@@ -4,6 +4,8 @@ import pytest
 
 from jarvis.assistant import llm_client
 from jarvis.assistant.providers import ProviderResponse, ToolCallRequest
+from jarvis.resume import store
+from jarvis.resume.schema import Bilingual, Certification, PersonalInfo, Resume, SkillCategory
 
 
 class ScriptedProvider:
@@ -129,3 +131,59 @@ def test_send_turn_stops_after_max_iterations():
 
     assert "perdi" in reply.lower()
     assert len(provider.calls) == llm_client.MAX_TOOL_ITERATIONS
+
+
+def test_specialization_summary_grounded_in_real_resume(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "RESUME_PATH", tmp_path / "resume.json")
+    monkeypatch.setattr(store, "BACKUPS_DIR", tmp_path / "backups")
+    resume = Resume(
+        personal_info=PersonalInfo(full_name="Fulano", phone="A"),
+        summary=Bilingual(pt="Resumo."),
+        skills=[SkillCategory(category="Programming", items=["Python", "SQL"])],
+        certifications=[Certification(name="Data Science for Beginners")],
+    )
+    store.save(resume)
+
+    summary = llm_client._specialization_summary()
+
+    assert "Python" in summary
+    assert "SQL" in summary
+    assert "Data Science for Beginners" in summary
+
+
+def test_specialization_summary_empty_when_resume_unreadable(monkeypatch):
+    def raise_it():
+        raise FileNotFoundError("no resume yet")
+
+    monkeypatch.setattr(store, "load", raise_it)
+
+    assert llm_client._specialization_summary() == ""
+
+
+def test_build_system_prompt_includes_specialization_when_available(monkeypatch):
+    monkeypatch.setattr(llm_client, "_specialization_summary", lambda: "Habilidades técnicas dele: Python.")
+
+    prompt = llm_client._build_system_prompt()
+
+    assert "Python" in prompt
+    assert "Senhor Nicholas" in prompt  # existing instructions preserved
+    assert "Fale o mínimo necessário" in prompt  # conciseness rules preserved
+
+
+def test_build_system_prompt_still_valid_when_resume_unreadable(monkeypatch):
+    monkeypatch.setattr(llm_client, "_specialization_summary", lambda: "")
+
+    prompt = llm_client._build_system_prompt()
+
+    assert "Senhor Nicholas" in prompt
+    assert "Fale o mínimo necessário" in prompt
+
+
+def test_send_turn_uses_a_fresh_system_prompt_each_call(monkeypatch):
+    monkeypatch.setattr(llm_client, "_build_system_prompt", lambda: "PROMPT DE TESTE")
+    provider = ScriptedProvider([ProviderResponse(content="ok")])
+    llm_client._provider = provider
+
+    llm_client.send_turn([{"role": "user", "content": "oi"}])
+
+    assert provider.calls[0][0] == {"role": "system", "content": "PROMPT DE TESTE"}

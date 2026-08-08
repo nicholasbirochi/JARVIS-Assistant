@@ -9,13 +9,19 @@ from jarvis.assistant.providers import LocalLLMProvider, get_provider
 from jarvis.assistant.tool_schema import functions_to_tool_specs
 from jarvis.assistant.tools import TOOLS
 
-SYSTEM_PROMPT = """\
+_BASE_SYSTEM_PROMPT = """\
 Você é o JARVIS, o assistente pessoal do Nicholas. Fale sempre em português \
 do Brasil, de forma direta e respeitosa, tratando-o como "Senhor Nicholas" \
 quando apropriado -- sem exagerar na formalidade.
 
-Sua função hoje é conversar sobre o currículo do Nicholas: consultar dados \
-(ferramenta read_resume), editar campos quando ele pedir (ferramenta \
+Você também é apaixonado por dados -- análise de dados, estatística, machine \
+learning, visualização -- os mesmos temas em que o Nicholas se especializa e \
+busca atuar profissionalmente. Quando o assunto surgir na conversa, mostre \
+entusiasmo e conhecimento real sobre isso, não só sobre o currículo -- mas \
+sem perder a objetividade abaixo.
+{specialization_block}
+Sua função principal é conversar sobre o currículo do Nicholas: consultar \
+dados (ferramenta read_resume), editar campos quando ele pedir (ferramenta \
 update_resume_field), e informar quais sites de vagas já são suportados \
 (list_supported_sites) ou tentar publicar nele (push_resume_to_site -- ainda \
 não implementado para nenhum site, apenas explique isso quando pedido).
@@ -31,6 +37,39 @@ oferecer ajuda extra que não foi pedida ("posso ajudar com mais algo?" só \
 se fizer sentido de verdade, não por padrão). Se a resposta puder ser uma \
 frase, não use duas.
 """
+
+
+def _specialization_summary() -> str:
+    """Pulls a short, factual line of what Nicholas actually studies from
+    the résumé -- so the data-enthusiast trait above is grounded in his
+    real specialization, not generic. Best-effort: an empty string (never
+    an exception) if the résumé can't be read for any reason, since a
+    missing personality flourish must never block a conversation turn."""
+    try:
+        from jarvis.resume import store
+
+        resume = store.load()
+        skill_items = [item for category in resume.skills for item in category.items]
+        cert_names = [c.name for c in resume.certifications if c.name]
+    except Exception:
+        return ""
+
+    parts = []
+    if skill_items:
+        parts.append(f"Habilidades técnicas dele: {', '.join(skill_items[:12])}.")
+    if cert_names:
+        parts.append(f"Certificações/cursos: {', '.join(cert_names[:6])}.")
+    return " ".join(parts)
+
+
+def _build_system_prompt() -> str:
+    """Rebuilt fresh each turn (not a module-level constant) so it always
+    reflects the current résumé -- certifications/skills added later show
+    up here without needing a restart."""
+    specialization = _specialization_summary()
+    specialization_block = f"\n{specialization}\n" if specialization else ""
+    return _BASE_SYSTEM_PROMPT.format(specialization_block=specialization_block)
+
 
 MAX_TOOL_ITERATIONS = 8
 
@@ -56,7 +95,7 @@ def send_turn(messages: list[dict]) -> str:
 
     for _ in range(MAX_TOOL_ITERATIONS):
         response = provider.chat(
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],
+            messages=[{"role": "system", "content": _build_system_prompt()}, *messages],
             tool_specs=_tool_specs,
         )
 

@@ -1,9 +1,19 @@
 import pytest
 
+from jarvis.assistant import news
 from jarvis.assistant.briefing import build_briefing
 from jarvis.indexing.proposals import Proposal, ProposedChange
 from jarvis.resume import store
 from jarvis.resume.schema import Bilingual, Conflict, Evidence, PersonalInfo, Resume
+
+
+@pytest.fixture(autouse=True)
+def _no_real_news_by_default(monkeypatch):
+    # build_briefing() also folds in news.build_news_briefing(), which
+    # hits a real network endpoint -- never do that from ordinary unit
+    # tests. Tests that specifically cover the news integration override
+    # this explicitly.
+    monkeypatch.setattr(news, "build_news_briefing", lambda: None)
 
 
 def make_resume(**kwargs) -> Resume:
@@ -156,3 +166,29 @@ def test_build_briefing_combines_both_kinds_of_pending_items(seeded_resume, empt
     assert briefing is not None
     assert "mudança de currículo pendente de revisão" in briefing
     assert "conflito em aberto no currículo" in briefing
+
+
+def test_build_briefing_includes_news_when_available(seeded_resume, empty_proposals_dir, monkeypatch):
+    store.save(make_resume())
+    monkeypatch.setattr(news, "build_news_briefing", lambda: "Uma notícia de hoje: Teste.")
+
+    briefing = build_briefing()
+
+    assert briefing == "Uma notícia de hoje: Teste."
+
+
+def test_build_briefing_combines_pending_items_and_news(seeded_resume, empty_proposals_dir, monkeypatch):
+    store.save(make_resume())
+    _write_proposal(empty_proposals_dir, "proposal_20260101T000000Z.json", n_changes=1)
+    monkeypatch.setattr(news, "build_news_briefing", lambda: "Uma notícia de hoje: Teste.")
+
+    briefing = build_briefing()
+
+    assert "1 mudança de currículo pendente de revisão" in briefing
+    assert "Uma notícia de hoje: Teste." in briefing
+
+
+def test_build_briefing_still_none_when_nothing_pending_and_no_news(seeded_resume, empty_proposals_dir):
+    store.save(make_resume())
+
+    assert build_briefing() is None  # news mocked to None by the autouse fixture
