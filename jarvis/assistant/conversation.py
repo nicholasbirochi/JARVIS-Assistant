@@ -128,21 +128,22 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
 
     from jarvis.assistant.briefing import build_briefing
     from jarvis.visualizer import state as visualizer_state
-    from jarvis.voice import audio, stt, tts
+    from jarvis.voice import audio, stt, tts, xtts_client
     from jarvis.voice.wake_word import WakeWordListener
 
-    # xtts_engine.preload_in_background() is deliberately NOT called here
-    # anymore. Found live: it made torchcodec dlopen the Homebrew-installed
-    # FFmpeg's shared libraries into this same process -- which already has
-    # faster-whisper's own bundled FFmpeg (via PyAV) loaded -- and macOS's
-    # ObjC runtime logged a real class collision (AVFFrameReceiver/
-    # AVFAudioReceiver defined in both), warning of "spurious casting
-    # failures and mysterious crashes". Wake-word/clap detection stopped
-    # firing entirely right after this was wired in, with no exception or
+    # Starts the XTTS worker as a genuinely separate OS process (see
+    # xtts_client.py / xtts_worker.py) -- NOT xtts_engine.preload_in_background()
+    # in-process anymore. That in-process version made torchcodec dlopen
+    # the Homebrew-installed FFmpeg's shared libraries into this same
+    # process -- which already has faster-whisper's own bundled FFmpeg (via
+    # PyAV) loaded -- and macOS's ObjC runtime logged a real class collision
+    # (AVFFrameReceiver/AVFAudioReceiver defined in both), warning of
+    # "spurious casting failures and mysterious crashes". Wake-word/clap
+    # detection stopped firing entirely right after, with no exception or
     # error anywhere -- consistent with silently corrupted audio capture,
-    # not a coincidence. Needs XTTS synthesis to run in a genuinely
-    # separate process before it's safe to preload in-process again;
-    # tracked as a real follow-up, not shipped half-safe in the meantime.
+    # not a coincidence. Running the model in its own process means that
+    # risk, if it recurs at all, can never touch PvRecorder here.
+    xtts_client.ensure_worker_started()
 
     listener = WakeWordListener()
     try:

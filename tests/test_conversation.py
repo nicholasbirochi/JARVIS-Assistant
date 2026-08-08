@@ -135,9 +135,9 @@ def test_run_voice_loop_recovers_from_a_listener_exception_instead_of_dying(monk
     # whole thread silently -- see run_voice_loop's docstring.
     import jarvis.voice.wake_word as wake_word_module
     from jarvis.assistant import briefing, conversation
-    from jarvis.voice import xtts_engine
+    from jarvis.voice import xtts_client
 
-    monkeypatch.setattr(xtts_engine, "preload_in_background", lambda: None)
+    monkeypatch.setattr(xtts_client, "ensure_worker_started", lambda: None)
     monkeypatch.setattr(briefing, "build_briefing", lambda: None)
     monkeypatch.setattr("time.sleep", lambda seconds: None)
 
@@ -159,9 +159,9 @@ def test_run_voice_loop_gives_up_if_the_microphone_cannot_be_recreated(monkeypat
     # a real error, not loop forever or fail silently.
     import jarvis.voice.wake_word as wake_word_module
     from jarvis.assistant import briefing, conversation
-    from jarvis.voice import xtts_engine
+    from jarvis.voice import xtts_client
 
-    monkeypatch.setattr(xtts_engine, "preload_in_background", lambda: None)
+    monkeypatch.setattr(xtts_client, "ensure_worker_started", lambda: None)
     monkeypatch.setattr(briefing, "build_briefing", lambda: None)
     monkeypatch.setattr("time.sleep", lambda seconds: None)
 

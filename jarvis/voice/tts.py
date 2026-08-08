@@ -1,9 +1,10 @@
 """Text-to-speech. Default is the macOS `say` command -- offline, free, no
-setup. When TTS_ENGINE="xtts" and a reference clip + loaded model are both
-available (see jarvis/voice/xtts_engine.py), speak() clones a voice from
-that clip instead; otherwise it transparently falls back to `say` below, so
-flipping TTS_ENGINE never breaks anything even before the reference clip
-exists or while the (very slow) model is still loading."""
+setup. When TTS_ENGINE="xtts" and a reference clip + a ready worker
+process are both available (see jarvis/voice/xtts_client.py and
+xtts_engine.py), speak() clones a voice from that clip instead; otherwise
+it transparently falls back to `say` below, so flipping TTS_ENGINE never
+breaks anything even before the reference clip exists or while the worker
+is still starting up/loading its model."""
 
 from __future__ import annotations
 
@@ -69,17 +70,19 @@ def _speak_via_xtts(text: str, stop_event: threading.Event | None) -> bool:
     interrupted on purpose" -- that's not a failure, and must NOT fall
     through to the say-based voice repeating the same text). Returns False
     to tell the caller to use the say-based path instead -- either xtts
-    isn't ready yet (no reference clip, or the model is still in its
-    15+ minute load), or generation itself failed."""
-    from jarvis.voice import xtts_engine
+    isn't ready yet (no reference clip, or the isolated worker process is
+    still loading), or generation itself failed. Talks to xtts_client, not
+    xtts_engine directly -- synthesis runs in its own OS process, see
+    xtts_engine.py's module docstring for why."""
+    from jarvis.voice import xtts_client
 
-    if not xtts_engine.has_reference_audio() or not xtts_engine.is_ready():
+    if not xtts_client.has_reference_audio() or not xtts_client.is_ready():
         return False
 
     fd, out_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     try:
-        xtts_engine.synthesize_to_file(text, out_path)
+        xtts_client.synthesize_to_file(text, out_path)
     except Exception as exc:
         print(f"[tts] XTTS falhou ({exc}), usando voz de fallback", file=sys.stderr)
         os.unlink(out_path)

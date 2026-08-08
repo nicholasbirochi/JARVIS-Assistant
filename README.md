@@ -165,10 +165,6 @@ até o próximo login (não fica sendo religado). Logs em `~/Library/Logs/JARVIS
 
 ## Voz clonada (XTTS-v2)
 
-⚠️ **Atualmente desligada da conversa de voz de verdade** -- veja "O problema real" logo
-abaixo antes de tentar religar. O que segue documenta o que já foi construído e verificado
-isoladamente, não o estado ao vivo hoje.
-
 `jarvis/voice/xtts_engine.py` clona uma voz a partir de um clipe curto de referência (em
 vez de usar uma das vozes prontas do macOS). É o motor padrão (`TTS_ENGINE=xtts`), mas só
 entra em ação se as duas condições abaixo forem verdadeiras -- **sem elas, `speak()` cai
@@ -185,33 +181,32 @@ Python, é a lib nativa que o `torchcodec` (leitor de áudio do torchaudio) carr
 de execução para decodificar o clipe de referência; sem ela, a síntese falha com um erro
 claro (`Could not load libtorchcodec`) apontando exatamente pra isso.
 
-**Números reais medidos neste Mac (M5, 24GB RAM) com o clipe de referência de verdade,
-depois de instalar o FFmpeg:**
-- Carregar o modelo: consistentemente **~13s** nos testes reais. Numa rodada isolada
-  anterior (antes do clipe de referência existir, com uma voz pronta do próprio modelo)
-  chegou a levar 15-17 minutos, de forma inconsistente e sem causa identificada -- não
-  reproduzido desde então. Por precaução o carregamento continua rodando numa thread em
-  segundo plano, iniciada assim que o loop de voz sobe (`preload_in_background()`), então
-  mesmo se aquilo se repetir um dia, nenhuma ativação por wake word fica travada esperando.
-- Gerar fala: **7,8s para uma frase de ~7s** (quase tempo real) e **21,3s para uma fala de
-  29,7s** (0,72x -- mais rápido que tempo real). Roda em `device="cpu"`, não `mps`: numa
-  comparação anterior (com voz pronta do modelo, antes do clipe real) CPU bateu MPS
-  (3,4s vs 11,4s pra mesma frase) -- nem toda operação do modelo tem kernel MPS eficiente
-  nesta versão do torch/coqui-tts, então o motor força CPU em vez de detectar
-  automaticamente.
-- **Confirmado ao vivo com o clipe de referência real, ouvindo o resultado.**
-- Enquanto o modelo ainda não carregou (ou não há clipe de referência), `speak()` usa a voz
-  padrão normalmente -- nunca trava esperando.
+**Roda num processo separado, de propósito.** Achado ao vivo: carregar o XTTS no mesmo
+processo do loop de voz fazia o `torchcodec` carregar o FFmpeg do Homebrew no mesmo espaço
+de memória que já tinha a própria cópia do FFmpeg do `faster-whisper` (via PyAV) carregada
+-- o macOS registrava uma colisão de classe Objective-C real
+(`AVFFrameReceiver`/`AVFAudioReceiver` definidas nas duas cópias), e a detecção de wake
+word/palmas parava de disparar por completo, silenciosamente. Corrigido de verdade
+rodando a síntese como um processo próprio:
 
-**O problema real, achado ao vivo:** `preload_in_background()` chamado de dentro do loop de
-voz faz o `torchcodec` carregar o FFmpeg do Homebrew no mesmo processo que já tem a própria
-cópia do FFmpeg do `faster-whisper` (via PyAV) carregada -- e o macOS registrou uma colisão
-de classe Objective-C real (`AVFFrameReceiver`/`AVFAudioReceiver` definidas nas duas cópias).
-A detecção de wake word e de palmas parou de disparar por completo, silenciosamente, logo
-depois disso -- sem exceção, sem erro no log, só silêncio. `xtts_engine.preload_in_background()`
-foi **removido** da chamada em `conversation.py`'s `run_voice_loop` por causa disso -- o
-resto do módulo está pronto e testado, só falta rodar a síntese num processo genuinamente
-separado antes de religar isso com segurança.
+- `jarvis/voice/xtts_worker.py` -- sobe um servidor HTTP local (só `127.0.0.1`, stdlib
+  puro) e carrega o modelo, isolado do processo principal. Nunca importa `faster-whisper`
+  nem toca no microfone -- confirmado ao vivo que roda sem nenhum aviso de colisão.
+- `jarvis/voice/xtts_client.py` -- roda no processo principal (`conversation.py`), sobe o
+  worker como subprocesso (`ensure_worker_started()`) e fala com ele por HTTP
+  (`/health`, `/synthesize`). `tts.py` só conhece esse client, nunca o `xtts_engine`
+  diretamente.
+
+**Números reais medidos neste Mac (M5, 24GB RAM), incluindo o processo isolado:**
+- Carregar o modelo no worker: ~13-18s. Roda em `device="cpu"`, não `mps` -- medido CPU
+  mais rápido que MPS pra esse modelo (3,4s vs 11,4s pra gerar a mesma frase curta).
+- Gerar fala: **7,8s para uma frase de ~7s** (quase tempo real) e **21,3s para uma fala de
+  29,7s** (0,72x -- mais rápido que tempo real) -- medido isolado, antes de mover pro worker.
+- **Confirmado ao vivo, de ponta a ponta**: worker isolado sobe, fica pronto, sintetiza via
+  HTTP, e o processo principal (mesmo importando `faster-whisper` junto) não mostra nenhum
+  aviso de colisão -- os três cenários testados separadamente antes de religar no loop real.
+- Enquanto o worker ainda não carregou (ou não há clipe de referência), `speak()` usa a voz
+  padrão normalmente -- nunca trava esperando.
 
 ## Adaptador da Gupy
 
@@ -258,10 +253,6 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
 
 ## Roadmap
 
-- Voz clonada: a síntese em si funciona e foi confirmada ao vivo isoladamente, mas está
-  **desligada da conversa de voz real** por causa de uma colisão de FFmpeg que quebrou a
-  detecção de wake word (ver "Voz clonada (XTTS-v2)" acima). Precisa rodar a síntese num
-  processo separado antes de religar o `preload_in_background()`.
 - E-mail na Gupy: testar ao vivo, supervisionado, se mudar o e-mail dispara algum fluxo
   de verificação -- só então liberar em `_WRITABLE_FIELDS` (`jarvis/sites/gupy.py`).
 - Sub-formulário "Meu currículo" da Gupy (experiência, formação, certificações,

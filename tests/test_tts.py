@@ -152,7 +152,9 @@ def test_speak_does_not_fall_back_when_interrupted_on_purpose(monkeypatch):
 
 
 class FakeXttsEngine:
-    """Stand-in for jarvis.voice.xtts_engine."""
+    """Stand-in for jarvis.voice.xtts_client (tts.py's actual dependency --
+    named _engine here for historical reasons, but patches the client
+    module, since that's what _speak_via_xtts talks to now)."""
 
     def __init__(self, *, has_reference=True, ready=True, raises=None):
         self._has_reference = has_reference
@@ -176,7 +178,7 @@ class FakeXttsEngine:
 
 
 def _install_fake_xtts_engine(monkeypatch, fake_engine):
-    import jarvis.voice.xtts_engine as real_module
+    import jarvis.voice.xtts_client as real_module
 
     monkeypatch.setattr(real_module, "has_reference_audio", fake_engine.has_reference_audio)
     monkeypatch.setattr(real_module, "is_ready", fake_engine.is_ready)

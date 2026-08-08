@@ -100,13 +100,11 @@ TTS_VOICE = os.environ.get("TTS_VOICE", "com.apple.voice.enhanced.pt-BR.Felipe")
 # Homebrew-installed FFmpeg into the same process that already has
 # faster-whisper's own bundled FFmpeg (via PyAV) loaded, and macOS logged a
 # real ObjC class collision -- wake-word/clap detection stopped firing
-# entirely, silently, right after. This engine currently only runs if
-# something explicitly calls xtts_engine.preload_in_background() itself
-# (nothing in the live voice loop does), so leaving TTS_ENGINE defaulted to
-# "xtts" here is inert/safe in practice right now -- tts.py's speak()
-# always falls back to TTS_VOICE above since xtts_engine.is_ready() can
-# never become true on its own. Needs XTTS synthesis moved to a genuinely
-# separate process before that preload call is safe to restore.
+# entirely, silently, right after. Fixed properly by moving XTTS synthesis
+# into its own OS process (jarvis/voice/xtts_worker.py, spawned by
+# xtts_client.py) -- that FFmpeg/torchcodec loading now happens in a
+# throwaway subprocess that never shares an address space with PvRecorder,
+# so a repeat of that collision (if it ever recurs) stays contained there.
 TTS_ENGINE = os.environ.get("TTS_ENGINE", "xtts")
 TTS_XTTS_LANGUAGE = "pt"
 # Deliberately NOT under DATA_DIR -- same reasoning as LOCAL_STATE_DIR
@@ -115,6 +113,10 @@ TTS_XTTS_LANGUAGE = "pt"
 # The reference clip itself is never fetched by JARVIS/Claude -- the user
 # supplies it directly at this exact path.
 TTS_XTTS_SPEAKER_WAV_PATH = LOCAL_STATE_DIR / "voice" / "jarvis_reference.wav"
+# Fixed port (not dynamic like the visualizer's) -- the client needs to
+# find the worker without any discovery mechanism, and only one worker
+# ever runs per machine.
+XTTS_WORKER_PORT = int(os.environ.get("XTTS_WORKER_PORT", "8766"))
 WAKE_WORD = "jarvis"
 STOP_PHRASES = ("tchau jarvis", "tchau, jarvis", "obrigado jarvis", "encerrar")
 
