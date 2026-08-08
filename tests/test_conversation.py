@@ -22,11 +22,108 @@ class ScriptedProvider:
 
 
 class FakeListener:
-    pass
+    """Used where the test doesn't care about barge-in at all -- just
+    needs to exist as a valid listener so _speak_with_barge_in's watcher
+    thread has something safe to call without raising."""
+
+    def read_frame(self):
+        return [0]
+
+    def check_trigger(self, frame):
+        return None
 
 
 def _install_scripted_provider(monkeypatch, responses):
     monkeypatch.setattr(llm_client, "_provider", ScriptedProvider(responses))
+
+
+class _ScriptedTriggerListener:
+    """check_trigger() returns from `triggers` in order (None once
+    exhausted, i.e. never fires again) -- read_frame() itself is a no-op,
+    just something for the watcher thread to call."""
+
+    def __init__(self, triggers):
+        self._triggers = list(triggers)
+        self.read_frame_calls = 0
+
+    def read_frame(self):
+        self.read_frame_calls += 1
+        return [0]
+
+    def check_trigger(self, frame):
+        return self._triggers.pop(0) if self._triggers else None
+
+
+def test_speak_with_barge_in_returns_none_when_speech_finishes_uninterrupted():
+    listener = _ScriptedTriggerListener(triggers=[])  # never fires
+
+    def instant_speak(text, stop_event=None):
+        pass  # "speech" finishes on its own, watcher never gets to fire
+
+    result = conversation._speak_with_barge_in(instant_speak, "oi", listener)
+
+    assert result is None
+
+
+def test_speak_with_barge_in_interrupts_speech_and_returns_wake_word():
+    listener = _ScriptedTriggerListener(triggers=["wake_word"])
+
+    def blocking_speak(text, stop_event):
+        # Stands in for tts.speak()'s real behavior: keeps "talking" until
+        # told to stop.
+        stop_event.wait(timeout=2)
+
+    result = conversation._speak_with_barge_in(blocking_speak, "uma frase longa", listener)
+
+    assert result == "wake_word"
+
+
+def test_speak_with_barge_in_interrupts_speech_and_returns_clap():
+    listener = _ScriptedTriggerListener(triggers=["clap"])
+
+    def blocking_speak(text, stop_event):
+        stop_event.wait(timeout=2)
+
+    result = conversation._speak_with_barge_in(blocking_speak, "uma frase longa", listener)
+
+    assert result == "clap"
+
+
+def test_speak_with_barge_in_stops_watching_once_speech_ends_on_its_own():
+    # Nothing ever barges in -- the watcher must still stop promptly
+    # (rather than spin forever) once speak() returns.
+    listener = _ScriptedTriggerListener(triggers=[])
+
+    def instant_speak(text, stop_event=None):
+        pass
+
+    conversation._speak_with_barge_in(instant_speak, "oi", listener)
+
+    # If the watcher were still running, read_frame_calls would keep
+    # climbing -- give it a moment and confirm it settled instead.
+    import time
+
+    calls_after = listener.read_frame_calls
+    time.sleep(0.05)
+    assert listener.read_frame_calls == calls_after
+
+
+def test_speak_with_barge_in_propagates_the_outer_stop_event():
+    # "Desligar JARVIS" firing mid-speech must still cut speech short via
+    # the same mechanism -- the watcher notices the outer stop_event too,
+    # not just its own wake-word/clap checks.
+    listener = _ScriptedTriggerListener(triggers=[])  # no real barge-in trigger
+    outer_stop_event = threading.Event()
+
+    def speak_then_get_stopped(text, stop_event):
+        outer_stop_event.set()  # simulate the off-toggle firing while "talking"
+        stop_event.wait(timeout=2)
+
+    result = conversation._speak_with_barge_in(
+        speak_then_get_stopped, "frase", listener, stop_event=outer_stop_event
+    )
+
+    assert result is None  # stopped via the outer event, not a real barge-in trigger
 
 
 def test_run_active_session_speaks_goodbye_and_unloads_on_stop_phrase(monkeypatch):
@@ -75,8 +172,12 @@ def test_run_active_session_calls_llm_and_speaks_reply(monkeypatch):
 
 def test_run_active_session_forwards_stop_event_to_every_speak_call(monkeypatch):
     # "Desligar JARVIS" mid-sentence needs to interrupt speech in progress
-    # (see tts.speak) -- that only works if the same stop_event reaches
-    # every speak() call, not just get dropped somewhere along the way.
+    # (see tts.speak) -- that only works if a stop_event reaches every
+    # speak() call, not just get dropped somewhere along the way. The
+    # reply goes through _speak_with_barge_in now, so it receives that
+    # function's own internal watch_event rather than the sentinel object
+    # itself -- still real threading.Event instances, and the sentinel
+    # still reaches speak() directly for GOODBYE (not barge-in-wrapped).
     unload_calls = []
     monkeypatch.setattr("jarvis.voice.stt.unload", lambda: unload_calls.append(1))
     _install_scripted_provider(monkeypatch, [ProviderResponse(content="Olá.")])
@@ -93,7 +194,36 @@ def test_run_active_session_forwards_stop_event_to_every_speak_call(monkeypatch)
         stop_event=sentinel_stop_event,
     )
 
-    assert received_stop_events == [sentinel_stop_event, sentinel_stop_event]
+    reply_stop_event, goodbye_stop_event = received_stop_events
+    assert isinstance(reply_stop_event, threading.Event)
+    assert goodbye_stop_event is sentinel_stop_event
+
+
+def test_run_active_session_reply_can_be_barged_in_on_via_the_listener(monkeypatch):
+    # Wires the real _speak_with_barge_in into _run_active_session (not a
+    # mock) -- confirms the reply is actually watched for a barge-in
+    # through whatever `listener` was passed in, and that being barged in
+    # on doesn't break the session (it just moves on to listening again,
+    # same as if the reply had finished normally).
+    unload_calls = []
+    monkeypatch.setattr("jarvis.voice.stt.unload", lambda: unload_calls.append(1))
+    _install_scripted_provider(monkeypatch, [ProviderResponse(content="Uma resposta longa.")])
+
+    listener = _ScriptedTriggerListener(triggers=["wake_word"])
+    transcripts = iter(["oi jarvis", "tchau jarvis"])
+
+    def blocking_speak(text, stop_event=None):
+        if stop_event is not None:
+            stop_event.wait(timeout=2)
+
+    conversation._run_active_session(
+        listener=listener,
+        record_utterance=lambda listener: b"",
+        transcribe=lambda pcm: next(transcripts),
+        speak=blocking_speak,
+    )
+
+    assert unload_calls == [1]  # session still ended cleanly via the stop phrase afterward
 
 
 def test_run_active_session_auto_goodbye_after_consecutive_empty_transcriptions(monkeypatch):

@@ -159,6 +159,42 @@ def test_listener_frame_length_and_sample_rate_proxy_engine(monkeypatch):
     assert listener.sample_rate == 16000
 
 
+def test_check_trigger_returns_wake_word_without_reading_a_frame_itself(monkeypatch):
+    # check_trigger takes an already-read frame -- unlike wait(), it must
+    # never call the recorder itself, since conversation.py's barge-in
+    # watcher reads frames on its own schedule while speak() is playing.
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine(detect_on_call=0)
+
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
+    recorder = FakeRecorder.instances[-1]
+    read_count_before = recorder.read_count
+
+    trigger = listener.check_trigger([0] * 1280)
+
+    assert trigger == "wake_word"
+    assert recorder.read_count == read_count_before
+
+
+def test_check_trigger_returns_clap(monkeypatch):
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine(detect_on_call=None)
+    clap_detector = FakeClapDetector(detect_on_call=0)
+
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=clap_detector)
+
+    assert listener.check_trigger([0] * 1280) == "clap"
+
+
+def test_check_trigger_returns_none_when_nothing_fires(monkeypatch):
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine(detect_on_call=None)
+
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
+
+    assert listener.check_trigger([0] * 1280) is None
+
+
 def test_listener_disables_clap_detector_when_config_flag_off(monkeypatch):
     monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
     monkeypatch.setattr(config, "CLAP_ACTIVATION_ENABLED", False)

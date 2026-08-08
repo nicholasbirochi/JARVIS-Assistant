@@ -21,19 +21,30 @@
     font-family: "SF Mono", "Menlo", "Monaco", ui-monospace, monospace;
   }
   body {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
     height: 100vh;
     color: var(--blue-listening);
     -webkit-user-select: none;
     user-select: none;
   }
+  /* #core (sphere + status label) is positioned independently of the
+     document flow, pinned to the exact center of the window -- however
+     much text ends up in #transcript below never touches its size or
+     position. That's the actual fix for "a rede neural muda de tamanho":
+     before, everything lived in one centered flex column, so a longer
+     transcript pushed/re-centered the whole column including the sphere. */
+  #core {
+    position: fixed;
+    top: 44%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
   #stage {
     position: relative;
-    width: min(70vh, 70vw);
-    height: min(70vh, 70vw);
+    width: min(58vh, 58vw);
+    height: min(58vh, 58vw);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -57,20 +68,40 @@
   body[data-state="off"] #status { color: #4a4f58; }
   body[data-state="off"] #brand, body[data-state="off"] #clock { color: #363a42; }
 
+  /* Fixed-size scrollable panel, pinned near the bottom -- independent of
+     #core above. Content can be any length; it scrolls inside its own
+     box instead of growing it. Both wheel/trackpad scroll (native, via
+     overflow-y) and click-drag (see the pointer handlers below, since
+     this window has no scrollbar chrome and text selection is disabled)
+     work to move through it. */
+  #transcript-wrap {
+    position: fixed;
+    bottom: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(640px, 84vw);
+    max-height: 22vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    cursor: grab;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(127,227,255,0.35) transparent;
+  }
+  #transcript-wrap.visible { opacity: 1; }
+  #transcript-wrap.dragging { cursor: grabbing; }
+  #transcript-wrap::-webkit-scrollbar { width: 5px; }
+  #transcript-wrap::-webkit-scrollbar-thumb { background: rgba(127,227,255,0.35); border-radius: 3px; }
+  #transcript-wrap::-webkit-scrollbar-track { background: transparent; }
   #transcript {
-    margin-top: 14px;
-    max-width: 640px;
-    min-height: 1.6em;
-    padding: 0 24px;
+    padding: 6px 24px;
     text-align: center;
     font-size: 16px;
     line-height: 1.5;
     color: #cdeeff;
     text-shadow: 0 0 10px rgba(127,227,255,0.35);
-    opacity: 0;
-    transition: opacity 0.5s ease;
   }
-  #transcript.visible { opacity: 1; }
 
   #clock {
     position: fixed;
@@ -94,18 +125,45 @@
 <body data-state="off">
   <div id="brand">J·A·R·V·I·S</div>
   <div id="clock">--:--:--</div>
-  <div id="stage">
-    <canvas id="orb"></canvas>
+  <div id="core">
+    <div id="stage">
+      <canvas id="orb"></canvas>
+    </div>
+    <div id="status">Desligado</div>
   </div>
-  <div id="status">Desligado</div>
-  <div id="transcript"></div>
+  <div id="transcript-wrap"><div id="transcript"></div></div>
 
 <script>
 const canvas = document.getElementById("orb");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const transcriptEl = document.getElementById("transcript");
+const transcriptWrap = document.getElementById("transcript-wrap");
 const body = document.body;
+
+// Click-and-drag scrolling for the transcript panel -- this window has no
+// scrollbar chrome and text selection is disabled globally, so wheel/
+// trackpad is the only other way to move through a long message.
+(function enableDragScroll(el) {
+  let dragging = false;
+  let startY = 0;
+  let startScrollTop = 0;
+  el.addEventListener("mousedown", (ev) => {
+    dragging = true;
+    startY = ev.clientY;
+    startScrollTop = el.scrollTop;
+    el.classList.add("dragging");
+    ev.preventDefault();
+  });
+  window.addEventListener("mousemove", (ev) => {
+    if (!dragging) return;
+    el.scrollTop = startScrollTop - (ev.clientY - startY);
+  });
+  window.addEventListener("mouseup", () => {
+    dragging = false;
+    el.classList.remove("dragging");
+  });
+})(transcriptWrap);
 
 let dpr = Math.max(1, window.devicePixelRatio || 1);
 function resize() {
@@ -267,9 +325,10 @@ function setState(newState, text) {
   }
   if (text) {
     transcriptEl.textContent = text;
-    transcriptEl.classList.add("visible");
+    transcriptWrap.scrollTop = 0; // new message -- start scrolled to the top, not wherever the last drag left it
+    transcriptWrap.classList.add("visible");
   } else if (newState === "idle") {
-    transcriptEl.classList.remove("visible");
+    transcriptWrap.classList.remove("visible");
   }
 }
 

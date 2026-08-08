@@ -15,6 +15,11 @@ Each state transition (idle/listening; "speaking" fires from tts.speak()
 itself, see jarvis/voice/tts.py) is published to jarvis/visualizer/state.py
 -- purely a live visual aid (the menu bar's "Visualizar Interação" button),
 never read back by anything here.
+
+Every reply/greeting/briefing is spoken through `_speak_with_barge_in`,
+which watches the mic concurrently while talking: saying the wake word or
+clapping again mid-sentence interrupts JARVIS immediately, same as the
+menu bar's off-toggle already did for `stop_event`.
 """
 
 from __future__ import annotations
@@ -33,6 +38,51 @@ MAX_CONSECUTIVE_EMPTY_TRANSCRIPTIONS = 3
 def _is_stop_phrase(text: str) -> bool:
     normalized = text.strip().lower().rstrip(".!")
     return normalized in STOP_PHRASES
+
+
+def _speak_with_barge_in(speak, text: str, listener, stop_event: threading.Event | None = None):
+    """Speaks `text`, but concurrently watches the mic (the wake word or a
+    clap -- the same two triggers that activate JARVIS in the first
+    place) for a deliberate interruption. The moment either fires, speech
+    is cut short right away instead of finishing the current sentence --
+    the caller doesn't need to do anything special afterward: the loops in
+    this module already go straight back to listening next, whether
+    speech ran to completion or was barged in on.
+
+    Known limitation, not attempted here: no acoustic echo cancellation,
+    so JARVIS's own voice playing through the speakers could in principle
+    trigger a false interrupt if it happens to say something close enough
+    to the wake phrase, or a sharp enough consonant reads as a clap. Both
+    engines are tuned against real claps/speech, not JARVIS's own TTS
+    output, so this is expected to be rare in practice -- worth
+    revisiting with a real headset/AEC setup if it turns out not to be.
+
+    Returns the trigger that interrupted speech ("wake_word" or "clap"),
+    or None if speech completed normally or was stopped via `stop_event`
+    (e.g. "Desligar JARVIS")."""
+    watch_event = threading.Event()
+    detected: list[str | None] = [None]
+
+    def _watch() -> None:
+        while not watch_event.is_set():
+            if stop_event is not None and stop_event.is_set():
+                watch_event.set()
+                return
+            frame = listener.read_frame()
+            trigger = listener.check_trigger(frame)
+            if trigger is not None:
+                detected[0] = trigger
+                watch_event.set()
+                return
+
+    watcher = threading.Thread(target=_watch, daemon=True)
+    watcher.start()
+    try:
+        speak(text, stop_event=watch_event)
+    finally:
+        watch_event.set()  # in case speak() returned on its own (finished, or a real failure) -- stop the watcher either way
+        watcher.join(timeout=1)
+    return detected[0]
 
 
 def run_text_loop() -> None:
@@ -71,7 +121,10 @@ def _run_active_session(
 
     `stop_event` is forwarded to every `speak()` call so "Desligar JARVIS"
     (the menu bar's off-toggle) interrupts speech that's already in
-    progress instead of waiting for the current sentence to finish."""
+    progress instead of waiting for the current sentence to finish. Every
+    reply is also spoken via `_speak_with_barge_in` so saying the wake
+    word or clapping again while JARVIS is still talking interrupts it the
+    same way -- see that function's docstring."""
     from jarvis.visualizer import state as visualizer_state
     from jarvis.voice import stt
 
@@ -101,7 +154,7 @@ def _run_active_session(
             messages.append({"role": "user", "content": text})
             reply = send_turn(messages)
             if reply:
-                speak(reply, stop_event=stop_event)
+                _speak_with_barge_in(speak, reply, listener, stop_event=stop_event)
     finally:
         stt.unload()
 
@@ -153,10 +206,10 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
                 trigger = listener.wait(stop_event=stop_event)
                 if trigger is None:
                     break
-                tts.speak(_GREETING_BY_TRIGGER[trigger], stop_event=stop_event)
+                _speak_with_barge_in(tts.speak, _GREETING_BY_TRIGGER[trigger], listener, stop_event=stop_event)
                 briefing = build_briefing()
                 if briefing:
-                    tts.speak(briefing, stop_event=stop_event)
+                    _speak_with_barge_in(tts.speak, briefing, listener, stop_event=stop_event)
                 _run_active_session(
                     listener, audio.record_utterance, stt.transcribe, tts.speak, stop_event=stop_event
                 )

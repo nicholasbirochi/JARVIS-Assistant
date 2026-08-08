@@ -86,6 +86,19 @@ class WakeWordListener:
     def read_frame(self) -> list[int]:
         return self._recorder.read()
 
+    def check_trigger(self, frame: list[int]) -> Trigger | None:
+        """Runs one already-read frame through the wake-word engine + clap
+        detector -- the same checks `wait()`'s loop body does, exposed
+        separately so a caller can read frames on its own schedule instead
+        of blocking inside wait(). Used by conversation.py to watch for a
+        barge-in (wake word or clap) while JARVIS is speaking, without
+        duplicating the detection logic."""
+        if self._engine.process(frame):
+            return "wake_word"
+        if self._clap_detector is not None and self._clap_detector.process(frame, self._frame_seconds):
+            return "clap"
+        return None
+
     def wait(self, stop_event: threading.Event | None = None) -> Trigger | None:
         """Blocks until the wake word is heard, two claps land within the
         configured window, or `stop_event` is set -- whichever comes first.
@@ -96,10 +109,9 @@ class WakeWordListener:
             if stop_event is not None and stop_event.is_set():
                 return None
             frame = self._recorder.read()
-            if self._engine.process(frame):
-                return "wake_word"
-            if self._clap_detector is not None and self._clap_detector.process(frame, self._frame_seconds):
-                return "clap"
+            trigger = self.check_trigger(frame)
+            if trigger is not None:
+                return trigger
 
     def close(self) -> None:
         self._recorder.stop()
