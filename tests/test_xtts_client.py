@@ -59,6 +59,16 @@ def test_ensure_worker_started_spawns_subprocess(monkeypatch):
 
     assert len(created) == 1
     assert "jarvis.voice.xtts_worker" in created[0].args
+    # Real regression: sys.executable doesn't reliably mean "a python that
+    # can import jarvis" -- under the packaged JARVIS.app (py2app alias
+    # mode) it resolves to the raw Homebrew framework interpreter, with no
+    # awareness of this project's venv, and the worker died every time
+    # with ModuleNotFoundError. Must always be the project's own venv
+    # python explicitly, regardless of how this process itself was
+    # launched (not asserting sys.executable is absent here -- in a
+    # normal venv-run test session the two paths happen to coincide).
+    assert str(config.PROJECT_ROOT / ".venv" / "bin" / "python") in created[0].args
+    assert created[0].kwargs.get("cwd") == config.PROJECT_ROOT
 
 
 def test_ensure_worker_started_does_not_relaunch_while_running(monkeypatch):

@@ -9,7 +9,6 @@ from __future__ import annotations
 import atexit
 import json
 import subprocess
-import sys
 import urllib.error
 import urllib.request
 
@@ -35,14 +34,26 @@ def ensure_worker_started() -> None:
     if _process is not None and _process.poll() is None:
         return
 
-    from jarvis.config import LOCAL_STATE_DIR
+    from jarvis.config import LOCAL_STATE_DIR, PROJECT_ROOT
 
     log_dir = LOCAL_STATE_DIR / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     _log_file = open(log_dir / "xtts_worker.log", "a", encoding="utf-8")
 
+    # Deliberately NOT sys.executable -- confirmed live that it doesn't
+    # reliably mean "a python that can import jarvis". Under the packaged
+    # JARVIS.app (py2app alias mode), sys.executable resolves to the raw
+    # Homebrew framework interpreter (py2app's stub dlopens it directly),
+    # which has no idea this project's venv/PYTHONPATH even exist --
+    # the worker subprocess spawned that way failed every time with
+    # "ModuleNotFoundError: No module named 'jarvis'", silently falling
+    # back to the non-cloned voice. The project's own venv python is the
+    # one interpreter guaranteed to have `jarvis` importable, regardless
+    # of how *this* process itself was launched.
+    venv_python = PROJECT_ROOT / ".venv" / "bin" / "python"
     _process = subprocess.Popen(
-        [sys.executable, "-m", "jarvis.voice.xtts_worker"],
+        [str(venv_python), "-m", "jarvis.voice.xtts_worker"],
+        cwd=PROJECT_ROOT,
         stdout=_log_file,
         stderr=_log_file,
     )
