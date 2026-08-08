@@ -107,12 +107,25 @@ def _run_active_session(
 
 
 def run_voice_loop(stop_event: threading.Event | None = None) -> None:
-    """Runs until an unhandled exception, or (when `stop_event` is given, as
-    the menu-bar app does) until it's set -- checked between wake-word
-    sessions, so "off" takes effect immediately while idle, or as soon as
-    the current conversation naturally ends if one is in progress. Speech
-    already in progress is cut short right away too -- see
-    `_run_active_session` and `tts.speak`."""
+    """Runs until an unhandled exception the microphone can't be recovered
+    from, or (when `stop_event` is given, as the menu-bar app does) until
+    it's set -- checked between wake-word sessions, so "off" takes effect
+    immediately while idle, or as soon as the current conversation
+    naturally ends if one is in progress. Speech already in progress is cut
+    short right away too -- see `_run_active_session` and `tts.speak`.
+
+    A single bad frame read (a real, observed failure: `pvrecorder` raising
+    `OSError: Failed to read from device` after another process briefly
+    grabbed the mic) used to kill this whole function silently -- the
+    thread just died, the menu bar kept showing "on" forever after, and
+    JARVIS simply stopped responding with no visible error short of
+    digging through the log file. Any exception from one wake-word session
+    now closes and rebuilds the listener and keeps going instead; only a
+    genuinely broken microphone (the rebuild itself failing) actually ends
+    the loop."""
+    import sys
+    import time
+
     from jarvis.assistant.briefing import build_briefing
     from jarvis.visualizer import state as visualizer_state
     from jarvis.voice import audio, stt, tts, xtts_engine
@@ -128,15 +141,27 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
     try:
         while stop_event is None or not stop_event.is_set():
             visualizer_state.publish("idle")
-            trigger = listener.wait(stop_event=stop_event)
-            if trigger is None:
-                break
-            tts.speak(_GREETING_BY_TRIGGER[trigger], stop_event=stop_event)
-            briefing = build_briefing()
-            if briefing:
-                tts.speak(briefing, stop_event=stop_event)
-            _run_active_session(
-                listener, audio.record_utterance, stt.transcribe, tts.speak, stop_event=stop_event
-            )
+            try:
+                trigger = listener.wait(stop_event=stop_event)
+                if trigger is None:
+                    break
+                tts.speak(_GREETING_BY_TRIGGER[trigger], stop_event=stop_event)
+                briefing = build_briefing()
+                if briefing:
+                    tts.speak(briefing, stop_event=stop_event)
+                _run_active_session(
+                    listener, audio.record_utterance, stt.transcribe, tts.speak, stop_event=stop_event
+                )
+            except Exception as exc:
+                print(f"[voice_loop] erro inesperado ({exc!r}) -- reiniciando o microfone", file=sys.stderr)
+                try:
+                    listener.close()
+                except Exception:
+                    pass
+                time.sleep(1)  # avoids a tight crash-loop if the failure is persistent, not transient
+                listener = WakeWordListener()  # lets a genuinely broken mic propagate and end the loop
     finally:
-        listener.close()
+        try:
+            listener.close()
+        except Exception:
+            pass

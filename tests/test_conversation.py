@@ -1,5 +1,7 @@
 import threading
 
+import pytest
+
 from jarvis.assistant import conversation
 from jarvis.assistant import llm_client
 from jarvis.assistant.providers import ProviderResponse
@@ -112,7 +114,72 @@ def test_run_active_session_auto_goodbye_after_consecutive_empty_transcriptions(
     assert unload_calls == [1]
 
 
-def test_run_active_session_unloads_even_if_llm_raises(monkeypatch):
+class _FakeListener:
+    def __init__(self, wait_results):
+        self._wait_results = list(wait_results)
+        self.closed = False
+
+    def wait(self, stop_event=None):
+        result = self._wait_results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    def close(self):
+        self.closed = True
+
+
+def test_run_voice_loop_recovers_from_a_listener_exception_instead_of_dying(monkeypatch):
+    # The real bug this guards against: pvrecorder raised OSError after
+    # another process briefly grabbed the mic, which used to kill the
+    # whole thread silently -- see run_voice_loop's docstring.
+    import jarvis.voice.wake_word as wake_word_module
+    from jarvis.assistant import briefing, conversation
+    from jarvis.voice import xtts_engine
+
+    monkeypatch.setattr(xtts_engine, "preload_in_background", lambda: None)
+    monkeypatch.setattr(briefing, "build_briefing", lambda: None)
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+
+    first = _FakeListener(wait_results=[RuntimeError("Failed to read from device.")])
+    second = _FakeListener(wait_results=[None])  # recovered -- stops the loop cleanly
+    to_construct = [first, second]
+    monkeypatch.setattr(wake_word_module, "WakeWordListener", lambda: to_construct.pop(0))
+
+    conversation.run_voice_loop()  # must return normally, not raise
+
+    assert to_construct == []     # both were constructed
+    assert first.closed is True   # closed during recovery, not leaked
+    assert second.closed is True  # closed in the final `finally`
+
+
+def test_run_voice_loop_gives_up_if_the_microphone_cannot_be_recreated(monkeypatch):
+    # A transient failure recovers (see the test above); a genuinely broken
+    # mic -- recreating the listener itself fails -- must still surface as
+    # a real error, not loop forever or fail silently.
+    import jarvis.voice.wake_word as wake_word_module
+    from jarvis.assistant import briefing, conversation
+    from jarvis.voice import xtts_engine
+
+    monkeypatch.setattr(xtts_engine, "preload_in_background", lambda: None)
+    monkeypatch.setattr(briefing, "build_briefing", lambda: None)
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+
+    first = _FakeListener(wait_results=[RuntimeError("Failed to read from device.")])
+    remaining = [first]
+
+    def factory():
+        if not remaining:
+            raise RuntimeError("microfone indisponível")
+        return remaining.pop(0)
+
+    monkeypatch.setattr(wake_word_module, "WakeWordListener", factory)
+
+    with pytest.raises(RuntimeError, match="microfone indisponível"):
+        conversation.run_voice_loop()
+
+    assert first.closed is True  # not leaked even though recovery ultimately failed
+
     unload_calls = []
     monkeypatch.setattr("jarvis.voice.stt.unload", lambda: unload_calls.append(1))
 

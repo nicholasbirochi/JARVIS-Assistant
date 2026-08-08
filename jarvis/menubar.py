@@ -77,6 +77,16 @@ class JarvisMenuBarApp(rumps.App):
         self._visualizer_item = rumps.MenuItem("Visualizar Interação", callback=self.open_visualizer)
         self.menu = [self._toggle_item, self._visualizer_item]
         self._controller = VoiceLoopController()  # starts OFF -- see module docstring
+        # run_voice_loop now survives most failures on its own (see its
+        # docstring), but if it ever does die unrecovered, this is what
+        # stops the icon/title from claiming "on" forever afterward --
+        # otherwise there'd be no visible sign JARVIS stopped responding.
+        rumps.Timer(self._sync_with_reality, 5).start()
+
+    def _sync_with_reality(self, _timer: rumps.Timer) -> None:
+        if self._toggle_item.title == "Desligar JARVIS" and not self._controller.is_running:
+            self.icon = ICON_OFF
+            self._toggle_item.title = "Ligar JARVIS"
 
     def toggle(self, _sender: rumps.MenuItem) -> None:
         if self._controller.is_running:
