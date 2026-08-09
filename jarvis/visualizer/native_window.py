@@ -49,7 +49,7 @@ def open_window() -> None:
     window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
         rect, style, NSBackingStoreBuffered, False
     )
-    window.setTitle_("J.A.R.V.I.S.")
+    window.setTitle_("J • A • R • V • I • S")
     # Keeps the NSWindow object alive (not deallocated) when the user
     # clicks the close button, so a later open_window() call can bring the
     # same window back with makeKeyAndOrderFront_ instead of needing to

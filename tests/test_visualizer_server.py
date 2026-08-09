@@ -40,7 +40,7 @@ def test_serves_the_hud_page():
         body = resp.read().decode("utf-8")
 
     assert "<html" in body.lower()
-    assert "J.A.R.V.I.S." in body
+    assert "J • A • R • V • I • S" in body
 
 
 def test_unknown_path_is_404():

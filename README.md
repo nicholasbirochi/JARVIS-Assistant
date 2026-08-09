@@ -1,4 +1,4 @@
-# J.A.R.V.I.S
+# J • A • R • V • I • S
 
 Assistente de voz pessoal do Nicholas. Ativado por wake word sem depender de nenhuma
 conta/chave externa, conversa em português por voz, e mantém um perfil profissional
