@@ -150,6 +150,18 @@ def _run_active_session(
     consecutive_empty = 0
     try:
         while True:
+            if stop_event is not None and stop_event.is_set():
+                # "Desligar JARVIS" mid-conversation -- a real gap: this
+                # loop only ever ended via a stop phrase or the user
+                # walking away, so the menu bar icon/HUD would flip to
+                # "off" the instant it was clicked while the session (and
+                # the mic) kept actually running underneath until one of
+                # those fired. Checked once per turn, not mid-recording --
+                # record_utterance() itself still isn't interruptible, so
+                # this can't cut off a recording already in progress, but
+                # it does mean JARVIS stops for real within one turn
+                # instead of needing an explicit goodbye.
+                return
             visualizer_state.publish("listening")
             pcm = record_utterance(listener)
             text = transcribe(pcm)

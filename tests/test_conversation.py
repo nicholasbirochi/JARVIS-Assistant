@@ -227,6 +227,34 @@ def test_run_active_session_forwards_stop_event_to_every_speak_call(monkeypatch)
     assert goodbye_stop_event is sentinel_stop_event
 
 
+def test_run_active_session_stops_between_turns_once_stop_event_fires(monkeypatch):
+    # Real gap this guards against: this loop only ever ended via a stop
+    # phrase or the user walking away -- "Desligar JARVIS" mid-conversation
+    # flipped the menu bar icon to "off" immediately while the session (and
+    # the mic) kept actually running underneath. Only one scripted
+    # transcript below on purpose: if the loop wrongly started a second
+    # turn instead of stopping, next(transcripts) raises and fails the test.
+    unload_calls = []
+    monkeypatch.setattr("jarvis.voice.stt.unload", lambda: unload_calls.append(1))
+    _install_scripted_provider(monkeypatch, [ProviderResponse(content="Uma resposta.")])
+
+    outer_stop_event = threading.Event()
+    transcripts = iter(["oi jarvis"])
+
+    def speak_then_request_stop(text, stop_event=None):
+        outer_stop_event.set()  # simulate "Desligar" being clicked while this reply plays
+
+    conversation._run_active_session(
+        listener=FakeListener(),
+        record_utterance=lambda listener: b"",
+        transcribe=lambda pcm: next(transcripts),
+        speak=speak_then_request_stop,
+        stop_event=outer_stop_event,
+    )
+
+    assert unload_calls == [1]  # returned cleanly (via the finally), not stuck or crashed
+
+
 def test_run_active_session_reply_can_be_barged_in_on_via_the_listener(monkeypatch):
     # Wires the real _speak_with_barge_in into _run_active_session (not a
     # mock) -- confirms the reply is actually watched for a barge-in
