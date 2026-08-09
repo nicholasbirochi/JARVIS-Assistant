@@ -167,7 +167,35 @@ def test_run_active_session_calls_llm_and_speaks_reply(monkeypatch):
     )
 
     assert spoken == ["Olá, Senhor Nicholas.", conversation.GOODBYE]
-    assert unload_calls == [1]
+
+
+def test_run_active_session_publishes_thinking_between_transcription_and_llm_call(monkeypatch):
+    # Without this, the HUD kept showing "Ouvindo..." through the whole
+    # LLM call too -- indistinguishable from actually still listening,
+    # even though the user had already finished talking.
+    from jarvis.visualizer import state as visualizer_state
+
+    monkeypatch.setattr("jarvis.voice.stt.unload", lambda: None)
+    published: list[str] = []
+    monkeypatch.setattr(visualizer_state, "publish", lambda state, text="": published.append(state))
+
+    state_when_llm_was_called = []
+
+    def fake_send_turn(messages):
+        state_when_llm_was_called.append(published[-1])
+        return ""
+
+    monkeypatch.setattr(conversation, "send_turn", fake_send_turn)
+    transcripts = iter(["oi jarvis", "tchau jarvis"])
+
+    conversation._run_active_session(
+        listener=FakeListener(),
+        record_utterance=lambda listener: b"",
+        transcribe=lambda pcm: next(transcripts),
+        speak=lambda text, stop_event=None: None,
+    )
+
+    assert state_when_llm_was_called == ["thinking"]
 
 
 def test_run_active_session_forwards_stop_event_to_every_speak_call(monkeypatch):

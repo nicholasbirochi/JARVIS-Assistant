@@ -11,10 +11,15 @@ only if there's something pending (a résumé proposal to review, an open
 conflict) -- also code-derived, never the model's own words, same reasoning
 as the greeting.
 
-Each state transition (idle/listening; "speaking" fires from tts.speak()
-itself, see jarvis/voice/tts.py) is published to jarvis/visualizer/state.py
--- purely a live visual aid (the menu bar's "Visualizar Interação" button),
-never read back by anything here.
+Each state transition (idle/listening/thinking; "speaking" fires from
+tts.speak() itself, see jarvis/voice/tts.py) is published to
+jarvis/visualizer/state.py -- purely a live visual aid (the menu bar's
+"Visualizar Interação" button), never read back by anything here.
+"Thinking" covers the real gap between the user finishing an utterance
+and JARVIS starting to speak the reply (STT already ran by then; what's
+left is the LLM call) -- without it, the HUD kept showing "Ouvindo..."
+long after the user had stopped talking, indistinguishable from actually
+still listening.
 
 Every reply/greeting/briefing is spoken through `_speak_with_barge_in`,
 which watches the mic concurrently while talking: saying the wake word or
@@ -164,6 +169,7 @@ def _run_active_session(
                 speak(GOODBYE, stop_event=stop_event)
                 return
 
+            visualizer_state.publish("thinking")
             messages.append({"role": "user", "content": text})
             reply = send_turn(messages)
             if reply:

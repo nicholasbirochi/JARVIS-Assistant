@@ -30,6 +30,12 @@ def test_publish_accepts_off():
     assert state.current() == state.StateEvent(state="off", text="")
 
 
+def test_publish_accepts_thinking():
+    state.publish("thinking")
+
+    assert state.current() == state.StateEvent(state="thinking", text="")
+
+
 def test_publish_rejects_unknown_state():
     with pytest.raises(ValueError):
         state.publish("dancing")  # type: ignore[arg-type]

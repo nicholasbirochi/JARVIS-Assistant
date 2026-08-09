@@ -11,9 +11,9 @@ import threading
 from dataclasses import dataclass
 from typing import Literal
 
-State = Literal["off", "idle", "listening", "speaking"]
+State = Literal["off", "idle", "listening", "thinking", "speaking"]
 
-_VALID_STATES = ("off", "idle", "listening", "speaking")
+_VALID_STATES = ("off", "idle", "listening", "thinking", "speaking")
 
 
 @dataclass(frozen=True)

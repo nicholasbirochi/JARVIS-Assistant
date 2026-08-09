@@ -9,6 +9,7 @@
     --ring-dim: #0d3a52;
     --blue-idle: #1f7ea8;
     --blue-listening: #2fb6e8;
+    --violet-thinking: #b78bff;
     --blue-speaking: #7fe3ff;
     --text-dim: #4f8fae;
   }
@@ -64,6 +65,7 @@
     transition: color 0.4s ease, text-shadow 0.4s ease;
   }
   body[data-state="listening"] #status { color: var(--blue-listening); text-shadow: 0 0 12px rgba(47,182,232,0.6); }
+  body[data-state="thinking"] #status { color: var(--violet-thinking); text-shadow: 0 0 12px rgba(183,139,255,0.6); }
   body[data-state="speaking"] #status { color: var(--blue-speaking); text-shadow: 0 0 16px rgba(127,227,255,0.85); }
   body[data-state="off"] #status { color: #4a4f58; }
   body[data-state="off"] #brand, body[data-state="off"] #clock { color: #363a42; }
@@ -174,11 +176,14 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-const STATE_LABEL = { off: "Desligado", idle: "Em espera", listening: "Ouvindo...", speaking: "Falando" };
+const STATE_LABEL = {
+  off: "Desligado", idle: "Em espera", listening: "Ouvindo...", thinking: "Pensando...", speaking: "Falando",
+};
 const STATE_COLOR = {
   off:       { core: [58, 64, 74], glow: 0.12 },
   idle:      { core: [31, 126, 168], glow: 0.35 },
   listening: { core: [47, 182, 232], glow: 0.65 },
+  thinking:  { core: [183, 139, 255], glow: 0.7 },
   speaking:  { core: [127, 227, 255], glow: 1.0 },
 };
 
@@ -208,12 +213,17 @@ for (let i = 0; i < NUM_PARTICLES; i++) {
 // Per-state motion profile: how fast the sphere spins, how far particles
 // wander in/out, how bright/large they read, overall -- and `connect`,
 // how strongly nearby particles link up with constellation lines (0 =
-// none). Only listening/speaking connect, as requested -- idle/off stay
-// as loose, unconnected dots.
+// none). idle/off stay as loose, unconnected dots -- listening/thinking/
+// speaking all connect, at increasing intensity, so the sphere visibly
+// "lights up" more the more actively JARVIS is engaged. thinking gets
+// its own distinct feel on top of its violet color: faster rotation and
+// more chaos than listening, like something's actively churning inside,
+// since nothing external is happening yet (no mic input, no voice out).
 const STATE_MOTION = {
   off:       { rotSpeed: 0.015, jitterAmp: 0.02, alpha: 0.30, sizeMul: 0.65, chaos: 0,    connect: 0 },
   idle:      { rotSpeed: 0.07,  jitterAmp: 0.05, alpha: 0.65, sizeMul: 0.9,  chaos: 0,    connect: 0 },
   listening: { rotSpeed: 0.16,  jitterAmp: 0.09, alpha: 0.88, sizeMul: 1.05, chaos: 0.02, connect: 0.5 },
+  thinking:  { rotSpeed: 0.24,  jitterAmp: 0.12, alpha: 0.9,  sizeMul: 1.1,  chaos: 0.12, connect: 0.35 },
   speaking:  { rotSpeed: 0.32,  jitterAmp: 0.17, alpha: 1.0,  sizeMul: 1.25, chaos: 0.06, connect: 0.85 },
 };
 
