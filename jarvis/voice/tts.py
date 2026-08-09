@@ -100,7 +100,17 @@ def _speak_via_xtts(text: str, stop_event: threading.Event | None) -> bool:
         # Told to shut up before any audio was even queued up to play.
         return True
 
-    process = subprocess.Popen(_ffplay_command(STREAM_SAMPLE_RATE), stdin=subprocess.PIPE)
+    try:
+        process = subprocess.Popen(_ffplay_command(STREAM_SAMPLE_RATE), stdin=subprocess.PIPE)
+    except OSError as exc:
+        # Real gap this closes: ffplay itself failing to even start (not
+        # found, no permission, whatever) used to propagate uncaught out
+        # of speak() entirely -- silent total failure, no sound at all and
+        # no fallback, instead of the graceful say-based degrade every
+        # other failure in this function gets.
+        print(f"[tts] não consegui iniciar o ffplay ({exc}), usando voz de fallback", file=sys.stderr)
+        return False
+
     try:
         for chunk in itertools.chain((first_chunk,), chunk_iter):
             if stop_event is not None and stop_event.is_set():
@@ -120,6 +130,11 @@ def _speak_via_xtts(text: str, stop_event: threading.Event | None) -> bool:
                 break
             time.sleep(_POLL_SECONDS)
         process.wait()
+        if process.returncode not in (0, None) and not (stop_event is not None and stop_event.is_set()):
+            # Not raised/fallen back to say at this point -- some audio
+            # may already have played -- but worth a clear signal in the
+            # log instead of silently pretending this went fine.
+            print(f"[tts] ffplay saiu com código {process.returncode} (áudio pode ter ficado incompleto)", file=sys.stderr)
     return True
 
 

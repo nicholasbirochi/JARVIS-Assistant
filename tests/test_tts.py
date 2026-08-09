@@ -244,6 +244,25 @@ def test_speak_uses_xtts_when_engine_configured_and_ready(monkeypatch):
     assert fake_stdin.closed is True
 
 
+def test_speak_falls_back_to_say_when_ffplay_itself_fails_to_start(monkeypatch):
+    # Real gap this closes: ffplay failing to even launch (not found, no
+    # permission, whatever) used to propagate uncaught out of speak()
+    # entirely -- total silence, no fallback attempted at all.
+    monkeypatch.setattr(tts, "TTS_ENGINE", "xtts")
+    _install_fake_xtts_client(monkeypatch, FakeXttsClient(chunks=[b"chunk1"]))
+
+    def raising_popen(*a, **kw):
+        raise FileNotFoundError("ffplay not found")
+
+    monkeypatch.setattr(subprocess, "Popen", raising_popen)
+    fake_run = FakeRun([0])
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    tts.speak("olá")  # must not raise
+
+    assert fake_run.calls == [["say", "-v", tts.TTS_VOICE, "olá"]]
+
+
 def test_speak_falls_back_to_say_when_no_reference_audio_yet(monkeypatch):
     monkeypatch.setattr(tts, "TTS_ENGINE", "xtts")
     _install_fake_xtts_client(monkeypatch, FakeXttsClient(has_reference=False))
