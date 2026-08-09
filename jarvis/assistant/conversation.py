@@ -81,7 +81,20 @@ def _speak_with_barge_in(speak, text: str, listener, stop_event: threading.Event
         speak(text, stop_event=watch_event)
     finally:
         watch_event.set()  # in case speak() returned on its own (finished, or a real failure) -- stop the watcher either way
-        watcher.join(timeout=1)
+        # No timeout here, deliberately -- a real bug hit shipping this:
+        # WakeWordListener's underlying PvRecorder stream isn't safe for
+        # concurrent reads. With a bounded join, if the watcher thread was
+        # still blocked inside read_frame() when the join gave up, the
+        # caller would move on to its own record_utterance()/wait() call
+        # on the very same recorder while the watcher was STILL reading
+        # from it -- two threads pulling frames off one stream at once,
+        # which corrupted wake-word detection for the rest of the process
+        # (JARVIS would activate once, then never hear the wake word
+        # again). An unbounded join guarantees the watcher has genuinely
+        # stopped calling read_frame() before this function returns --
+        # worst case adds one frame's duration (tens of ms) of wait, never
+        # more, since the watcher checks watch_event right after every read.
+        watcher.join()
     return detected[0]
 
 
