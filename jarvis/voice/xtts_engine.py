@@ -28,17 +28,24 @@ shape the design here, not assumptions:
   just using CPU outright. device is hardcoded to "cpu" below for that
   reason, not auto-detected.
 
-CURRENTLY NOT WIRED INTO THE LIVE VOICE LOOP: found live that
-preload_in_background(), when called from conversation.py's
-run_voice_loop, made torchcodec dlopen the Homebrew-installed FFmpeg into
-the same process that already has faster-whisper's own bundled FFmpeg
-(via PyAV) loaded -- macOS logged a real ObjC class collision
+Real, measured finding that shaped synthesize_stream() below: generation
+runs close to real-time on this hardware (not slow in absolute terms), but
+synthesize_to_file()'s blocking, whole-utterance-at-once API means JARVIS
+stays silent for the entire ~5s a short reply takes to generate before any
+audio plays at all -- a real, reported "demorando demais" complaint, not
+a hypothetical one. synthesize_stream() uses XTTS's own inference_stream()
+instead, yielding audio as it's generated so playback (see tts.py) can
+start within roughly a second instead of waiting for the whole thing.
+
+NEVER CALL preload_in_background() FROM THE MAIN JARVIS PROCESS: found
+live that doing so made torchcodec dlopen the Homebrew-installed FFmpeg
+into the same process that already has faster-whisper's own bundled
+FFmpeg (via PyAV) loaded -- macOS logged a real ObjC class collision
 (AVFFrameReceiver/AVFAudioReceiver defined in both libavdevice copies),
 and wake-word/clap detection stopped firing entirely, silently, right
-after. See conversation.py's run_voice_loop docstring. This module is
-otherwise complete and tested; it just needs XTTS synthesis to run in a
-genuinely separate process before it's safe to preload alongside the
-microphone listener again.
+after. This module is only ever imported by xtts_worker.py now, a
+genuinely separate OS process spawned by xtts_client.py -- see that
+module's docstring. Safe there; never safe alongside PvRecorder.
 """
 
 from __future__ import annotations
@@ -50,6 +57,18 @@ import threading
 _model = None
 _model_lock = threading.Lock()
 _load_started = False
+
+# int16, mono -- XTTS-v2's own native output rate (confirmed live via the
+# loaded model's synthesizer.output_sample_rate), not a guess. Whatever
+# plays these chunks back (jarvis/voice/tts.py, via ffplay) must be told
+# this exact rate or the audio will sound pitched/sped up or down.
+STREAM_SAMPLE_RATE = 24000
+
+# (gpt_cond_latent, speaker_embedding) for the one reference clip this
+# whole module clones from -- computed once (a real, measured ~0.2-0.4s,
+# not free) and reused for every synthesize_stream() call rather than
+# recomputed from the reference wav on every single reply.
+_conditioning_cache = None
 
 
 def has_reference_audio() -> bool:
@@ -132,3 +151,58 @@ def synthesize_to_file(text: str, out_path: str) -> None:
         language=TTS_XTTS_LANGUAGE,
         file_path=out_path,
     )
+
+
+def _get_conditioning_latents():
+    """Computed once and cached at module scope -- every synthesize_stream()
+    call after the first reuses it instead of recomputing from the
+    reference wav each time. Raises RuntimeError if the model isn't loaded
+    yet, same contract as the rest of this module."""
+    global _conditioning_cache
+
+    if _conditioning_cache is not None:
+        return _conditioning_cache
+
+    from jarvis.config import TTS_XTTS_SPEAKER_WAV_PATH
+
+    with _model_lock:
+        model = _model
+    if model is None:
+        raise RuntimeError("modelo XTTS ainda não carregado")
+
+    _conditioning_cache = model.synthesizer.tts_model.get_conditioning_latents(
+        audio_path=str(TTS_XTTS_SPEAKER_WAV_PATH)
+    )
+    return _conditioning_cache
+
+
+def _to_pcm16_bytes(wav_chunk) -> bytes:
+    import numpy as np
+
+    array = wav_chunk.detach().cpu().numpy() if hasattr(wav_chunk, "detach") else np.asarray(wav_chunk)
+    clipped = np.clip(array, -1.0, 1.0)
+    return (clipped * 32767).astype(np.int16).tobytes()
+
+
+def synthesize_stream(text: str):
+    """Yields raw int16 PCM byte chunks (mono, STREAM_SAMPLE_RATE Hz) as
+    XTTS generates them, instead of blocking until the whole utterance is
+    done (synthesize_to_file above) -- lets playback start within roughly
+    a second instead of waiting out the full ~5s a short reply takes to
+    fully generate. Raises RuntimeError if the model isn't loaded yet or
+    there's no reference clip -- same "check is_ready() first" contract as
+    synthesize_to_file; once at least one chunk has been yielded, a later
+    failure just ends the generator (propagates the exception on the next
+    `next()` call) rather than raising up front."""
+    from jarvis.config import TTS_XTTS_LANGUAGE
+
+    with _model_lock:
+        model = _model
+    if model is None:
+        raise RuntimeError("modelo XTTS ainda não carregado")
+
+    gpt_cond_latent, speaker_embedding = _get_conditioning_latents()
+    for wav_chunk in model.synthesizer.tts_model.inference_stream(
+        text, TTS_XTTS_LANGUAGE, gpt_cond_latent, speaker_embedding
+    ):
+        yield _to_pcm16_bytes(wav_chunk)

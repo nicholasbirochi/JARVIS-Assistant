@@ -9,11 +9,13 @@ from jarvis.voice import xtts_engine
 
 @pytest.fixture(autouse=True)
 def _reset_module_state(monkeypatch):
-    # _model/_load_started are module-level singletons by design (the real
-    # model must load exactly once per process) -- reset them around every
-    # test so tests don't leak state into each other.
+    # _model/_load_started/_conditioning_cache are module-level singletons
+    # by design (the real model loads, and its reference clip's
+    # conditioning latents compute, exactly once per process) -- reset
+    # them around every test so tests don't leak state into each other.
     monkeypatch.setattr(xtts_engine, "_model", None)
     monkeypatch.setattr(xtts_engine, "_load_started", False)
+    monkeypatch.setattr(xtts_engine, "_conditioning_cache", None)
 
 
 def test_has_reference_audio_false_when_file_missing(tmp_path, monkeypatch):
@@ -121,3 +123,98 @@ def test_synthesize_to_file_delegates_to_loaded_model(monkeypatch, tmp_path):
     xtts_engine.synthesize_to_file("olá", "/tmp/out.wav")
 
     assert calls == [("olá", str(tmp_path / "reference.wav"), "pt", "/tmp/out.wav")]
+
+
+# ---- synthesize_stream ----
+
+
+class FakeTtsModel:
+    def __init__(self, chunks, latents=("cond_latent", "spk_emb")):
+        self.chunks = chunks
+        self.latents = latents
+        self.conditioning_calls: list[str] = []
+        self.inference_calls: list[tuple] = []
+
+    def get_conditioning_latents(self, audio_path):
+        self.conditioning_calls.append(audio_path)
+        return self.latents
+
+    def inference_stream(self, text, language, gpt_cond_latent, speaker_embedding):
+        self.inference_calls.append((text, language, gpt_cond_latent, speaker_embedding))
+        yield from self.chunks
+
+
+class FakeSynthesizer:
+    def __init__(self, tts_model):
+        self.tts_model = tts_model
+
+
+class FakeModel:
+    def __init__(self, tts_model):
+        self.synthesizer = FakeSynthesizer(tts_model)
+
+
+def test_synthesize_stream_raises_when_model_not_loaded():
+    with pytest.raises(RuntimeError):
+        list(xtts_engine.synthesize_stream("olá"))
+
+
+def _expected_pcm16_bytes(values):
+    import numpy as np
+
+    clipped = np.clip(np.array(values, dtype=np.float64), -1.0, 1.0)
+    return (clipped * 32767).astype(np.int16).tobytes()
+
+
+def test_synthesize_stream_yields_pcm16_bytes_per_chunk(monkeypatch, tmp_path):
+    import numpy as np
+
+    monkeypatch.setattr(config, "TTS_XTTS_SPEAKER_WAV_PATH", tmp_path / "reference.wav")
+    monkeypatch.setattr(config, "TTS_XTTS_LANGUAGE", "pt")
+    tts_model = FakeTtsModel(chunks=[np.array([0.5, -0.5]), np.array([1.0, -1.0])])
+    monkeypatch.setattr(xtts_engine, "_model", FakeModel(tts_model))
+
+    chunks = list(xtts_engine.synthesize_stream("olá"))
+
+    assert chunks == [_expected_pcm16_bytes([0.5, -0.5]), _expected_pcm16_bytes([1.0, -1.0])]
+
+
+def test_synthesize_stream_passes_configured_language_and_text(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "TTS_XTTS_SPEAKER_WAV_PATH", tmp_path / "reference.wav")
+    monkeypatch.setattr(config, "TTS_XTTS_LANGUAGE", "pt")
+    tts_model = FakeTtsModel(chunks=[])
+    monkeypatch.setattr(xtts_engine, "_model", FakeModel(tts_model))
+
+    list(xtts_engine.synthesize_stream("bom dia"))
+
+    assert tts_model.inference_calls == [("bom dia", "pt", "cond_latent", "spk_emb")]
+
+
+def test_synthesize_stream_computes_conditioning_latents_from_reference_wav(monkeypatch, tmp_path):
+    reference = tmp_path / "reference.wav"
+    monkeypatch.setattr(config, "TTS_XTTS_SPEAKER_WAV_PATH", reference)
+    tts_model = FakeTtsModel(chunks=[])
+    monkeypatch.setattr(xtts_engine, "_model", FakeModel(tts_model))
+
+    list(xtts_engine.synthesize_stream("olá"))
+
+    assert tts_model.conditioning_calls == [str(reference)]
+
+
+def test_synthesize_stream_reuses_cached_conditioning_latents_across_calls(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "TTS_XTTS_SPEAKER_WAV_PATH", tmp_path / "reference.wav")
+    tts_model = FakeTtsModel(chunks=[])
+    monkeypatch.setattr(xtts_engine, "_model", FakeModel(tts_model))
+
+    list(xtts_engine.synthesize_stream("primeira"))
+    list(xtts_engine.synthesize_stream("segunda"))
+
+    assert len(tts_model.conditioning_calls) == 1  # not recomputed the second time
+
+
+def test_to_pcm16_bytes_clips_out_of_range_values():
+    import numpy as np
+
+    result = xtts_engine._to_pcm16_bytes(np.array([2.0, -2.0]))
+
+    assert result == _expected_pcm16_bytes([1.0, -1.0])

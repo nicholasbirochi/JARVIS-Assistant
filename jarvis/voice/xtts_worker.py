@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import struct
 import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -38,6 +39,8 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if self.path == "/synthesize":
             self._handle_synthesize()
+        elif self.path == "/synthesize_stream":
+            self._handle_synthesize_stream()
         else:
             self.send_response(404)
             self.end_headers()
@@ -70,6 +73,61 @@ class _Handler(BaseHTTPRequestHandler):
             self._respond_json(500, {"error": str(exc)})
         finally:
             os.unlink(out_path)
+
+    def _handle_synthesize_stream(self) -> None:
+        """Streams raw PCM chunks as XTTS generates them, instead of
+        waiting for the whole utterance (see xtts_engine.synthesize_stream's
+        docstring for why) -- so playback (jarvis/voice/tts.py, via ffplay)
+        can start almost immediately instead of after several seconds of
+        silence. Framing: each chunk is a 4-byte big-endian length prefix
+        followed by that many raw PCM bytes; a zero-length chunk marks a
+        clean end. Deliberately not real HTTP chunked transfer-encoding --
+        this is a length-prefixed protocol we fully control on both ends
+        (see xtts_client.py), simpler to get right than hand-rolling
+        chunked-encoding framing for a single, local, internal endpoint."""
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            body = json.loads(self.rfile.read(length))
+            text = body["text"]
+        except (json.JSONDecodeError, KeyError) as exc:
+            self._respond_json(400, {"error": f"corpo inválido: {exc}"})
+            return
+
+        if not xtts_engine.is_ready():
+            self._respond_json(503, {"error": "modelo ainda não carregado"})
+            return
+
+        # Fetch the first chunk BEFORE sending any response headers -- a
+        # failure here can still become a clean 500 JSON error, same
+        # contract as /synthesize. A failure AFTER this point means audio
+        # may already be playing on the client, so it just ends the
+        # stream early instead (see the except below).
+        chunk_iter = xtts_engine.synthesize_stream(text)
+        try:
+            first_chunk = next(chunk_iter)
+            got_first_chunk = True
+        except StopIteration:
+            got_first_chunk = False
+        except Exception as exc:
+            self._respond_json(500, {"error": str(exc)})
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.end_headers()
+        try:
+            if got_first_chunk:
+                self._write_chunk(first_chunk)
+                for chunk in chunk_iter:
+                    self._write_chunk(chunk)
+            self._write_chunk(b"")  # terminator -- signals a clean end
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass  # client disconnected (e.g. interrupted mid-speech) -- nothing more to do
+
+    def _write_chunk(self, data: bytes) -> None:
+        self.wfile.write(struct.pack(">I", len(data)))
+        if data:
+            self.wfile.write(data)
 
     def _respond_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")

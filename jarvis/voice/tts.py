@@ -4,14 +4,20 @@ process are both available (see jarvis/voice/xtts_client.py and
 xtts_engine.py), speak() clones a voice from that clip instead; otherwise
 it transparently falls back to `say` below, so flipping TTS_ENGINE never
 breaks anything even before the reference clip exists or while the worker
-is still starting up/loading its model."""
+is still starting up/loading its model.
+
+The xtts path streams: PCM chunks are piped into `ffplay` as they arrive
+from the worker (jarvis/voice/xtts_client.py's synthesize_stream()) rather
+than waiting for a whole utterance to finish generating first and only
+then playing a file. Measured live: XTTS synthesis for a short reply takes
+around 5s on this hardware -- streaming means audio starts within about a
+second of that instead of JARVIS sitting silent for the whole thing."""
 
 from __future__ import annotations
 
-import os
+import itertools
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 
@@ -50,19 +56,11 @@ def _speak_interruptible(voice: str, text: str, stop_event: threading.Event) -> 
     return process.returncode == 0
 
 
-def _play_file_uninterruptible(path: str) -> bool:
-    return subprocess.run(["afplay", path]).returncode == 0
-
-
-def _play_file_interruptible(path: str, stop_event: threading.Event) -> bool:
-    process = subprocess.Popen(["afplay", path])
-    while process.poll() is None:
-        if stop_event.is_set():
-            process.terminate()
-            process.wait()
-            return True
-        time.sleep(_POLL_SECONDS)
-    return process.returncode == 0
+def _ffplay_command(sample_rate: int) -> list[str]:
+    # Raw PCM straight in via stdin -- no temp file, no waiting for a
+    # whole WAV to exist first. ffmpeg is already a required system
+    # dependency here (xtts_engine.py's docstring), so ffplay comes free.
+    return ["ffplay", "-f", "s16le", "-ar", str(sample_rate), "-ac", "1", "-nodisp", "-autoexit", "-loglevel", "quiet", "-"]
 
 
 def _speak_via_xtts(text: str, stop_event: threading.Event | None) -> bool:
@@ -71,51 +69,84 @@ def _speak_via_xtts(text: str, stop_event: threading.Event | None) -> bool:
     through to the say-based voice repeating the same text). Returns False
     to tell the caller to use the say-based path instead -- either xtts
     isn't ready yet (no reference clip, or the isolated worker process is
-    still loading), or generation itself failed. Talks to xtts_client, not
-    xtts_engine directly -- synthesis runs in its own OS process, see
-    xtts_engine.py's module docstring for why."""
+    still loading), or generation failed before any audio was produced.
+    Talks to xtts_client, not xtts_engine directly -- synthesis runs in
+    its own OS process, see xtts_engine.py's module docstring for why.
+
+    Streams: pipes PCM chunks into ffplay as xtts_client.synthesize_stream()
+    yields them, rather than waiting for the whole utterance to finish and
+    only then playing a file -- the real, measured ~5s of silence per
+    reply that was the whole point of this rewrite. Once the first chunk
+    has actually started playing, a later failure just stops audio instead
+    of falling back to say (that would repeat the reply out loud in a
+    different voice, worse than a slightly short cutoff)."""
     from jarvis.voice import xtts_client
+    from jarvis.voice.xtts_engine import STREAM_SAMPLE_RATE
 
     if not xtts_client.has_reference_audio() or not xtts_client.is_ready():
         return False
 
-    fd, out_path = tempfile.mkstemp(suffix=".wav")
-    os.close(fd)
     try:
-        xtts_client.synthesize_to_file(text, out_path)
+        chunk_iter = xtts_client.synthesize_stream(text)
+        first_chunk = next(chunk_iter, None)
     except Exception as exc:
         print(f"[tts] XTTS falhou ({exc}), usando voz de fallback", file=sys.stderr)
-        os.unlink(out_path)
         return False
 
+    if first_chunk is None:
+        return True  # empty synthesis (e.g. empty text) -- nothing to play, not a failure
+
+    if stop_event is not None and stop_event.is_set():
+        # Told to shut up before any audio was even queued up to play.
+        return True
+
+    process = subprocess.Popen(_ffplay_command(STREAM_SAMPLE_RATE), stdin=subprocess.PIPE)
     try:
-        if stop_event is not None and stop_event.is_set():
-            # Told to shut up while audio was still generating -- don't
-            # play stale speech after the fact.
-            return True
-        if stop_event is not None:
-            return _play_file_interruptible(out_path, stop_event)
-        return _play_file_uninterruptible(out_path)
+        for chunk in itertools.chain((first_chunk,), chunk_iter):
+            if stop_event is not None and stop_event.is_set():
+                break
+            try:
+                process.stdin.write(chunk)
+            except (BrokenPipeError, OSError):
+                break  # ffplay exited on its own (e.g. real failure) -- nothing left to feed it
     finally:
-        os.unlink(out_path)
+        try:
+            process.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+        while process.poll() is None:
+            if stop_event is not None and stop_event.is_set():
+                process.terminate()
+                break
+            time.sleep(_POLL_SECONDS)
+        process.wait()
+    return True
 
 
 def speak(text: str, stop_event: threading.Event | None = None) -> None:
     """Speaks `text` aloud. If `stop_event` is given (the menu bar's
     off-toggle sets it) and fires while this is talking, playback is killed
     immediately -- "Desligar JARVIS" cuts him off right away instead of
-    finishing the current sentence first."""
+    finishing the current sentence first.
+
+    The visualizer transcript shows `text` exactly as given (e.g. "IA"),
+    but what's actually synthesized goes through prepare_for_speech()
+    first -- markdown stripped, acronyms spelled out ("IA" -> "I.A.") so
+    say/XTTS pronounce them letter by letter instead of as a word. Display
+    and speech are deliberately different strings from here on."""
     from jarvis.visualizer import state as visualizer_state
+    from jarvis.voice.speech_text import prepare_for_speech
 
     visualizer_state.publish("speaking", text=text)
+    spoken_text = prepare_for_speech(text)
 
-    if TTS_ENGINE == "xtts" and _speak_via_xtts(text, stop_event):
+    if TTS_ENGINE == "xtts" and _speak_via_xtts(spoken_text, stop_event):
         return
 
     if stop_event is not None:
-        ok = _speak_interruptible(TTS_VOICE, text, stop_event)
+        ok = _speak_interruptible(TTS_VOICE, spoken_text, stop_event)
     else:
-        ok = _speak_uninterruptible(TTS_VOICE, text)
+        ok = _speak_uninterruptible(TTS_VOICE, spoken_text)
     if ok:
         return
 
@@ -124,8 +155,8 @@ def speak(text: str, stop_event: threading.Event | None = None) -> None:
 
     print(f"[tts] voz {TTS_VOICE!r} indisponível, usando {FALLBACK_VOICE!r}", file=sys.stderr)
     if stop_event is not None:
-        ok = _speak_interruptible(FALLBACK_VOICE, text, stop_event)
+        ok = _speak_interruptible(FALLBACK_VOICE, spoken_text, stop_event)
     else:
-        ok = _speak_uninterruptible(FALLBACK_VOICE, text)
+        ok = _speak_uninterruptible(FALLBACK_VOICE, spoken_text)
     if not ok:
         raise RuntimeError(f"say -v {FALLBACK_VOICE!r} falhou")

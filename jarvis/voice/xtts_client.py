@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import atexit
 import json
+import struct
 import subprocess
 import urllib.error
 import urllib.request
@@ -94,3 +95,46 @@ def synthesize_to_file(text: str, out_path: str) -> None:
         data = resp.read()
     with open(out_path, "wb") as f:
         f.write(data)
+
+
+def _read_exact(resp, n: int) -> bytes:
+    data = b""
+    while len(data) < n:
+        piece = resp.read(n - len(data))
+        if not piece:
+            raise urllib.error.URLError("conexão encerrada no meio do streaming de áudio")
+        data += piece
+    return data
+
+
+def synthesize_stream(text: str):
+    """Yields raw PCM chunks (int16, mono, xtts_engine.STREAM_SAMPLE_RATE
+    Hz) as they arrive from the worker -- the caller (tts.py) can start
+    playing audio before the whole utterance has even finished generating,
+    instead of synthesize_to_file's wait-for-everything behavior.
+
+    Raises on any failure that happens before the first chunk (worker
+    unreachable, not ready, synthesis error before any audio was
+    produced) -- same "callers must check is_ready() first" contract as
+    synthesize_to_file. Once at least one chunk has been yielded, a later
+    failure just ends the generator instead of raising -- see tts.py's
+    caller for why: audio may already be playing by then, so falling back
+    to a different voice mid-sentence would be worse than just stopping."""
+    from jarvis.config import XTTS_WORKER_PORT
+
+    body = json.dumps({"text": text}).encode("utf-8")
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{XTTS_WORKER_PORT}/synthesize_stream",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    resp = urllib.request.urlopen(req, timeout=60)
+    try:
+        while True:
+            (chunk_len,) = struct.unpack(">I", _read_exact(resp, 4))
+            if chunk_len == 0:
+                return
+            yield _read_exact(resp, chunk_len)
+    finally:
+        resp.close()

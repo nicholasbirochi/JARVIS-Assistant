@@ -113,6 +113,8 @@ class _FakeWorkerHandler(BaseHTTPRequestHandler):
     ready = True
     synth_bytes = b"RIFFfakewav"
     synth_status = 200
+    stream_chunks: list[bytes] = [b"chunk1", b"chunk2"]
+    stream_status = 200
 
     def log_message(self, format, *args):
         pass
@@ -132,6 +134,9 @@ class _FakeWorkerHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
         self.rfile.read(length)
+        if self.path == "/synthesize_stream":
+            self._handle_synthesize_stream()
+            return
         if self.synth_status != 200:
             body = json.dumps({"error": "boom"}).encode()
             self.send_response(self.synth_status)
@@ -145,6 +150,25 @@ class _FakeWorkerHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(self.synth_bytes)))
         self.end_headers()
         self.wfile.write(self.synth_bytes)
+
+    def _handle_synthesize_stream(self):
+        import struct
+
+        if self.stream_status != 200:
+            body = json.dumps({"error": "boom"}).encode()
+            self.send_response(self.stream_status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.end_headers()
+        for chunk in self.stream_chunks:
+            self.wfile.write(struct.pack(">I", len(chunk)))
+            self.wfile.write(chunk)
+        self.wfile.write(struct.pack(">I", 0))
 
 
 @pytest.fixture()
@@ -184,3 +208,24 @@ def test_synthesize_to_file_raises_on_worker_error(fake_worker, tmp_path):
 
     with pytest.raises(urllib.error.HTTPError):
         xtts_client.synthesize_to_file("olá", str(out_path))
+
+
+def test_synthesize_stream_yields_chunks_in_order(fake_worker):
+    _FakeWorkerHandler.stream_status = 200
+    _FakeWorkerHandler.stream_chunks = [b"chunk1", b"chunkTWO"]
+
+    assert list(xtts_client.synthesize_stream("olá")) == [b"chunk1", b"chunkTWO"]
+
+
+def test_synthesize_stream_empty_stream_yields_nothing(fake_worker):
+    _FakeWorkerHandler.stream_status = 200
+    _FakeWorkerHandler.stream_chunks = []
+
+    assert list(xtts_client.synthesize_stream("")) == []
+
+
+def test_synthesize_stream_raises_on_worker_error_before_any_chunk(fake_worker):
+    _FakeWorkerHandler.stream_status = 500
+
+    with pytest.raises(urllib.error.HTTPError):
+        list(xtts_client.synthesize_stream("olá"))
