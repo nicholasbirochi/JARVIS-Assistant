@@ -51,3 +51,61 @@ def test_push_resume_to_site_unsupported_site():
 def test_push_resume_to_site_supported_site_says_not_implemented():
     result = tools.push_resume_to_site("LinkedIn")
     assert "não foi implementada" in result.lower() or "nao foi implementada" in result.lower()
+
+
+# ---- prepare_claude_prompt ----
+
+
+def test_prepare_claude_prompt_copies_to_clipboard(monkeypatch):
+    calls = []
+    monkeypatch.setattr(tools.subprocess, "run", lambda args, **kw: calls.append((args, kw)))
+    monkeypatch.setattr(tools, "_log_claude_prompt", lambda prompt: None)
+
+    result = tools.prepare_claude_prompt("Troque a cor do HUD para verde.")
+
+    assert calls[0][0] == ["pbcopy"]
+    assert calls[0][1]["input"] == "Troque a cor do HUD para verde.".encode("utf-8")
+    assert "copiado" in result.lower()
+
+
+def test_prepare_claude_prompt_reports_error_without_raising_when_pbcopy_fails(monkeypatch):
+    def raising_run(args, **kw):
+        raise OSError("pbcopy indisponível")
+
+    monkeypatch.setattr(tools.subprocess, "run", raising_run)
+
+    result = tools.prepare_claude_prompt("qualquer coisa")
+
+    assert "não consegui" in result.lower()
+
+
+def test_prepare_claude_prompt_logs_even_though_it_still_reports_clipboard_success(monkeypatch, tmp_path):
+    from jarvis import config
+
+    monkeypatch.setattr(tools.subprocess, "run", lambda args, **kw: None)
+    monkeypatch.setattr(config, "LOCAL_STATE_DIR", tmp_path)
+
+    result = tools.prepare_claude_prompt("Adicione um botão novo.")
+
+    log_path = tmp_path / "claude_prompts.log"
+    assert log_path.exists()
+    assert "Adicione um botão novo." in log_path.read_text(encoding="utf-8")
+    assert "copiado" in result.lower()
+
+
+def test_prepare_claude_prompt_still_succeeds_if_logging_itself_fails(monkeypatch, tmp_path):
+    # The clipboard copy is the actual guarantee the user asked for -- a
+    # logging hiccup (durability net only) must never turn that into a
+    # reported failure. Real failure mode, not a mock: LOCAL_STATE_DIR
+    # pointed at a path that's a file, not a directory, so mkdir(parents=True)
+    # inside _log_claude_prompt raises for real.
+    from jarvis import config
+
+    monkeypatch.setattr(tools.subprocess, "run", lambda args, **kw: None)
+    not_a_directory = tmp_path / "not_a_directory"
+    not_a_directory.write_text("")
+    monkeypatch.setattr(config, "LOCAL_STATE_DIR", not_a_directory)
+
+    result = tools.prepare_claude_prompt("qualquer coisa")
+
+    assert "copiado" in result.lower()

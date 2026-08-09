@@ -209,6 +209,18 @@ simplesmente **não faz nada visível, sem erro nenhum** (`spctl --assess` mostr
 para sempre. `spctl --add` (que permitiria liberar isso via terminal, sem esse passo
 manual) foi descontinuado pelo próprio macOS -- não tem como pular essa etapa.
 
+## Pedir uma mudança de código por voz
+
+Pedir pro JARVIS ("mude a cor do HUD pra verde", "peça pro Claude Code revisar o
+adaptador da Gupy") faz ele escrever um prompt completo e bem estruturado -- não a sua
+fala ao pé da letra -- e copiar pra área de transferência (`prepare_claude_prompt` em
+`jarvis/assistant/tools.py`). Não existe uma forma de o JARVIS colocar texto direto numa
+conversa já aberta com o Claude Code, então isso é proposital, não uma limitação: é só
+colar (`Cmd+V`) onde e quando você quiser -- nesta conversa, numa nova, sobre este
+projeto ou outro. Cada prompt também fica salvo em
+`~/Library/Application Support/JARVIS/claude_prompts.log`, como rede de segurança caso
+você não cole na hora.
+
 ## Voz clonada (XTTS-v2)
 
 `jarvis/voice/xtts_engine.py` clona uma voz a partir de um clipe curto de referência (em
