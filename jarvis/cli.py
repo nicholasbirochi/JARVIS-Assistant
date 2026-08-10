@@ -6,22 +6,25 @@ by typing instead of speaking -- no mic, wake-word engine, or TTS needed.
 `python -m jarvis menubar` runs the macOS menu-bar on/off toggle;
 `python -m jarvis calibrate-claps` prints live mic peak amplitude to help
 tune CLAP_PEAK_THRESHOLD; `python -m jarvis gupy-login` / `gupy-preview` /
-`gupy-apply` drive the Gupy site adapter (jarvis/sites/gupy.py)."""
+`gupy-apply` drive the Gupy site adapter (jarvis/sites/gupy.py);
+`vagas-login` / `vagas-preview` / `vagas-apply` drive the Vagas.com one
+(jarvis/sites/vagas.py) the same way."""
 
 from __future__ import annotations
 
 import argparse
 
 
-def _run_gupy(apply_changes: bool) -> None:
+def _run_site(adapter, display_name: str, login_command: str, apply_changes: bool) -> None:
+    """Shared preview/apply flow for every site adapter -- adapter-specific
+    logic lives entirely in the adapter (jarvis/sites/<site>.py); this is
+    just the generic "check session, diff, show, confirm, apply" shell."""
     from jarvis.resume import store
     from jarvis.sites.base import SessionStatus
-    from jarvis.sites.gupy import GupyAdapter
 
-    adapter = GupyAdapter()
     status = adapter.check_session()
     if status != SessionStatus.AUTHENTICATED:
-        print(f"Sessão da Gupy: {status.value}. Rode `python -m jarvis gupy-login` primeiro.")
+        print(f"Sessão da {display_name}: {status.value}. Rode `python -m jarvis {login_command}` primeiro.")
         return
 
     try:
@@ -37,7 +40,7 @@ def _run_gupy(apply_changes: bool) -> None:
     if not apply_changes or not plan.changes:
         return
 
-    answer = input("Aplicar essas mudanças na Gupy de verdade? [s/N] ").strip().lower()
+    answer = input(f"Aplicar essas mudanças na {display_name} de verdade? [s/N] ").strip().lower()
     if not answer.startswith("s"):
         print("Cancelado -- nada foi enviado.")
         return
@@ -52,6 +55,18 @@ def _run_gupy(apply_changes: bool) -> None:
         print(f"Aplicado: {len(result.changes_applied)} mudança(s).")
     else:
         print(f"Falhou: {result.error}")
+
+
+def _run_gupy(apply_changes: bool) -> None:
+    from jarvis.sites.gupy import GupyAdapter
+
+    _run_site(GupyAdapter(), "Gupy", "gupy-login", apply_changes)
+
+
+def _run_vagas(apply_changes: bool) -> None:
+    from jarvis.sites.vagas import VagasAdapter
+
+    _run_site(VagasAdapter(), "Vagas.com", "vagas-login", apply_changes)
 
 
 def main() -> None:
@@ -77,6 +92,13 @@ def main() -> None:
     )
     subparsers.add_parser(
         "gupy-apply", help="Aplica de verdade as mudanças no perfil da Gupy, após confirmação explícita."
+    )
+    subparsers.add_parser("vagas-login", help="Abre um navegador para login manual (uma vez só) no Vagas.com.")
+    subparsers.add_parser(
+        "vagas-preview", help="Mostra (sem aplicar) o que mudaria no perfil do Vagas.com vs. o currículo local."
+    )
+    subparsers.add_parser(
+        "vagas-apply", help="Aplica de verdade as mudanças no perfil do Vagas.com, após confirmação explícita."
     )
     args = parser.parse_args()
 
@@ -117,6 +139,16 @@ def main() -> None:
 
     if args.command in ("gupy-preview", "gupy-apply"):
         _run_gupy(apply_changes=args.command == "gupy-apply")
+        return
+
+    if args.command == "vagas-login":
+        from jarvis.sites.vagas import VagasAdapter
+
+        VagasAdapter().login()
+        return
+
+    if args.command in ("vagas-preview", "vagas-apply"):
+        _run_vagas(apply_changes=args.command == "vagas-apply")
         return
 
     from jarvis.assistant.conversation import run_text_loop, run_voice_loop

@@ -197,6 +197,12 @@ GUPY_PORTAL_URL = "https://portal.gupy.io/"
 # link is a different page (experience/skills/diversity, no contact
 # fields); contact info lives under "Editar perfil" instead.
 GUPY_PROFILE_URL = "https://login.gupy.io/candidates/profile"
+# Verified via WebFetch against vagas.com.br's own public homepage, not
+# guessed. Profile edit URL is NOT filled in here -- unlike Gupy's, it's
+# only reachable after a real login (no public equivalent to crawl), so
+# it gets discovered live during vagas.py's first supervised session
+# instead of being hardcoded ahead of time.
+VAGAS_LOGIN_URL = "https://www.vagas.com.br/login-candidatos"
 # Headless by default so a normal `preview`/`apply` run doesn't pop a window;
 # `login` always forces headed regardless, since it needs a human present.
 SITES_HEADLESS = os.environ.get("SITES_HEADLESS", "true").lower() != "false"
