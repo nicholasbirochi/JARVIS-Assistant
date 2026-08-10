@@ -5,12 +5,6 @@ import pytest
 from jarvis.assistant import conversation
 from jarvis.assistant import llm_client
 from jarvis.assistant.providers import ProviderResponse
-from jarvis.config import CLAP_GREETING, GREETING
-
-
-def test_greeting_by_trigger_maps_wake_word_and_clap():
-    assert conversation._GREETING_BY_TRIGGER["wake_word"] == GREETING
-    assert conversation._GREETING_BY_TRIGGER["clap"] == CLAP_GREETING
 
 
 class ScriptedProvider:
@@ -315,15 +309,55 @@ class _FakeListener:
         self.closed = True
 
 
+def test_run_voice_loop_goes_straight_to_active_session_without_speaking_first(monkeypatch):
+    # Real complaint fixed: JARVIS used to speak a greeting immediately on
+    # activation, before the user had said anything -- and that greeting
+    # raced xtts_worker's ~15-20s load time, which is the actual reason
+    # the voice sometimes came out as the fallback instead of the cloned
+    # one. Activation must go straight to _run_active_session (which
+    # itself publishes "listening" first thing), zero speak() calls first.
+    import jarvis.voice.wake_word as wake_word_module
+    from jarvis.assistant import conversation
+
+    monkeypatch.setattr("jarvis.voice.xtts_client.ensure_worker_started", lambda: None)
+    speak_calls = []
+    monkeypatch.setattr("jarvis.voice.tts.speak", lambda text, stop_event=None: speak_calls.append(text))
+
+    speak_calls_before_active_session = []
+
+    def fake_run_active_session(listener, record_utterance, transcribe, speak, stop_event=None):
+        speak_calls_before_active_session.append(len(speak_calls))
+
+    monkeypatch.setattr(conversation, "_run_active_session", fake_run_active_session)
+
+    class OneShotListener:
+        def __init__(self):
+            self._waited = False
+
+        def wait(self, stop_event=None, wake_event=None):
+            if self._waited:
+                return None  # stop after one session
+            self._waited = True
+            return "wake_word"
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(wake_word_module, "WakeWordListener", lambda: OneShotListener())
+
+    conversation.run_voice_loop()
+
+    assert speak_calls_before_active_session == [0]
+
+
 def test_run_voice_loop_forwards_wake_event_to_listener_wait(monkeypatch):
     # jarvis/menubar.py sets this from a real NSWorkspace wake notification
     # -- it has to actually reach listener.wait() for the mic-stream
     # recovery there (see WakeWordListener.wait()'s docstring) to ever run.
     import jarvis.voice.wake_word as wake_word_module
-    from jarvis.assistant import briefing, conversation
+    from jarvis.assistant import conversation
 
     monkeypatch.setattr("jarvis.voice.xtts_client.ensure_worker_started", lambda: None)
-    monkeypatch.setattr(briefing, "build_briefing", lambda: None)
 
     received = []
 
@@ -348,11 +382,10 @@ def test_run_voice_loop_recovers_from_a_listener_exception_instead_of_dying(monk
     # another process briefly grabbed the mic, which used to kill the
     # whole thread silently -- see run_voice_loop's docstring.
     import jarvis.voice.wake_word as wake_word_module
-    from jarvis.assistant import briefing, conversation
+    from jarvis.assistant import conversation
     from jarvis.voice import xtts_client
 
     monkeypatch.setattr(xtts_client, "ensure_worker_started", lambda: None)
-    monkeypatch.setattr(briefing, "build_briefing", lambda: None)
     monkeypatch.setattr("time.sleep", lambda seconds: None)
 
     first = _FakeListener(wait_results=[RuntimeError("Failed to read from device.")])
@@ -372,11 +405,10 @@ def test_run_voice_loop_gives_up_if_the_microphone_cannot_be_recreated(monkeypat
     # mic -- recreating the listener itself fails -- must still surface as
     # a real error, not loop forever or fail silently.
     import jarvis.voice.wake_word as wake_word_module
-    from jarvis.assistant import briefing, conversation
+    from jarvis.assistant import conversation
     from jarvis.voice import xtts_client
 
     monkeypatch.setattr(xtts_client, "ensure_worker_started", lambda: None)
-    monkeypatch.setattr(briefing, "build_briefing", lambda: None)
     monkeypatch.setattr("time.sleep", lambda seconds: None)
 
     first = _FakeListener(wait_results=[RuntimeError("Failed to read from device.")])

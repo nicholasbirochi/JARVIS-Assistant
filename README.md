@@ -137,14 +137,14 @@ Modo de voz completo (diga "Hey Jarvis" ou bata duas palmas para ativar):
 python -m jarvis
 ```
 
-Ao ativar, o JARVIS pode falar um briefing curto antes de ouvir o pedido: mudanças de
-currículo pendentes de revisão, conflitos em aberto, e -- no máximo uma vez por dia -- uma
-ou duas manchetes reais do dia sobre dados e IA (RSS público do Olhar Digital, categorias
-Inteligência Artificial e Big Data, `jarvis/assistant/news.py`; nenhum dado seu é enviado a
-lugar nenhum, é só leitura de manchetes). Cada manchete ainda passa por um filtro de tópico
-no código antes de ser falada, então mesmo que o feed traga algo fora do assunto, o JARVIS
-não fala sobre isso. Se não houver nada pendente nem notícia no tema, ele fica quieto e não
-diz nada, como manda a regra de "fala só o necessário".
+Ao ativar (palavra de ativação ou palma), o JARVIS fica em silêncio e só passa a ouvir --
+sem falar nada antes de você dizer o que quer. Era diferente antes (um briefing/saudação
+falado imediatamente), mas isso competia com o tempo de carregamento do worker de voz
+clonada (~15-20s) e às vezes saía com a voz genérica em vez da voz do JARVIS -- um bug real,
+não só um incômodo de UX. O briefing de pendências (mudanças de currículo, conflitos em
+aberto, manchetes do dia sobre dados/IA -- `jarvis/assistant/news.py`, RSS público do Olhar
+Digital, nenhum dado seu enviado a lugar nenhum) continua existindo em `--text-only`
+(`jarvis/assistant/briefing.py`), só não é mais falado automaticamente no modo de voz.
 O JARVIS também conhece as habilidades e certificações reais do currículo (Python, R, SQL,
 Power BI, estatística, etc.) e comenta sobre dados com entusiasmo quando o assunto surge --
 grounded no `data/resume.json`, não inventado (`jarvis/assistant/llm_client.py`).
