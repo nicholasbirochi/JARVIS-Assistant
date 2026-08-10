@@ -8,7 +8,9 @@ by typing instead of speaking -- no mic, wake-word engine, or TTS needed.
 tune CLAP_PEAK_THRESHOLD; `python -m jarvis gupy-login` / `gupy-preview` /
 `gupy-apply` drive the Gupy site adapter (jarvis/sites/gupy.py);
 `vagas-login` / `vagas-preview` / `vagas-apply` drive the Vagas.com one
-(jarvis/sites/vagas.py) the same way."""
+(jarvis/sites/vagas.py, paused at login/check_session -- see its module
+docstring); `catho-login` / `catho-preview` / `catho-apply` drive Catho
+(jarvis/sites/catho.py)."""
 
 from __future__ import annotations
 
@@ -69,6 +71,12 @@ def _run_vagas(apply_changes: bool) -> None:
     _run_site(VagasAdapter(), "Vagas.com", "vagas-login", apply_changes)
 
 
+def _run_catho(apply_changes: bool) -> None:
+    from jarvis.sites.catho import CathoAdapter
+
+    _run_site(CathoAdapter(), "Catho", "catho-login", apply_changes)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="jarvis")
     parser.add_argument(
@@ -99,6 +107,13 @@ def main() -> None:
     )
     subparsers.add_parser(
         "vagas-apply", help="Aplica de verdade as mudanças no perfil do Vagas.com, após confirmação explícita."
+    )
+    subparsers.add_parser("catho-login", help="Abre um navegador para login manual (uma vez só) na Catho.")
+    subparsers.add_parser(
+        "catho-preview", help="Mostra (sem aplicar) o que mudaria no perfil da Catho vs. o currículo local."
+    )
+    subparsers.add_parser(
+        "catho-apply", help="Aplica de verdade as mudanças no perfil da Catho, após confirmação explícita."
     )
     args = parser.parse_args()
 
@@ -149,6 +164,16 @@ def main() -> None:
 
     if args.command in ("vagas-preview", "vagas-apply"):
         _run_vagas(apply_changes=args.command == "vagas-apply")
+        return
+
+    if args.command == "catho-login":
+        from jarvis.sites.catho import CathoAdapter
+
+        CathoAdapter().login()
+        return
+
+    if args.command in ("catho-preview", "catho-apply"):
+        _run_catho(apply_changes=args.command == "catho-apply")
         return
 
     from jarvis.assistant.conversation import run_text_loop, run_voice_loop

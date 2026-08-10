@@ -203,6 +203,21 @@ GUPY_PROFILE_URL = "https://login.gupy.io/candidates/profile"
 # it gets discovered live during vagas.py's first supervised session
 # instead of being hardcoded ahead of time.
 VAGAS_LOGIN_URL = "https://www.vagas.com.br/login-candidatos"
+# Confirmed live: Vagas.com sits behind Cloudflare and resets the
+# connection outright for Playwright's automated browser (net::
+# ERR_CONNECTION_RESET), even headed and with the webdriver flag hidden --
+# a stronger anti-automation signal than Gupy's. Per this project's own
+# LinkedIn precedent (step back from sites that actively fight
+# automation, don't escalate into stealth/evasion), vagas.py is paused at
+# the login/session-check stage -- never wire inspect_current_profile/
+# apply_changes for it without revisiting this.
+#
+# Confirmed via a real Catho signin/ redirects here, so this is the
+# canonical URL, not the seguro.catho.com.br one. Unlike Vagas.com,
+# Playwright DOES reach this one -- but only headed (confirmed live:
+# headless=True gets a 403 "Forbidden" page, headless=False loads the
+# real login page normally) -- see catho.py for where that's handled.
+CATHO_LOGIN_URL = "https://www.catho.com.br/signin/"
 # Headless by default so a normal `preview`/`apply` run doesn't pop a window;
 # `login` always forces headed regardless, since it needs a human present.
 SITES_HEADLESS = os.environ.get("SITES_HEADLESS", "true").lower() != "false"

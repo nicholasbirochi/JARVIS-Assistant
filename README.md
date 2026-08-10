@@ -316,10 +316,17 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
 - Sub-formulário "Meu currículo" da Gupy (experiência, formação, certificações,
   habilidades) -- inspeção ao vivo ainda não feita, hoje o adaptador só cobre a tela de
   contato.
-- Adaptadores restantes (Catho, InfoJobs, Vagas.com, Indeed, Academia do Universitário) --
-  cada um precisa da mesma verificação ao vivo (domínios, seletores reais, e depois o
-  envio real) feita para a Gupy, não dá pra generalizar sem repetir esse processo por
-  site.
+- Catho: login/check_session funcionando (`jarvis/sites/catho.py`) -- falta inspecionar a
+  página real do perfil (precisa de sessão autenticada) para implementar o resto. Só
+  funciona com navegador visível (`headless=False`); a versão headless leva 403 do próprio
+  site, confirmado ao vivo.
+- Vagas.com: **pausado** de propósito -- o site fica atrás de Cloudflare e derruba a conexão
+  do Playwright mesmo com navegador visível (`net::ERR_CONNECTION_RESET`), sinal mais forte
+  de anti-automação que a Gupy. Mesmo raciocínio do LinkedIn (`jarvis/sites/base.py`): não
+  vale escalar para técnicas de evasão. Só `check_session`/`login` implementados.
+- Adaptadores restantes (InfoJobs, Indeed, Academia do Universitário) -- cada um precisa da
+  mesma verificação ao vivo (domínios, seletores reais, e depois o envio real) feita para a
+  Gupy, não dá pra generalizar sem repetir esse processo por site.
 - MLXProvider como opção de menor latência.
 - Itens extras no menu bar (abrir logs/perfil, revisar propostas pendentes direto do
   menu -- hoje só tem liga/desliga).
