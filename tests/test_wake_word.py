@@ -136,6 +136,59 @@ def test_listener_wait_stops_mid_wait_once_event_is_set(monkeypatch):
     assert trigger is None
 
 
+def test_reset_recorder_tears_down_old_and_creates_a_new_one(monkeypatch):
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine()
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
+    old_recorder = FakeRecorder.instances[-1]
+
+    listener._reset_recorder()
+
+    assert old_recorder.stopped is True
+    assert old_recorder.deleted is True
+    new_recorder = FakeRecorder.instances[-1]
+    assert new_recorder is not old_recorder
+    assert new_recorder.started is True
+
+
+def test_wait_resets_recorder_when_wake_event_is_set_then_clears_it(monkeypatch):
+    # Real, confirmed failure mode: a machine wake from sleep left the mic
+    # stream silently dead (no exception, just no real frames anymore).
+    # jarvis/menubar.py sets wake_event from an actual NSWorkspace wake
+    # notification -- this is the recovery path for that.
+    import threading
+
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine(detect_on_call=0)  # fires on the first read after the reset
+    wake_event = threading.Event()
+    wake_event.set()
+
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
+    old_recorder = FakeRecorder.instances[-1]
+
+    trigger = listener.wait(wake_event=wake_event)
+
+    assert trigger == "wake_word"
+    assert old_recorder.stopped is True  # torn down because wake_event was set
+    assert wake_event.is_set() is False  # cleared once handled
+
+
+def test_wait_ignores_wake_event_when_not_set(monkeypatch):
+    import threading
+
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine(detect_on_call=0)
+    wake_event = threading.Event()  # never set
+
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
+    old_recorder = FakeRecorder.instances[-1]
+
+    trigger = listener.wait(wake_event=wake_event)
+
+    assert trigger == "wake_word"
+    assert old_recorder.stopped is False  # never reset -- wake_event was never set
+
+
 def test_listener_close_tears_down_recorder_and_engine(monkeypatch):
     monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
     engine = FakeEngine()

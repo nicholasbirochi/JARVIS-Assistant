@@ -305,7 +305,7 @@ class _FakeListener:
         self._wait_results = list(wait_results)
         self.closed = False
 
-    def wait(self, stop_event=None):
+    def wait(self, stop_event=None, wake_event=None):
         result = self._wait_results.pop(0)
         if isinstance(result, Exception):
             raise result
@@ -313,6 +313,34 @@ class _FakeListener:
 
     def close(self):
         self.closed = True
+
+
+def test_run_voice_loop_forwards_wake_event_to_listener_wait(monkeypatch):
+    # jarvis/menubar.py sets this from a real NSWorkspace wake notification
+    # -- it has to actually reach listener.wait() for the mic-stream
+    # recovery there (see WakeWordListener.wait()'s docstring) to ever run.
+    import jarvis.voice.wake_word as wake_word_module
+    from jarvis.assistant import briefing, conversation
+
+    monkeypatch.setattr("jarvis.voice.xtts_client.ensure_worker_started", lambda: None)
+    monkeypatch.setattr(briefing, "build_briefing", lambda: None)
+
+    received = []
+
+    class RecordingListener:
+        def wait(self, stop_event=None, wake_event=None):
+            received.append(wake_event)
+            return None  # stops the loop cleanly
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(wake_word_module, "WakeWordListener", lambda: RecordingListener())
+    sentinel_wake_event = threading.Event()
+
+    conversation.run_voice_loop(wake_event=sentinel_wake_event)
+
+    assert received == [sentinel_wake_event]
 
 
 def test_run_voice_loop_recovers_from_a_listener_exception_instead_of_dying(monkeypatch):

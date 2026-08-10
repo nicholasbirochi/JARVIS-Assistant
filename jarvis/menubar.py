@@ -34,7 +34,12 @@ from pathlib import Path
 from typing import Callable
 
 import rumps
-from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+from AppKit import (
+    NSApplication,
+    NSApplicationActivationPolicyAccessory,
+    NSWorkspace,
+    NSWorkspaceDidWakeNotification,
+)
 
 from jarvis.assistant.conversation import run_voice_loop
 
@@ -105,6 +110,7 @@ class VoiceLoopController:
     def __init__(self, target: Callable[..., None] = run_voice_loop) -> None:
         self._target = target
         self._stop_event: threading.Event | None = None
+        self._wake_event: threading.Event | None = None
         self._thread: threading.Thread | None = None
 
     @property
@@ -115,8 +121,11 @@ class VoiceLoopController:
         if self.is_running:
             return
         self._stop_event = threading.Event()
+        self._wake_event = threading.Event()
         self._thread = threading.Thread(
-            target=self._target, kwargs={"stop_event": self._stop_event}, daemon=True
+            target=self._target,
+            kwargs={"stop_event": self._stop_event, "wake_event": self._wake_event},
+            daemon=True,
         )
         self._thread.start()
 
@@ -126,6 +135,14 @@ class VoiceLoopController:
         # and blocking the menu-click handler on that would freeze the UI.
         if self._stop_event is not None:
             self._stop_event.set()
+
+    def notify_system_wake(self) -> None:
+        """Called from a real NSWorkspace wake notification (see
+        JarvisMenuBarApp below). No-ops while off -- there's no listener
+        to refresh, and it'll get a fresh one anyway next time start() is
+        called."""
+        if self._wake_event is not None:
+            self._wake_event.set()
 
 
 class JarvisMenuBarApp(rumps.App):
@@ -147,6 +164,21 @@ class JarvisMenuBarApp(rumps.App):
         # stops the icon/title from claiming "on" forever afterward --
         # otherwise there'd be no visible sign JARVIS stopped responding.
         rumps.Timer(self._sync_with_reality, 5).start()
+        # Real, confirmed failure mode, not speculative: a session ran for
+        # hours, the machine went through an actual macOS Clamshell Sleep,
+        # and wake-word detection silently stopped firing afterward -- no
+        # exception anywhere, the mic stream just quietly stopped
+        # delivering real frames. This is the genuine OS-level signal for
+        # "the machine just woke up"; see WakeWordListener.wait()'s
+        # docstring for what happens with it. Kept as an attribute (not a
+        # bare local) so the observer token isn't garbage-collected.
+        self._wake_observer = (
+            NSWorkspace.sharedWorkspace()
+            .notificationCenter()
+            .addObserverForName_object_queue_usingBlock_(
+                NSWorkspaceDidWakeNotification, None, None, lambda _note: self._controller.notify_system_wake()
+            )
+        )
 
     def _sync_with_reality(self, _timer: rumps.Timer) -> None:
         if self._toggle_item.title == "Desligar" and not self._controller.is_running:

@@ -99,19 +99,47 @@ class WakeWordListener:
             return "clap"
         return None
 
-    def wait(self, stop_event: threading.Event | None = None) -> Trigger | None:
+    def wait(
+        self,
+        stop_event: threading.Event | None = None,
+        wake_event: threading.Event | None = None,
+    ) -> Trigger | None:
         """Blocks until the wake word is heard, two claps land within the
         configured window, or `stop_event` is set -- whichever comes first.
         Returns which trigger it was, or None if stopped externally (the
         menu-bar app's off button sets stop_event to make this return
-        promptly instead of blocking forever)."""
+        promptly instead of blocking forever).
+
+        `wake_event`, if given, is checked on the same cycle: when set, the
+        underlying mic stream is torn down and reopened (see
+        _reset_recorder), then waiting continues transparently -- no
+        return, the caller never even notices beyond a brief gap. This is
+        real, confirmed behavior, not speculative: a live session ran for
+        hours, the machine went through an actual macOS Clamshell Sleep,
+        and wake-word detection silently stopped firing afterward with no
+        exception anywhere -- consistent with a stream that's still
+        technically open but has quietly stopped delivering real frames.
+        jarvis/menubar.py sets this from a real NSWorkspace wake
+        notification."""
         while True:
             if stop_event is not None and stop_event.is_set():
                 return None
+            if wake_event is not None and wake_event.is_set():
+                self._reset_recorder()
+                wake_event.clear()
             frame = self._recorder.read()
             trigger = self.check_trigger(frame)
             if trigger is not None:
                 return trigger
+
+    def _reset_recorder(self) -> None:
+        try:
+            self._recorder.stop()
+            self._recorder.delete()
+        except Exception:
+            pass  # best-effort teardown of a stream that may already be in a bad state
+        self._recorder = PvRecorder(device_index=-1, frame_length=self._engine.frame_length)
+        self._recorder.start()
 
     def close(self) -> None:
         self._recorder.stop()

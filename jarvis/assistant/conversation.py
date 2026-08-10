@@ -190,7 +190,10 @@ def _run_active_session(
         stt.unload()
 
 
-def run_voice_loop(stop_event: threading.Event | None = None) -> None:
+def run_voice_loop(
+    stop_event: threading.Event | None = None,
+    wake_event: threading.Event | None = None,
+) -> None:
     """Runs until an unhandled exception the microphone can't be recovered
     from, or (when `stop_event` is given, as the menu-bar app does) until
     it's set -- checked between wake-word sessions, so "off" takes effect
@@ -206,7 +209,14 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
     digging through the log file. Any exception from one wake-word session
     now closes and rebuilds the listener and keeps going instead; only a
     genuinely broken microphone (the rebuild itself failing) actually ends
-    the loop."""
+    the loop.
+
+    `wake_event`, if given (the menu bar sets it from a real NSWorkspace
+    wake notification), is forwarded to `listener.wait()` -- see its
+    docstring. This is the *other* real mic-corruption case found live,
+    distinct from the one above: no exception at all, the stream just
+    quietly stops delivering real frames after the machine wakes from
+    sleep, so there's nothing for the except block below to even catch."""
     import sys
     import time
 
@@ -234,7 +244,7 @@ def run_voice_loop(stop_event: threading.Event | None = None) -> None:
         while stop_event is None or not stop_event.is_set():
             visualizer_state.publish("idle")
             try:
-                trigger = listener.wait(stop_event=stop_event)
+                trigger = listener.wait(stop_event=stop_event, wake_event=wake_event)
                 if trigger is None:
                     break
                 _speak_with_barge_in(tts.speak, _GREETING_BY_TRIGGER[trigger], listener, stop_event=stop_event)

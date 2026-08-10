@@ -7,9 +7,10 @@ from jarvis import config
 from jarvis.menubar import VoiceLoopController, _acquire_singleton_lock, _pid_is_alive
 
 
-def _cooperative_target(stop_event: threading.Event) -> None:
+def _cooperative_target(stop_event: threading.Event, wake_event: threading.Event | None = None) -> None:
     """Stands in for run_voice_loop: exits promptly once stop_event is set,
-    without touching any real audio/model/TTS."""
+    without touching any real audio/model/TTS. Accepts wake_event to match
+    start()'s real call signature, even though this fake never uses it."""
     while not stop_event.is_set():
         time.sleep(0.01)
 
@@ -64,6 +65,25 @@ def test_stop_before_start_is_a_safe_no_op():
 
 def test_is_running_false_before_start():
     controller = VoiceLoopController(target=_cooperative_target)
+
+    assert controller.is_running is False
+
+
+def test_notify_system_wake_sets_the_wake_event_while_running():
+    controller = VoiceLoopController(target=_cooperative_target)
+    controller.start()
+    assert _wait_until(lambda: controller.is_running)
+
+    controller.notify_system_wake()
+
+    assert controller._wake_event.is_set()
+    controller.stop()
+
+
+def test_notify_system_wake_before_start_is_a_safe_no_op():
+    controller = VoiceLoopController(target=_cooperative_target)
+
+    controller.notify_system_wake()  # must not raise -- no listener exists yet to refresh
 
     assert controller.is_running is False
 
