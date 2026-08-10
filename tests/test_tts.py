@@ -78,6 +78,23 @@ def test_speak_shows_original_text_but_speaks_the_prepared_version(monkeypatch):
     assert fake_run.calls == [["say", "-v", "com.apple.voice.enhanced.pt-BR.Felipe", "Isso é sobre I.A."]]
 
 
+def test_speak_strips_markdown_from_the_displayed_transcript_too(monkeypatch):
+    # Real bug reported live: the HUD transcript has no markdown renderer
+    # at all (page.html just sets textContent), so a literal "`código`"
+    # the model slipped in showed its raw backticks on screen instead of
+    # being cleaned up like speech already was.
+    from jarvis.visualizer import state as visualizer_state
+
+    monkeypatch.setattr(tts, "TTS_VOICE", "com.apple.voice.enhanced.pt-BR.Felipe")
+    monkeypatch.setattr(subprocess, "run", FakeRun([0]))
+    published = []
+    monkeypatch.setattr(visualizer_state, "publish", lambda state, text="": published.append((state, text)))
+
+    tts.speak("Rode `pytest` antes.")
+
+    assert published == [("speaking", "Rode pytest antes.")]
+
+
 def test_speak_without_stop_event_uses_plain_run(monkeypatch):
     monkeypatch.setattr(tts, "TTS_VOICE", "com.apple.voice.enhanced.pt-BR.Felipe")
     fake_run = FakeRun([0])

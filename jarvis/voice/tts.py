@@ -154,16 +154,20 @@ def speak(text: str, stop_event: threading.Event | None = None) -> None:
     immediately -- "Desligar JARVIS" cuts him off right away instead of
     finishing the current sentence first.
 
-    The visualizer transcript shows `text` exactly as given (e.g. "IA"),
-    but what's actually synthesized goes through prepare_for_speech()
-    first -- markdown stripped, acronyms spelled out ("IA" -> "I.A.") so
-    say/XTTS pronounce them letter by letter instead of as a word. Display
-    and speech are deliberately different strings from here on."""
+    The visualizer transcript shows `text` with markdown stripped (a
+    stray "`code`" or "**bold**" the model slipped in reads as literal
+    backticks/asterisks otherwise -- this HUD has no markdown renderer,
+    it's plain textContent, see jarvis/visualizer/page.html), but
+    acronyms stay as written ("IA"). What's actually synthesized goes
+    further: acronyms get spelled out too ("IA" -> "I.A.") so say/XTTS
+    pronounce them letter by letter instead of as a word -- display and
+    speech are deliberately different strings from that point on."""
     from jarvis.visualizer import state as visualizer_state
-    from jarvis.voice.speech_text import prepare_for_speech
+    from jarvis.voice.speech_text import spell_out_acronyms, strip_markdown
 
-    visualizer_state.publish("speaking", text=text)
-    spoken_text = prepare_for_speech(text)
+    display_text = strip_markdown(text)
+    visualizer_state.publish("speaking", text=display_text)
+    spoken_text = spell_out_acronyms(display_text)
 
     if TTS_ENGINE == "xtts" and _speak_via_xtts(spoken_text, stop_event):
         return

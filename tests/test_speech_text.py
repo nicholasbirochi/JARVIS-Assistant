@@ -1,4 +1,4 @@
-from jarvis.voice.speech_text import prepare_for_speech, spell_out_acronyms, strip_markdown
+from jarvis.voice.speech_text import spell_out_acronyms, strip_markdown
 
 
 def test_strip_markdown_removes_bold():
@@ -55,12 +55,3 @@ def test_spell_out_acronyms_does_not_touch_normal_capitalized_words():
 
 def test_spell_out_acronyms_does_not_touch_single_capital_letter():
     assert spell_out_acronyms("O relatório é o Anexo A.") == "O relatório é o Anexo A."
-
-
-def test_prepare_for_speech_strips_markdown_and_spells_out_acronyms_together():
-    assert prepare_for_speech("Isso é sobre **IA**.") == "Isso é sobre I.A."
-
-
-def test_prepare_for_speech_leaves_plain_short_reply_untouched():
-    text = "Sim, adoro trabalhar com dados."
-    assert prepare_for_speech(text) == text

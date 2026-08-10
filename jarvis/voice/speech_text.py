@@ -1,15 +1,17 @@
-"""Turns a reply's display text into what should actually be spoken --
-used only for the text handed to the TTS engines (say/XTTS), never for
-what's shown in the visualizer transcript or printed anywhere. The two
-are deliberately different: the transcript should show "IA" as written,
-but say/XTTS need "I.A." (dots force letter-by-letter pronunciation) or
-they'll try to pronounce it as a word.
+"""Two independent text cleanups tts.py's speak() composes for its two
+different audiences -- what's shown in the visualizer transcript and what
+actually gets synthesized are deliberately different strings from
+speak() onward:
 
-The system prompt already tells the model not to use markdown, but LLMs
-don't always comply -- when it slips through, a literal "**IA**" read
-aloud comes out as "asterisco asterisco I A asterisco asterisco" instead
-of just being spoken plainly. Stripped here as a safety net, not because
-markdown is expected to be the normal case.
+- strip_markdown(): applied to BOTH. The system prompt already tells the
+  model not to use markdown, but LLMs don't always comply, and this HUD
+  has no markdown renderer at all (page.html just sets textContent) -- a
+  literal "**IA**"/"`code`" would otherwise show its raw asterisks/
+  backticks on screen, and read aloud as "asterisco asterisco I A..."
+  instead of being spoken plainly.
+- spell_out_acronyms(): applied to speech ONLY. The transcript should
+  still show "IA" as written; say/XTTS need "I.A." (dots force letter-by-
+  letter pronunciation) or they'll try to pronounce it as a word.
 """
 
 from __future__ import annotations
@@ -62,13 +64,3 @@ def spell_out_acronyms(text: str) -> str:
     way, but a single period is cleaner."""
     text = _ACRONYM.sub(_spell_out, text)
     return _REPEATED_PERIODS.sub(".", text)
-
-
-def prepare_for_speech(text: str) -> str:
-    """The full pipeline tts.speak() runs before handing text to an
-    engine. Markdown is stripped before acronyms are spelled out, since a
-    bare acronym could otherwise be wrapped in now-irrelevant markdown
-    syntax (e.g. "**IA**")."""
-    text = strip_markdown(text)
-    text = spell_out_acronyms(text)
-    return text
