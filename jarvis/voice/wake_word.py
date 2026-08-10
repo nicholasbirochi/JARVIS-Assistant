@@ -49,6 +49,27 @@ def get_wake_word_engine() -> WakeWordEngine:
     return factory()
 
 
+def _select_device_index() -> int:
+    """Picks which input device PvRecorder should open. Deliberately not
+    always -1 ("the system's current default") -- see
+    config.PREFERRED_MIC_NAME_SUBSTRING's comment for the real, confirmed
+    failure this guards against (a Bluetooth accessory silently becoming
+    the default input, with JARVIS listening through it instead of the
+    laptop with zero errors anywhere). Falls back to -1 if no device name
+    matches, so this still works on a different machine or if the
+    built-in mic is ever genuinely unavailable."""
+    from jarvis.config import PREFERRED_MIC_NAME_SUBSTRING  # live lookup -- monkeypatchable in tests
+
+    try:
+        devices = PvRecorder.get_available_devices()
+    except Exception:
+        return -1  # can't enumerate devices for some reason -- fall back rather than fail construction
+    for index, name in enumerate(devices):
+        if PREFERRED_MIC_NAME_SUBSTRING in name:
+            return index
+    return -1
+
+
 class WakeWordListener:
     """Holds the mic stream open and blocks until the wake word is heard.
 
@@ -64,10 +85,14 @@ class WakeWordListener:
         clap_detector: ClapDetector | None = None,
     ) -> None:
         self._engine = engine or get_wake_word_engine()
-        self._recorder = PvRecorder(device_index=-1, frame_length=self._engine.frame_length)
-        self._recorder.start()
+        self._recorder = self._open_recorder()
         self._clap_detector = clap_detector if clap_detector is not None else self._maybe_clap_detector()
         self._frame_seconds = self._engine.frame_length / self._engine.sample_rate
+
+    def _open_recorder(self) -> PvRecorder:
+        recorder = PvRecorder(device_index=_select_device_index(), frame_length=self._engine.frame_length)
+        recorder.start()
+        return recorder
 
     @staticmethod
     def _maybe_clap_detector() -> ClapDetector | None:
@@ -138,8 +163,7 @@ class WakeWordListener:
             self._recorder.delete()
         except Exception:
             pass  # best-effort teardown of a stream that may already be in a bad state
-        self._recorder = PvRecorder(device_index=-1, frame_length=self._engine.frame_length)
-        self._recorder.start()
+        self._recorder = self._open_recorder()
 
     def close(self) -> None:
         self._recorder.stop()

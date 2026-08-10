@@ -34,6 +34,11 @@ class FakeClapDetector:
 
 class FakeRecorder:
     instances: list["FakeRecorder"] = []
+    available_devices: list[str] = []
+
+    @classmethod
+    def get_available_devices(cls):
+        return cls.available_devices
 
     def __init__(self, device_index, frame_length):
         self.device_index = device_index
@@ -73,6 +78,52 @@ def test_get_wake_word_engine_unknown_raises(monkeypatch):
     monkeypatch.setattr(config, "WAKE_WORD_ENGINE", "not-a-real-engine")
     with pytest.raises(ValueError):
         wake_word.get_wake_word_engine()
+
+
+# ---- _select_device_index -- see config.PREFERRED_MIC_NAME_SUBSTRING's
+# comment for the real, confirmed bug this guards against: a Bluetooth
+# accessory (an Apple Watch) silently became the system default input
+# device, and JARVIS listened through it instead of the laptop's mic. ----
+
+
+def test_select_device_index_prefers_device_matching_configured_substring(monkeypatch):
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    monkeypatch.setattr(
+        FakeRecorder, "available_devices", ["Smart Watch de Nicholas", "Microfone (MacBook Air)", "iPhone Microphone"]
+    )
+    monkeypatch.setattr(config, "PREFERRED_MIC_NAME_SUBSTRING", "MacBook")
+
+    assert wake_word._select_device_index() == 1
+
+
+def test_select_device_index_falls_back_to_system_default_when_no_match(monkeypatch):
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    monkeypatch.setattr(FakeRecorder, "available_devices", ["Smart Watch de Nicholas", "iPhone Microphone"])
+    monkeypatch.setattr(config, "PREFERRED_MIC_NAME_SUBSTRING", "MacBook")
+
+    assert wake_word._select_device_index() == -1
+
+
+def test_select_device_index_falls_back_when_enumeration_raises(monkeypatch):
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+
+    def raising_get_available_devices():
+        raise OSError("no audio subsystem")
+
+    monkeypatch.setattr(FakeRecorder, "get_available_devices", staticmethod(raising_get_available_devices))
+
+    assert wake_word._select_device_index() == -1
+
+
+def test_listener_construction_uses_the_selected_device_index(monkeypatch):
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    monkeypatch.setattr(FakeRecorder, "available_devices", ["Smart Watch de Nicholas", "Microfone (MacBook Air)"])
+    monkeypatch.setattr(config, "PREFERRED_MIC_NAME_SUBSTRING", "MacBook")
+    engine = FakeEngine()
+
+    wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
+
+    assert FakeRecorder.instances[-1].device_index == 1
 
 
 def test_listener_wait_returns_wake_word_when_engine_detects(monkeypatch):

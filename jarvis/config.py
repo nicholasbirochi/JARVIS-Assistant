@@ -124,6 +124,19 @@ STOP_PHRASES = ("tchau jarvis", "tchau, jarvis", "obrigado jarvis", "encerrar")
 # model) or "porcupine" (optional adapter, needs PICOVOICE_ACCESS_KEY).
 WAKE_WORD_ENGINE = os.environ.get("WAKE_WORD_ENGINE", "openwakeword")
 
+# A real, confirmed failure mode: PvRecorder's device_index=-1 means "the
+# system's current default input device", which isn't a stable choice --
+# a Bluetooth accessory (an Apple Watch) had silently become the default
+# input, and a whole live session listened through its mic instead of the
+# laptop's, with zero errors anywhere (the Watch's mic still "worked", it
+# just wasn't pointed at the room). Substring-matched against
+# PvRecorder.get_available_devices() at listener construction time
+# (jarvis/voice/wake_word.py); only falls back to the volatile system
+# default if no device name contains this. "MacBook" specifically (not
+# "Microphone"/"Microfone") because the model name isn't localized, unlike
+# the rest of the device label.
+PREFERRED_MIC_NAME_SUBSTRING = os.environ.get("PREFERRED_MIC_NAME_SUBSTRING", "MacBook")
+
 # Two claps is a second, independent activation trigger that always runs
 # alongside the wake-word engine above (see jarvis/voice/engines/clap_detector.py).
 # Peak amplitude, not RMS -- a clap's transient is a few ms long and RMS
