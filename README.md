@@ -62,7 +62,7 @@ não inspecionado.
   (ícone visível, mas não ouvindo até você clicar) e sem ícone no Dock/Cmd-Tab (política de
   ativação "accessory"). Pode ser iniciado manualmente (`python -m jarvis menubar`) ou
   automaticamente no login via LaunchAgent -- ver "Iniciar automaticamente" abaixo. O botão
-  "Visualizar Interação" abre o HUD de `jarvis/visualizer/` -- ver seção própria abaixo.
+  "Abrir"/"Fechar" abre e fecha o HUD de `jarvis/visualizer/` -- ver seção própria abaixo.
 - **`jarvis/visualizer/`** — HUD visual (círculo azul animado, estilo painel futurista) que
   reflete o estado real do JARVIS (desligado/em espera/ouvindo/falando) e o texto sendo
   ouvido/falado. `state.py` é um pub/sub em memória que `conversation.py`/`tts.py`/
@@ -157,8 +157,8 @@ python -m jarvis calibrate-claps
 ```
 
 App de menu bar (mesma coisa, com um ícone e botão liga/desliga -- e, acima dele, um botão
-"Visualizar Interação" que abre o HUD visual numa janela própria, sem navegador nenhum
-envolvido, independente de JARVIS estar ligado ou não):
+"Abrir"/"Fechar" pro HUD visual numa janela própria, sem navegador nenhum envolvido,
+independente de JARVIS estar ligado ou não):
 
 ```bash
 python -m jarvis menubar

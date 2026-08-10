@@ -9,13 +9,15 @@ scripts/generate_menubar_icons.py) -- macOS tints them to match every other
 native menu-bar icon (monochrome, adapts to light/dark) instead of showing
 a colored emoji.
 
-"Visualizar Interação" opens jarvis/visualizer/'s live HUD in a real
-native window (jarvis/visualizer/native_window.py, WKWebView -- no
-browser process involved at all) -- works independently of the on/off
-toggle above, since it's just a window onto whatever state is currently
+"Abrir"/"Fechar" toggles jarvis/visualizer/'s live HUD in a real native
+window (jarvis/visualizer/native_window.py, WKWebView -- no browser
+process involved at all) -- works independently of the on/off toggle
+below, since it's just a window onto whatever state is currently
 published (including "off" itself, published here -- see toggle() and
 _sync_with_reality() -- since jarvis/assistant/conversation.py only ever
-knows "idle/listening/speaking", never that it was stopped).
+knows "idle/listening/speaking", never that it was stopped). The label
+is kept truthful even if the window gets closed via its own native close
+button instead of this menu -- see _sync_with_reality().
 
 main() refuses to start a second instance (a PID lock file under
 LOCAL_STATE_DIR) -- found live that two real instances (the LaunchAgent's
@@ -155,7 +157,7 @@ class JarvisMenuBarApp(rumps.App):
         NSApplication.sharedApplication().setActivationPolicy_(
             NSApplicationActivationPolicyAccessory
         )
-        self._visualizer_item = rumps.MenuItem("Visualizar Interação", callback=self.open_visualizer)
+        self._visualizer_item = rumps.MenuItem("Abrir", callback=self.toggle_visualizer)
         self._toggle_item = rumps.MenuItem("Ligar", callback=self.toggle)
         self.menu = [self._visualizer_item, self._toggle_item]
         self._controller = VoiceLoopController()  # starts OFF -- see module docstring
@@ -186,6 +188,14 @@ class JarvisMenuBarApp(rumps.App):
             self._toggle_item.title = "Ligar"
             self._publish_off()
 
+        # Catches the window being closed via its own native close button
+        # instead of this menu -- without this, the label would keep
+        # claiming "Fechar" for a window that's no longer actually open.
+        from jarvis.visualizer import native_window
+
+        if self._visualizer_item.title == "Fechar" and not native_window.is_open():
+            self._visualizer_item.title = "Abrir"
+
     def toggle(self, _sender: rumps.MenuItem) -> None:
         if self._controller.is_running:
             self._controller.stop()
@@ -206,14 +216,17 @@ class JarvisMenuBarApp(rumps.App):
 
         state.publish("off")
 
-    def open_visualizer(self, _sender: rumps.MenuItem) -> None:
+    def toggle_visualizer(self, _sender: rumps.MenuItem) -> None:
         # Works whether or not JARVIS is currently listening -- the HUD
-        # just shows "Desligado" until a real state is published. Safe to
-        # click repeatedly -- open_window() brings the existing window
-        # forward instead of stacking up duplicates.
+        # just shows "Desligado" until a real state is published.
         from jarvis.visualizer import native_window
 
-        native_window.open_window()
+        if native_window.is_open():
+            native_window.close_window()
+            self._visualizer_item.title = "Abrir"
+        else:
+            native_window.open_window()
+            self._visualizer_item.title = "Fechar"
 
 
 def main() -> None:

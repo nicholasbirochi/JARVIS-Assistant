@@ -64,3 +64,23 @@ def open_window() -> None:
 
     _window = window
     _webview = webview
+
+
+def close_window() -> None:
+    """Hides the HUD window -- safe to call even if it was never opened,
+    or was already closed (including by the user clicking the window's
+    own native close button, not this). setReleasedWhenClosed_(False) in
+    open_window() means this never deallocates the window/webview, so a
+    later open_window() call can bring the exact same one back instead of
+    rebuilding it from scratch."""
+    if _window is not None:
+        _window.close()
+
+
+def is_open() -> bool:
+    """Whether the HUD window is currently visible -- False both before
+    the first open_window() call and after the user closes it via the
+    window's own close button, not just via close_window() above. Used by
+    jarvis/menubar.py to keep its menu item label truthful regardless of
+    which way the window actually got closed."""
+    return _window is not None and _window.isVisible()
