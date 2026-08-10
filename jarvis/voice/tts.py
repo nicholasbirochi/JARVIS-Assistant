@@ -60,7 +60,17 @@ def _ffplay_command(sample_rate: int) -> list[str]:
     # Raw PCM straight in via stdin -- no temp file, no waiting for a
     # whole WAV to exist first. ffmpeg is already a required system
     # dependency here (xtts_engine.py's docstring), so ffplay comes free.
-    return ["ffplay", "-f", "s16le", "-ar", str(sample_rate), "-ac", "1", "-nodisp", "-autoexit", "-loglevel", "quiet", "-"]
+    #
+    # No "-ac 1": a real bug, confirmed live -- this ffmpeg build (8.1.2)
+    # doesn't recognize "-ac" as a valid option for the raw s16le demuxer
+    # at all ("Failed to set value '1' for option 'ac': Option not
+    # found"), so ffplay exited immediately with no audio and no fallback
+    # (the failure happens after _speak_via_xtts already commits to the
+    # xtts path). Confirmed via `ffmpeg -h demuxer=s16le` that "mono" is
+    # already this demuxer's own default channel layout -- which is
+    # exactly what xtts_engine.synthesize_stream() produces, so the flag
+    # was never actually necessary, not just wrong.
+    return ["ffplay", "-f", "s16le", "-ar", str(sample_rate), "-nodisp", "-autoexit", "-loglevel", "quiet", "-"]
 
 
 def _speak_via_xtts(text: str, stop_event: threading.Event | None) -> bool:
