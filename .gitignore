@@ -5,6 +5,7 @@ __pycache__/
 data/backups/
 data/proposals/
 data/index_state.json
+data/reminders.json
 # legacy path -- session state now defaults outside the repo (see jarvis/config.py LOCAL_STATE_DIR); kept as a safety net
 data/sites/
 .pytest_cache/

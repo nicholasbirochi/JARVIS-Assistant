@@ -6,14 +6,20 @@ call re-loads/re-saves data/resume.json rather than sharing in-memory
 state -- this is a low-throughput personal CLI, so the extra file IO is
 irrelevant and it guarantees tools never see stale state.
 
-prepare_claude_prompt() is the one tool here that isn't about the résumé
-at all: it's how "tell Claude Code to do X" by voice actually reaches
-Claude Code -- there's no API for JARVIS to inject text into a running
-Claude Code conversation, so it copies a prompt to the clipboard (and logs
-it locally as a durability net) for the user to paste themselves,
-wherever/whenever they choose. That choice is deliberate, not a
-limitation to route around: which project a request is even about is
-Nicholas's call, not something to guess."""
+prepare_claude_prompt() is how "tell Claude Code to do X" by voice
+actually reaches Claude Code -- there's no API for JARVIS to inject text
+into a running Claude Code conversation, so it copies a prompt to the
+clipboard (and logs it locally as a durability net) for the user to
+paste themselves, wherever/whenever they choose. That choice is
+deliberate, not a limitation to route around: which project a request is
+even about is Nicholas's call, not something to guess.
+
+add_roadmap_item()/add_reminder()/list_reminders() are the two other
+non-résumé tools -- respectively jarvis/roadmap.py (appends to this
+project's own README.md "## Roadmap" section) and jarvis/reminders.py
+(a flat local JSON note list). Both act directly, no clipboard hop --
+unlike a real code change, appending one line to a list needs no human
+review step to be safe."""
 
 from __future__ import annotations
 
@@ -100,6 +106,49 @@ def prepare_claude_prompt(prompt: str) -> str:
     return "Prompt copiado para a área de transferência -- já pode colar numa conversa com o Claude Code."
 
 
+def add_roadmap_item(description: str) -> str:
+    """Adiciona um item à seção "## Roadmap" do README.md deste projeto.
+
+    Use quando o Nicholas pedir para anotar uma ideia futura, uma
+    melhoria pendente ou algo para revisitar depois no próprio JARVIS --
+    diferente de prepare_claude_prompt, que é para pedir uma mudança já,
+    isso só registra a ideia para depois.
+
+    Args:
+        description: Descrição curta e clara do item, pronta para virar
+                      um marcador de lista (sem o "- " inicial).
+    """
+    from jarvis.roadmap import RoadmapSectionMissing, add_item
+
+    try:
+        add_item(description)
+    except RoadmapSectionMissing as exc:
+        return f"Erro: {exc}"
+    return "Adicionado ao roadmap do README."
+
+
+def add_reminder(text: str) -> str:
+    """Anota um lembrete pessoal para o Nicholas ver depois.
+
+    Args:
+        text: O texto do lembrete, como o Nicholas pediria para anotar.
+    """
+    from jarvis import reminders
+
+    reminders.add_reminder(text)
+    return "Lembrete anotado."
+
+
+def list_reminders() -> str:
+    """Lista todos os lembretes já anotados, do mais antigo ao mais recente."""
+    from jarvis import reminders
+
+    items = reminders.list_reminders()
+    if not items:
+        return "Nenhum lembrete anotado ainda."
+    return "\n".join(f"- {r['text']} ({r['created_at']})" for r in items)
+
+
 def _log_claude_prompt(prompt: str) -> None:
     """Best-effort durability net so a prompt isn't lost if it isn't
     pasted right away -- never raises, since a logging hiccup here must
@@ -119,4 +168,13 @@ def _log_claude_prompt(prompt: str) -> None:
         pass
 
 
-TOOLS = [read_resume, update_resume_field, list_supported_sites, push_resume_to_site, prepare_claude_prompt]
+TOOLS = [
+    read_resume,
+    update_resume_field,
+    list_supported_sites,
+    push_resume_to_site,
+    prepare_claude_prompt,
+    add_roadmap_item,
+    add_reminder,
+    list_reminders,
+]

@@ -93,6 +93,69 @@ def test_prepare_claude_prompt_logs_even_though_it_still_reports_clipboard_succe
     assert "copiado" in result.lower()
 
 
+# ---- add_roadmap_item ----
+
+
+def test_add_roadmap_item_appends_to_readme(monkeypatch, tmp_path):
+    from jarvis import config
+
+    readme = tmp_path / "README.md"
+    readme.write_text("# Projeto\n\n## Roadmap\n\n- Item existente.\n", encoding="utf-8")
+    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+
+    result = tools.add_roadmap_item("Ideia nova para testar.")
+
+    assert "roadmap" in result.lower()
+    assert "Ideia nova para testar." in readme.read_text(encoding="utf-8")
+
+
+def test_add_roadmap_item_reports_error_when_section_missing(monkeypatch):
+    from jarvis.roadmap import RoadmapSectionMissing
+
+    def _raise(description):
+        raise RoadmapSectionMissing('"## Roadmap" não encontrado')
+
+    monkeypatch.setattr("jarvis.roadmap.add_item", _raise)
+
+    result = tools.add_roadmap_item("Qualquer coisa")
+
+    assert "erro" in result.lower()
+
+
+# ---- add_reminder / list_reminders ----
+
+
+def test_add_reminder_tool_reports_success(monkeypatch, tmp_path):
+    from jarvis import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+
+    result = tools.add_reminder("Ligar para o dentista.")
+
+    assert "anotado" in result.lower()
+
+
+def test_list_reminders_tool_reports_no_reminders_when_empty(monkeypatch, tmp_path):
+    from jarvis import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+
+    result = tools.list_reminders()
+
+    assert "nenhum" in result.lower()
+
+
+def test_list_reminders_tool_includes_added_reminders(monkeypatch, tmp_path):
+    from jarvis import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    tools.add_reminder("Ligar para o dentista.")
+
+    result = tools.list_reminders()
+
+    assert "Ligar para o dentista." in result
+
+
 def test_prepare_claude_prompt_still_succeeds_if_logging_itself_fails(monkeypatch, tmp_path):
     # The clipboard copy is the actual guarantee the user asked for -- a
     # logging hiccup (durability net only) must never turn that into a
