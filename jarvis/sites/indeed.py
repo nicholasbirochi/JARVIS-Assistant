@@ -16,7 +16,20 @@ selectors, the actual save mechanism -- is intentionally NOT filled in
 yet, same reasoning as every other adapter here: no way to find those
 without an authenticated session, so they get discovered and verified
 live rather than guessed.
-"""
+
+Job search (search_jobs(), added 2026-08-11): no login required --
+confirmed live, a plain unauthenticated headed context browses
+br.indeed.com/jobs?q=<query>&l=<location> fine (still headless=False,
+same 403 constraint as everywhere else in this file). Listing cards are
+`.job_seen_beacon`, each carrying Indeed's own `data-jk` attribute on the
+title `<a>` -- a clean, ready-made external id, unlike every other
+adapter here which had to parse or decode one out of a URL. The
+"cleaner-looking" canonical `br.indeed.com/viewjob?jk=<id>` URL was
+tried and confirmed live to 403 ("Security Check") when visited directly
+without the search page's own referrer/session context -- so this uses
+the real relative href straight off the search result instead of
+constructing a shorter one, same principle as never guessing a cleaner
+URL than what the site actually serves."""
 
 from __future__ import annotations
 
@@ -24,6 +37,7 @@ from jarvis.resume.schema import Resume
 from jarvis.sites import session
 from jarvis.sites.base import (
     ChangePreview,
+    JobListing,
     SessionStatus,
     SiteAdapter,
     SiteProfileSnapshot,
@@ -89,3 +103,70 @@ class IndeedAdapter(SiteAdapter):
 
     def apply_changes(self, plan: UpdatePlan, confirmed: bool) -> UpdateResult:
         raise NotImplementedError("Ainda não implementado -- ver inspect_current_profile().")
+
+    def search_jobs(self, query: str, *, location: str = "São Paulo") -> list[JobListing]:
+        """Read-only, no login required (see module docstring) -- callers
+        should run the result through jarvis.sites.job_matching before
+        treating it as "matches". Only the first results page (~15 items)
+        is fetched -- pagination is out of scope for this round."""
+        import urllib.parse
+
+        params = urllib.parse.urlencode({"q": query, "l": location})
+        url = f"https://br.indeed.com/jobs?{params}"
+
+        p, context = session.open_context(self.site_name, headless=False)
+        try:
+            page = context.new_page()
+            page.goto(url, timeout=45_000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+            consent_btn = page.query_selector('button:has-text("Recusar tudo")')
+            if consent_btn is not None and consent_btn.is_visible():
+                consent_btn.click()
+                page.wait_for_timeout(500)
+            cards = self._extract_listing_cards(page)
+        finally:
+            context.close()
+            p.stop()
+
+        listings = []
+        for card in cards:
+            listing = _card_to_job_listing(card)
+            if listing is not None:
+                listings.append(listing)
+        return listings
+
+    def _extract_listing_cards(self, page) -> list[dict]:
+        """Raw card data, straight off the DOM -- kept as a thin, separate
+        method so _card_to_job_listing()'s conversion/validation logic
+        (below) can be unit-tested without a real page.evaluate() call."""
+        return page.evaluate(
+            """
+            () => Array.from(document.querySelectorAll('.job_seen_beacon')).map(c => {
+                const a = c.querySelector('h3.jobTitle a[data-jk]');
+                const company = c.querySelector('[data-testid="company-name"]');
+                const location = c.querySelector('[data-testid="text-location"]');
+                return {
+                    external_id: a ? a.getAttribute('data-jk') : null,
+                    title: a ? (a.querySelector('span[title]')?.textContent || a.textContent || '').trim() : null,
+                    href: a ? a.getAttribute('href') : null,
+                    company: company ? company.textContent.trim() : null,
+                    location: location ? location.textContent.trim() : null,
+                };
+            })
+            """
+        )
+
+
+def _card_to_job_listing(card: dict) -> JobListing | None:
+    if not card.get("title") or not card.get("href") or not card.get("external_id"):
+        return None
+    href = card["href"]
+    url = href if href.startswith("http") else f"https://br.indeed.com{href}"
+    return JobListing(
+        site_name=SITE_NAME,
+        external_id=card["external_id"],
+        title=card["title"],
+        company=card.get("company"),
+        location=card.get("location"),
+        url=url,
+    )

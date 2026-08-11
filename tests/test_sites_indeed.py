@@ -1,8 +1,9 @@
 import pytest
 
 from jarvis import config
+from jarvis.sites import session
 from jarvis.sites.base import SessionStatus
-from jarvis.sites.indeed import IndeedAdapter, _is_authenticated
+from jarvis.sites.indeed import IndeedAdapter, _card_to_job_listing, _is_authenticated
 
 
 class FakeAuthPage:
@@ -98,3 +99,100 @@ def test_profile_methods_raise_not_implemented_until_the_real_site_is_inspected(
         adapter.preview_changes(plan=None)
     with pytest.raises(NotImplementedError):
         adapter.apply_changes(plan=None, confirmed=True)
+
+
+def test_card_to_job_listing_converts_a_real_shaped_card():
+    card = {
+        "external_id": "7737acd337c15625",
+        "title": "Analista de Dados Jr",
+        "href": "/rc/clk?jk=7737acd337c15625&bb=abc",
+        "company": "Grupo Pernambucanas",
+        "location": "São Paulo, SP",
+    }
+
+    listing = _card_to_job_listing(card)
+
+    assert listing.site_name == "indeed"
+    assert listing.external_id == "7737acd337c15625"
+    assert listing.url == "https://br.indeed.com/rc/clk?jk=7737acd337c15625&bb=abc"
+    assert listing.company == "Grupo Pernambucanas"
+
+
+def test_card_to_job_listing_none_for_a_card_missing_title_href_or_id():
+    assert _card_to_job_listing({"external_id": "1", "title": None, "href": "/x"}) is None
+    assert _card_to_job_listing({"external_id": "1", "title": "X", "href": None}) is None
+    assert _card_to_job_listing({"external_id": None, "title": "X", "href": "/x"}) is None
+
+
+class FakeConsentButton:
+    def __init__(self, visible: bool):
+        self._visible = visible
+        self.clicked = False
+
+    def is_visible(self):
+        return self._visible
+
+    def click(self):
+        self.clicked = True
+
+
+class FakeSearchPage:
+    def __init__(self, cards: list[dict], *, consent_button: "FakeConsentButton | None" = None):
+        self._cards = cards
+        self.consent_button = consent_button
+        self.goto_calls = []
+
+    def goto(self, url, timeout=None, wait_until=None):
+        self.goto_calls.append(url)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def query_selector(self, selector):
+        if "Recusar tudo" in selector:
+            return self.consent_button
+        return None
+
+    def evaluate(self, script):
+        return self._cards
+
+
+class FakeSearchContext:
+    def __init__(self, page):
+        self._page = page
+        self.closed = False
+
+    def new_page(self):
+        return self._page
+
+    def close(self):
+        self.closed = True
+
+
+class FakeSearchPlaywright:
+    def stop(self):
+        pass
+
+
+def test_search_jobs_builds_the_real_query_url_and_converts_valid_cards(monkeypatch):
+    cards = [
+        {
+            "external_id": "1",
+            "title": "Analista de Dados",
+            "href": "/rc/clk?jk=1",
+            "company": "Empresa",
+            "location": "São Paulo, SP",
+        },
+        {"external_id": None, "title": None, "href": None, "company": None, "location": None},
+    ]
+    page = FakeSearchPage(cards, consent_button=FakeConsentButton(visible=True))
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
+    )
+
+    listings = IndeedAdapter().search_jobs("Analista de Dados")
+
+    assert len(listings) == 1
+    assert listings[0].external_id == "1"
+    assert page.goto_calls == ["https://br.indeed.com/jobs?q=Analista+de+Dados&l=S%C3%A3o+Paulo"]
+    assert page.consent_button.clicked is True
