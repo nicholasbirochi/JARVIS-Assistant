@@ -223,6 +223,13 @@ CATHO_LOGIN_URL = "https://www.catho.com.br/signin/"
 # 403, no connection reset) -- infojobs.py can use config.SITES_HEADLESS
 # normally, no per-site override needed like catho.py's.
 INFOJOBS_LOGIN_URL = "https://login.infojobs.com.br/Account/Login"
+# Found live on br.indeed.com's own homepage -- the "Acessar" link (not
+# "Entrar"/"Login", which is why an earlier text-based search for those
+# words missed it). Same pattern as Catho: Playwright reaches this fine
+# headed but gets served a 403 "Blocked - Indeed.com" page headless
+# (confirmed live) -- indeed.py hardcodes headless=False for that reason,
+# same as catho.py.
+INDEED_LOGIN_URL = "https://secure.indeed.com/auth?hl=pt_BR&co=BR&continue=https%3A%2F%2Fbr.indeed.com%2F"
 # Headless by default so a normal `preview`/`apply` run doesn't pop a window;
 # `login` always forces headed regardless, since it needs a human present.
 SITES_HEADLESS = os.environ.get("SITES_HEADLESS", "true").lower() != "false"

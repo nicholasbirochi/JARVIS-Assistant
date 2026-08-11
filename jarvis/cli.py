@@ -11,7 +11,9 @@ tune CLAP_PEAK_THRESHOLD; `python -m jarvis gupy-login` / `gupy-preview` /
 (jarvis/sites/vagas.py, paused at login/check_session -- see its module
 docstring); `catho-login` / `catho-preview` / `catho-apply` drive Catho
 (jarvis/sites/catho.py); `infojobs-login` / `infojobs-preview` /
-`infojobs-apply` drive InfoJobs (jarvis/sites/infojobs.py)."""
+`infojobs-apply` drive InfoJobs (jarvis/sites/infojobs.py);
+`indeed-login` / `indeed-preview` / `indeed-apply` drive Indeed
+(jarvis/sites/indeed.py)."""
 
 from __future__ import annotations
 
@@ -84,6 +86,12 @@ def _run_infojobs(apply_changes: bool) -> None:
     _run_site(InfoJobsAdapter(), "InfoJobs", "infojobs-login", apply_changes)
 
 
+def _run_indeed(apply_changes: bool) -> None:
+    from jarvis.sites.indeed import IndeedAdapter
+
+    _run_site(IndeedAdapter(), "Indeed", "indeed-login", apply_changes)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="jarvis")
     parser.add_argument(
@@ -128,6 +136,13 @@ def main() -> None:
     )
     subparsers.add_parser(
         "infojobs-apply", help="Aplica de verdade as mudanças no perfil do InfoJobs, após confirmação explícita."
+    )
+    subparsers.add_parser("indeed-login", help="Abre um navegador para login manual (uma vez só) no Indeed.")
+    subparsers.add_parser(
+        "indeed-preview", help="Mostra (sem aplicar) o que mudaria no perfil do Indeed vs. o currículo local."
+    )
+    subparsers.add_parser(
+        "indeed-apply", help="Aplica de verdade as mudanças no perfil do Indeed, após confirmação explícita."
     )
     args = parser.parse_args()
 
@@ -198,6 +213,16 @@ def main() -> None:
 
     if args.command in ("infojobs-preview", "infojobs-apply"):
         _run_infojobs(apply_changes=args.command == "infojobs-apply")
+        return
+
+    if args.command == "indeed-login":
+        from jarvis.sites.indeed import IndeedAdapter
+
+        IndeedAdapter().login()
+        return
+
+    if args.command in ("indeed-preview", "indeed-apply"):
+        _run_indeed(apply_changes=args.command == "indeed-apply")
         return
 
     from jarvis.assistant.conversation import run_text_loop, run_voice_loop

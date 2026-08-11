@@ -344,9 +344,14 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
   menos uma Área de Atuação e salvar uma vez -- depois disso a escrita automatizada deve
   funcionar (ainda não reverificado, já que é uma escolha de carreira do usuário, não algo
   que o código deva decidir sozinho).
-- Adaptadores restantes (Indeed, Academia do Universitário) -- cada um precisa da mesma
-  verificação ao vivo (domínios, seletores reais, e depois o envio real) feita para a Gupy,
-  não dá pra generalizar sem repetir esse processo por site.
+- Indeed: login/check_session funcionando (`jarvis/sites/indeed.py`) -- mesmo padrão da
+  Catho, só funciona com navegador visível (`headless=False`); a versão headless leva 403
+  "Blocked - Indeed.com", confirmado ao vivo. URL de login real é a "Acessar" (não
+  "Entrar"/"Login") na home do br.indeed.com. Falta inspecionar a página real do perfil
+  (precisa de sessão autenticada) para implementar o resto.
+- Academia do Universitário -- ainda não investigado; precisa da mesma verificação ao vivo
+  (domínios, seletores reais, e depois o envio real) feita para os outros sites, não dá pra
+  generalizar sem repetir esse processo por site.
 - MLXProvider como opção de menor latência.
 - Itens extras no menu bar (abrir logs/perfil, revisar propostas pendentes direto do
   menu -- hoje só tem liga/desliga).
