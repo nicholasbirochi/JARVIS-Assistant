@@ -29,7 +29,20 @@ tried and confirmed live to 403 ("Security Check") when visited directly
 without the search page's own referrer/session context -- so this uses
 the real relative href straight off the search result instead of
 constructing a shorter one, same principle as never guessing a cleaner
-URL than what the site actually serves."""
+URL than what the site actually serves.
+
+**Escalating block, confirmed live 2026-08-11:** after several automated
+searches in a short window (a handful of search_jobs() calls across a
+few keywords), this machine's IP started getting a 403 "Security Check"
+page from Indeed on EVERY request -- confirmed with a plain `curl`
+carrying a normal browser User-Agent, so this isn't a Playwright/
+automation-specific flag, it's a real IP-level block. Same posture as
+Vagas.com (jarvis/sites/vagas.py): step back, don't escalate into
+evasion (rotating IPs, spoofing more headers, slowing down to sneak
+under a rate limit). search_jobs() here works and is tested, but treat
+Indeed as unreliable for now -- don't retry it repeatedly in a short
+window, and if it starts 403ing, stop and let the user know rather than
+hammering it."""
 
 from __future__ import annotations
 

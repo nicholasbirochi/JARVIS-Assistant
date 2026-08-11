@@ -344,9 +344,12 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
   menos uma Área de Atuação e salvar uma vez -- depois disso a escrita automatizada deve
   funcionar (ainda não reverificado, já que é uma escolha de carreira do usuário, não algo
   que o código deva decidir sozinho).
-- Indeed: login/check_session funcionando (`jarvis/sites/indeed.py`) -- mesmo padrão da
-  Catho, só funciona com navegador visível (`headless=False`); a versão headless leva 403
-  "Blocked - Indeed.com", confirmado ao vivo. URL de login real é a "Acessar" (não
+- Indeed: login/check_session e busca de vagas funcionando (`jarvis/sites/indeed.py`),
+  mas **IP levou bloqueio 403 do próprio Indeed depois de algumas buscas seguidas em pouco
+  tempo** (confirmado ao vivo até com `curl` puro, não é coisa do Playwright) -- mesma
+  postura do Vagas.com: não escalar para evasão, só evitar bater nele com frequência por
+  enquanto. Só funciona com navegador visível (`headless=False`); a versão headless leva 403
+  "Blocked - Indeed.com" à parte, confirmado ao vivo. URL de login real é a "Acessar" (não
   "Entrar"/"Login") na home do br.indeed.com. Falta inspecionar a página real do perfil
   (precisa de sessão autenticada) para implementar o resto.
 - Academia do Universitário -- ainda não investigado; precisa da mesma verificação ao vivo
