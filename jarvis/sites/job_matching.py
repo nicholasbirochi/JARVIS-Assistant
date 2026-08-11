@@ -64,6 +64,34 @@ _JUNIOR_SIGNAL_TERMS = [
     "aprendiz",
 ]
 
+# The user's home city (São Bernardo do Campo, from resume.json's
+# personal_info.location) plus its immediate ABC-region neighbors, and
+# São Paulo city itself ("Centro de SP e proximidades" per the user's own
+# words, 2026-08-11) -- listing location strings almost never carry
+# district-level detail (nearly everything just says "São Paulo - SP"),
+# so the city itself is the finest resolution available, not "Centro"
+# specifically. Deliberately does NOT include Grande São Paulo cities on
+# the opposite side of the metro region (Guarulhos, Barueri, Osasco,
+# Jundiaí, etc.) even though they showed up in real search results --
+# the user asked to focus, not to keep everything "sort of near SP".
+_TARGET_REGION_TERMS = [
+    "são bernardo do campo",
+    "sao bernardo do campo",
+    "sbc",
+    "são paulo",
+    "sao paulo",
+    "santo andré",
+    "santo andre",
+    "são caetano do sul",
+    "sao caetano do sul",
+    "diadema",
+    "mauá",
+    "maua",
+    "ribeirão pires",
+    "ribeirao pires",
+    "rio grande da serra",
+]
+
 
 def derive_search_terms(resume: Resume) -> list[str]:
     """job_preferences.target_roles, if the user has ever set it, always
@@ -121,6 +149,23 @@ def rank_junior_first(listings: list[JobListing]) -> list[JobListing]:
     -- relative order within each group is preserved, so a site's own
     "Relevantes" ranking still matters as the tiebreaker."""
     return sorted(listings, key=lambda listing: not has_junior_signal(listing.title, listing.snippet))
+
+
+def is_in_target_region(location: str | None, region_terms: list[str] = _TARGET_REGION_TERMS) -> bool:
+    """True if the listing's location text names the user's home city, its
+    ABC-region neighbors, or São Paulo city itself. False for anything
+    with no location text at all -- an unknown location isn't a match,
+    it's just unknown, and shouldn't be assumed nearby."""
+    if not location:
+        return False
+    haystack = location.lower()
+    return any(term in haystack for term in region_terms)
+
+
+def filter_by_location(
+    listings: list[JobListing], region_terms: list[str] = _TARGET_REGION_TERMS
+) -> list[JobListing]:
+    return [listing for listing in listings if is_in_target_region(listing.location, region_terms)]
 
 
 def dedupe(listings: list[JobListing]) -> list[JobListing]:

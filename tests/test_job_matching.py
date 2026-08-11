@@ -3,8 +3,10 @@ from jarvis.sites.base import JobListing
 from jarvis.sites.job_matching import (
     dedupe,
     derive_search_terms,
+    filter_by_location,
     filter_relevant,
     has_junior_signal,
+    is_in_target_region,
     is_relevant_match,
     rank_junior_first,
 )
@@ -101,6 +103,40 @@ def test_has_junior_signal_true_for_explicit_level_words():
 
 def test_has_junior_signal_false_when_level_is_unstated():
     assert not has_junior_signal("Analista De Dados", "Trabalhe com Python e SQL")
+
+
+def test_is_in_target_region_true_for_home_city_and_abc_neighbors():
+    assert is_in_target_region("São Bernardo do Campo - SP")
+    assert is_in_target_region("Santo André - SP")
+    assert is_in_target_region("São Caetano do Sul - SP")
+    assert is_in_target_region("Diadema - SP")
+    assert is_in_target_region("São Paulo - SP")
+
+
+def test_is_in_target_region_false_for_the_state_suffix_alone():
+    # The real risk: every location string ends in "- SP" (the state
+    # abbreviation), which must never itself count as a match -- only the
+    # city name "São Paulo" should.
+    assert not is_in_target_region("Piracicaba - SP")
+    assert not is_in_target_region("Guarulhos - SP")
+    assert not is_in_target_region("Jundiaí - SP")
+
+
+def test_is_in_target_region_false_for_missing_location():
+    assert not is_in_target_region(None)
+    assert not is_in_target_region("")
+
+
+def test_filter_by_location_keeps_only_nearby_listings():
+    listings = [
+        make_listing("1", "Analista De Dados"),  # location defaults to São Paulo - SP in make_listing
+        make_listing("2", "Analista De BI", site_name="catho"),
+    ]
+    listings[1].location = "Piracicaba - SP"
+
+    result = filter_by_location(listings)
+
+    assert [listing.external_id for listing in result] == ["1"]
 
 
 def test_rank_junior_first_moves_explicit_junior_signals_to_the_front():
