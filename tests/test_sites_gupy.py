@@ -9,6 +9,8 @@ from jarvis.sites import session
 from jarvis.sites.base import PlannedFieldChange, SiteProfileSnapshot, UpdatePlan
 from jarvis.sites.gupy import (
     GupyAdapter,
+    _card_to_job_listing,
+    _decode_job_id,
     _is_authenticated,
     _map_resume_to_gupy_fields,
     _split_full_name,
@@ -459,3 +461,91 @@ def test_apply_changes_closes_context_and_stops_playwright_even_on_success(monke
 
     assert fake_context.closed is True
     assert fake_p.stopped is True
+
+
+def test_decode_job_id_from_a_real_shaped_url():
+    # Verified live: this exact base64 segment decodes to {"jobId":
+    # 12047884, "source": "gupy_portal"}.
+    url = "https://globo.gupy.io/job/eyJqb2JJZCI6MTIwNDc4ODQsInNvdXJjZSI6Imd1cHlfcG9ydGFsIn0=?jobBoardSource=gupy_portal"
+
+    assert _decode_job_id(url) == "12047884"
+
+
+def test_decode_job_id_none_for_malformed_input():
+    assert _decode_job_id("https://globo.gupy.io/job/not-valid-base64!!!") is None
+    assert _decode_job_id("https://globo.gupy.io/job/") is None
+
+
+def test_card_to_job_listing_converts_a_real_shaped_card():
+    card = {
+        "href": "https://globo.gupy.io/job/eyJqb2JJZCI6MTIwNDc4ODQsInNvdXJjZSI6Imd1cHlfcG9ydGFsIn0=?jobBoardSource=gupy_portal",
+        "title": "Analista de Dados Pleno - Data & AI",
+        "company": "Globo",
+        "location": "Rio de Jan... - RJ",
+    }
+
+    listing = _card_to_job_listing(card)
+
+    assert listing.site_name == "gupy"
+    assert listing.external_id == "12047884"
+    assert listing.company == "Globo"
+    assert listing.url == card["href"]
+
+
+def test_card_to_job_listing_none_when_title_missing_or_id_undecodable():
+    assert _card_to_job_listing({"href": "https://x.gupy.io/job/abc", "title": None}) is None
+    assert _card_to_job_listing({"href": "https://x.gupy.io/job/not-valid!!!", "title": "X"}) is None
+
+
+class FakeSearchPage:
+    def __init__(self, cards: list[dict]):
+        self._cards = cards
+        self.goto_calls = []
+
+    def goto(self, url, timeout=None, wait_until=None):
+        self.goto_calls.append(url)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def evaluate(self, script):
+        return self._cards
+
+
+class FakeSearchContext:
+    def __init__(self, page):
+        self._page = page
+        self.closed = False
+
+    def new_page(self):
+        return self._page
+
+    def close(self):
+        self.closed = True
+
+
+class FakeSearchPlaywright:
+    def stop(self):
+        pass
+
+
+def test_search_jobs_builds_the_real_query_url_and_converts_valid_cards(monkeypatch):
+    cards = [
+        {
+            "href": "https://globo.gupy.io/job/eyJqb2JJZCI6MTIwNDc4ODQsInNvdXJjZSI6Imd1cHlfcG9ydGFsIn0=",
+            "title": "Analista de Dados",
+            "company": "Globo",
+            "location": "Rio de Janeiro - RJ",
+        },
+        {"href": "https://x.gupy.io/job/abc", "title": None, "company": None, "location": None},
+    ]
+    page = FakeSearchPage(cards)
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
+    )
+
+    listings = GupyAdapter().search_jobs("Analista de Dados")
+
+    assert len(listings) == 1
+    assert listings[0].external_id == "12047884"
+    assert page.goto_calls == ["https://portal.gupy.io/job-search/term=Analista%20de%20Dados"]

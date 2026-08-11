@@ -42,6 +42,21 @@ Real submission (apply_changes) verified live, human-supervised, 2026-08-06:
   has never been observed, so it stays untested and apply_changes() raises
   NotImplementedError if a plan ever contains an email change, rather than
   silently attempting it.
+
+Job search (search_jobs(), added 2026-08-11): portal.gupy.io/job-search
+is a real, unified marketplace search across every company using Gupy as
+their ATS -- NOT per-company only, resolving earlier uncertainty about
+this. URL: https://portal.gupy.io/job-search/term=<query> (found by
+watching where the homepage's own search box navigates to, same method
+as the other adapters). No login required. Listing cards are
+`a[href*="/job/"]` -- each links out to the HIRING COMPANY's own
+<company>.gupy.io subdomain, not portal.gupy.io, and encodes the job id
+as base64 JSON (`{"jobId": ..., "source": "gupy_portal"}`) rather than a
+plain path segment, so external_id is decoded from that instead of
+parsed from the URL path like every other adapter here. Real selectors:
+`h3` (title), the card's first `p` (company), and
+`span[data-testid="job-location"]` (location) -- all clean, structured
+markup, no truncated snippets or broken company names like InfoJobs.
 """
 
 from __future__ import annotations
@@ -53,6 +68,7 @@ from jarvis.resume.schema import Resume
 from jarvis.sites import session
 from jarvis.sites.base import (
     ChangePreview,
+    JobListing,
     PlannedFieldChange,
     SessionStatus,
     SiteAdapter,
@@ -324,3 +340,90 @@ class GupyAdapter(SiteAdapter):
             return str(path)
         except Exception:
             return None
+
+    def search_jobs(self, query: str) -> list[JobListing]:
+        """Read-only, no login required (see module docstring) -- callers
+        should run the result through jarvis.sites.job_matching before
+        treating it as "matches". Only the first results page (~12 items)
+        is fetched -- pagination is out of scope for this round."""
+        import urllib.parse
+
+        from jarvis.config import SITES_HEADLESS
+
+        url = f"https://portal.gupy.io/job-search/term={urllib.parse.quote(query)}"
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            page = context.new_page()
+            page.goto(url, timeout=45_000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+            cards = self._extract_listing_cards(page)
+        finally:
+            context.close()
+            p.stop()
+
+        listings = []
+        for card in cards:
+            listing = _card_to_job_listing(card)
+            if listing is not None:
+                listings.append(listing)
+        return listings
+
+    def _extract_listing_cards(self, page) -> list[dict]:
+        """Raw card data, straight off the DOM -- kept as a thin, separate
+        method so _card_to_job_listing()'s conversion/validation logic
+        (below) can be unit-tested without a real page.evaluate() call."""
+        return page.evaluate(
+            """
+            () => Array.from(document.querySelectorAll("a[href*='/job/']")).map(a => {
+                const title = a.querySelector('h3');
+                const company = a.querySelector('p');
+                const location = a.querySelector('[data-testid="job-location"]');
+                return {
+                    href: a.getAttribute('href'),
+                    title: title ? title.textContent.trim() : null,
+                    company: company ? company.textContent.trim() : null,
+                    location: location ? location.textContent.trim() : null,
+                };
+            })
+            """
+        )
+
+
+def _decode_job_id(href: str) -> str | None:
+    """Gupy encodes the job id as base64 JSON in the URL's path segment
+    (e.g. `.../job/eyJqb2JJZCI6MTIwNDc4ODQs...` decodes to
+    `{"jobId": 12047884, "source": "gupy_portal"}`) rather than a plain
+    numeric path segment like every other adapter here -- confirmed live
+    by decoding a real URL. Returns None on any malformed input rather
+    than raising, since this is scraped, not trusted, data."""
+    import base64
+    import binascii
+    import json
+
+    try:
+        encoded = href.rstrip("/").split("/job/")[-1].split("?")[0]
+        # base64.b64decode needs correct padding; Gupy's URLs sometimes
+        # omit the trailing "=" that plain b64decode requires.
+        padded = encoded + "=" * (-len(encoded) % 4)
+        decoded = json.loads(base64.b64decode(padded))
+        job_id = decoded.get("jobId")
+        return str(job_id) if job_id is not None else None
+    except (ValueError, KeyError, binascii.Error, UnicodeDecodeError):
+        return None
+
+
+def _card_to_job_listing(card: dict) -> JobListing | None:
+    if not card.get("title") or not card.get("href"):
+        return None
+    external_id = _decode_job_id(card["href"])
+    if external_id is None:
+        return None
+    return JobListing(
+        site_name=SITE_NAME,
+        external_id=external_id,
+        title=card["title"],
+        company=card.get("company"),
+        location=card.get("location"),
+        url=card["href"],
+    )
