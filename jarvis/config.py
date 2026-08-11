@@ -218,6 +218,11 @@ VAGAS_LOGIN_URL = "https://www.vagas.com.br/login-candidatos"
 # headless=True gets a 403 "Forbidden" page, headless=False loads the
 # real login page normally) -- see catho.py for where that's handled.
 CATHO_LOGIN_URL = "https://www.catho.com.br/signin/"
+# Found via WebSearch + confirmed reachable live. Best of the three so
+# far: Playwright reaches it fine in BOTH headless and headed mode (no
+# 403, no connection reset) -- infojobs.py can use config.SITES_HEADLESS
+# normally, no per-site override needed like catho.py's.
+INFOJOBS_LOGIN_URL = "https://login.infojobs.com.br/Account/Login"
 # Headless by default so a normal `preview`/`apply` run doesn't pop a window;
 # `login` always forces headed regardless, since it needs a human present.
 SITES_HEADLESS = os.environ.get("SITES_HEADLESS", "true").lower() != "false"

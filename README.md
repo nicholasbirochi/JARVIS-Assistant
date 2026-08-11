@@ -324,9 +324,13 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
   do Playwright mesmo com navegador visível (`net::ERR_CONNECTION_RESET`), sinal mais forte
   de anti-automação que a Gupy. Mesmo raciocínio do LinkedIn (`jarvis/sites/base.py`): não
   vale escalar para técnicas de evasão. Só `check_session`/`login` implementados.
-- Adaptadores restantes (InfoJobs, Indeed, Academia do Universitário) -- cada um precisa da
-  mesma verificação ao vivo (domínios, seletores reais, e depois o envio real) feita para a
-  Gupy, não dá pra generalizar sem repetir esse processo por site.
+- InfoJobs: login/check_session funcionando (`jarvis/sites/infojobs.py`) -- o melhor dos
+  três sites testados até agora, Playwright alcança normalmente tanto headless quanto com
+  navegador visível, sem bloqueio nenhum. Falta inspecionar a página real do perfil para
+  implementar o resto.
+- Adaptadores restantes (Indeed, Academia do Universitário) -- cada um precisa da mesma
+  verificação ao vivo (domínios, seletores reais, e depois o envio real) feita para a Gupy,
+  não dá pra generalizar sem repetir esse processo por site.
 - MLXProvider como opção de menor latência.
 - Itens extras no menu bar (abrir logs/perfil, revisar propostas pendentes direto do
   menu -- hoje só tem liga/desliga).

@@ -10,7 +10,8 @@ tune CLAP_PEAK_THRESHOLD; `python -m jarvis gupy-login` / `gupy-preview` /
 `vagas-login` / `vagas-preview` / `vagas-apply` drive the Vagas.com one
 (jarvis/sites/vagas.py, paused at login/check_session -- see its module
 docstring); `catho-login` / `catho-preview` / `catho-apply` drive Catho
-(jarvis/sites/catho.py)."""
+(jarvis/sites/catho.py); `infojobs-login` / `infojobs-preview` /
+`infojobs-apply` drive InfoJobs (jarvis/sites/infojobs.py)."""
 
 from __future__ import annotations
 
@@ -77,6 +78,12 @@ def _run_catho(apply_changes: bool) -> None:
     _run_site(CathoAdapter(), "Catho", "catho-login", apply_changes)
 
 
+def _run_infojobs(apply_changes: bool) -> None:
+    from jarvis.sites.infojobs import InfoJobsAdapter
+
+    _run_site(InfoJobsAdapter(), "InfoJobs", "infojobs-login", apply_changes)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="jarvis")
     parser.add_argument(
@@ -114,6 +121,13 @@ def main() -> None:
     )
     subparsers.add_parser(
         "catho-apply", help="Aplica de verdade as mudanças no perfil da Catho, após confirmação explícita."
+    )
+    subparsers.add_parser("infojobs-login", help="Abre um navegador para login manual (uma vez só) no InfoJobs.")
+    subparsers.add_parser(
+        "infojobs-preview", help="Mostra (sem aplicar) o que mudaria no perfil do InfoJobs vs. o currículo local."
+    )
+    subparsers.add_parser(
+        "infojobs-apply", help="Aplica de verdade as mudanças no perfil do InfoJobs, após confirmação explícita."
     )
     args = parser.parse_args()
 
@@ -174,6 +188,16 @@ def main() -> None:
 
     if args.command in ("catho-preview", "catho-apply"):
         _run_catho(apply_changes=args.command == "catho-apply")
+        return
+
+    if args.command == "infojobs-login":
+        from jarvis.sites.infojobs import InfoJobsAdapter
+
+        InfoJobsAdapter().login()
+        return
+
+    if args.command in ("infojobs-preview", "infojobs-apply"):
+        _run_infojobs(apply_changes=args.command == "infojobs-apply")
         return
 
     from jarvis.assistant.conversation import run_text_loop, run_voice_loop
