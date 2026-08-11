@@ -147,9 +147,12 @@ class FakeConsentButton:
 
 class FakeSearchPage:
     def __init__(self, cards: list[dict], *, consent_button: FakeConsentButton | None = None):
-        self._cards = cards
+        # Accepts either a flat list of card dicts (single page, wrapped
+        # here) or a list of pages (list of lists) for pagination tests.
+        self._pages = [cards] if not cards or isinstance(cards[0], dict) else cards
         self.consent_button = consent_button
         self.goto_calls = []
+        self._evaluate_calls = 0
 
     def goto(self, url, timeout=None, wait_until=None):
         self.goto_calls.append(url)
@@ -163,7 +166,13 @@ class FakeSearchPage:
         return None
 
     def evaluate(self, script):
-        return self._cards
+        # Each goto() call is followed by exactly one evaluate() call in
+        # search_jobs() -- use that 1:1 pairing to hand back one "page" of
+        # cards per call, then an empty list once pages run out (real end
+        # of results).
+        result = self._pages[self._evaluate_calls] if self._evaluate_calls < len(self._pages) else []
+        self._evaluate_calls += 1
+        return result
 
 
 class FakeSearchContext:
@@ -203,8 +212,49 @@ def test_search_jobs_builds_the_real_slug_url_and_converts_valid_cards(monkeypat
 
     assert len(listings) == 1
     assert listings[0].external_id == "1"
-    assert page.goto_calls == ["https://www.catho.com.br/vagas/analista-de-dados/"]
+    # Page 1 has cards (fewer than max_results), so it pages on to 2 --
+    # which comes back empty (real end of results) and stops there.
+    assert page.goto_calls == [
+        "https://www.catho.com.br/vagas/analista-de-dados/",
+        "https://www.catho.com.br/vagas/analista-de-dados/?page=2",
+    ]
     assert page.consent_button.clicked is True
+
+
+def test_search_jobs_paginates_until_max_results_or_an_empty_page(monkeypatch):
+    page_1 = [
+        {
+            "external_id": str(i),
+            "title": f"Analista de Dados {i}",
+            "href": f"/vagas/analista-de-dados/{i}",
+            "company": "Empresa",
+            "location": "São Paulo",
+        }
+        for i in range(1, 21)
+    ]
+    page_2 = [
+        {
+            "external_id": str(i),
+            "title": f"Analista de Dados {i}",
+            "href": f"/vagas/analista-de-dados/{i}",
+            "company": "Empresa",
+            "location": "São Paulo",
+        }
+        for i in range(21, 26)
+    ]
+    page = FakeSearchPage([page_1, page_2], consent_button=None)
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
+    )
+
+    listings = CathoAdapter().search_jobs("Analista de Dados", max_results=25)
+
+    assert len(listings) == 25
+    # Stopped after page 2 satisfied max_results -- never requested page 3.
+    assert page.goto_calls == [
+        "https://www.catho.com.br/vagas/analista-de-dados/",
+        "https://www.catho.com.br/vagas/analista-de-dados/?page=2",
+    ]
 
 
 def test_search_jobs_skips_consent_click_when_banner_not_present(monkeypatch):

@@ -404,13 +404,18 @@ class InfoJobsAdapter(SiteAdapter):
         except Exception:
             return None
 
-    def search_jobs(self, query: str, *, province: int | None = SAO_PAULO_PROVINCIA_ID) -> list[JobListing]:
+    def search_jobs(
+        self, query: str, *, province: int | None = SAO_PAULO_PROVINCIA_ID, max_results: int = 60
+    ) -> list[JobListing]:
         """Read-only: runs InfoJobs' own job search and returns whatever it
         gives back, unfiltered -- callers should run the result through
         jarvis.sites.job_matching.filter_relevant() before treating it as
         "matches", since InfoJobs' own search is loose (see module
         docstring). Never touches apply_changes()'s login-writing machinery
-        -- entirely separate, read-only flow."""
+        -- entirely separate, read-only flow. max_results is a target, not
+        a guarantee -- scrolling stops early once a scroll stops adding new
+        cards (real end of results) or after a bounded number of attempts,
+        whichever comes first."""
         from jarvis.config import SITES_HEADLESS
 
         params = {"palabra": query}
@@ -423,7 +428,20 @@ class InfoJobsAdapter(SiteAdapter):
             page = context.new_page()
             page.goto(url, timeout=45_000, wait_until="domcontentloaded")
             page.wait_for_timeout(3000)
+            # InfoJobs' results load via infinite scroll -- confirmed live,
+            # a single scroll-to-bottom roughly doubles the card count (22
+            # -> 42). Scroll repeatedly until either the target is reached
+            # or a scroll stops adding new cards (end of real results).
             cards = self._extract_listing_cards(page)
+            attempts = 0
+            while len(cards) < max_results and attempts < 6:
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(2000)
+                new_cards = self._extract_listing_cards(page)
+                if len(new_cards) <= len(cards):
+                    break
+                cards = new_cards
+                attempts += 1
         finally:
             context.close()
             p.stop()

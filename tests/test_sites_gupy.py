@@ -499,8 +499,11 @@ def test_card_to_job_listing_none_when_title_missing_or_id_undecodable():
 
 class FakeSearchPage:
     def __init__(self, cards: list[dict]):
-        self._cards = cards
+        # Accepts either a flat list of card dicts (single page, wrapped
+        # here) or a list of pages (list of lists) for pagination tests.
+        self._pages = [cards] if not cards or isinstance(cards[0], dict) else cards
         self.goto_calls = []
+        self._evaluate_calls = 0
 
     def goto(self, url, timeout=None, wait_until=None):
         self.goto_calls.append(url)
@@ -509,7 +512,13 @@ class FakeSearchPage:
         pass
 
     def evaluate(self, script):
-        return self._cards
+        # Each goto() call is followed by exactly one evaluate() call in
+        # search_jobs() -- use that 1:1 pairing to hand back one "page" of
+        # cards per call, then an empty list once pages run out (real end
+        # of results).
+        result = self._pages[self._evaluate_calls] if self._evaluate_calls < len(self._pages) else []
+        self._evaluate_calls += 1
+        return result
 
 
 class FakeSearchContext:
@@ -548,4 +557,9 @@ def test_search_jobs_builds_the_real_query_url_and_converts_valid_cards(monkeypa
 
     assert len(listings) == 1
     assert listings[0].external_id == "12047884"
-    assert page.goto_calls == ["https://portal.gupy.io/job-search/term=Analista%20de%20Dados"]
+    # Page 1 has cards (fewer than max_results), so it pages on to 2 --
+    # which comes back empty (real end of results) and stops there.
+    assert page.goto_calls == [
+        "https://portal.gupy.io/job-search/term=Analista%20de%20Dados",
+        "https://portal.gupy.io/job-search/term=Analista%20de%20Dados?page=2",
+    ]

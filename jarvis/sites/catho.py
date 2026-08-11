@@ -117,26 +117,44 @@ class CathoAdapter(SiteAdapter):
     def apply_changes(self, plan: UpdatePlan, confirmed: bool) -> UpdateResult:
         raise NotImplementedError("Ainda não implementado -- ver inspect_current_profile().")
 
-    def search_jobs(self, query: str) -> list[JobListing]:
+    def search_jobs(self, query: str, *, max_results: int = 60) -> list[JobListing]:
         """Read-only, no login required (see module docstring) -- goes
         through session.open_context() anyway, same as every other
         adapter, even though there's no saved state to load for Catho
         search specifically; keeps this testable/consistent the same way
         as apply_changes() rather than a one-off raw Playwright call.
         headless=False, matching this file's confirmed 403-on-headless
-        constraint everywhere else."""
-        url = f"https://www.catho.com.br/vagas/{_slugify(query)}/"
+        constraint everywhere else.
+
+        Pagination: real, confirmed live -- page 1 is the bare
+        /vagas/<slug>/ URL, page N>=2 is /vagas/<slug>/?page=N (found via
+        the results page's own numbered pagination links). Stops once a
+        page returns no new cards (real end of results) or max_results is
+        reached, whichever comes first."""
+        slug = _slugify(query)
 
         p, context = session.open_context(self.site_name, headless=False)
         try:
             page = context.new_page()
-            page.goto(url, timeout=45_000, wait_until="domcontentloaded")
-            page.wait_for_timeout(2500)
-            consent_btn = page.query_selector("button.acceptAll")
-            if consent_btn is not None and consent_btn.is_visible():
-                consent_btn.click()
-                page.wait_for_timeout(500)
-            cards = self._extract_listing_cards(page)
+            cards: list[dict] = []
+            page_num = 1
+            while len(cards) < max_results:
+                url = f"https://www.catho.com.br/vagas/{slug}/" if page_num == 1 else (
+                    f"https://www.catho.com.br/vagas/{slug}/?page={page_num}"
+                )
+                page.goto(url, timeout=45_000, wait_until="domcontentloaded")
+                page.wait_for_timeout(2500)
+                consent_btn = page.query_selector("button.acceptAll")
+                if consent_btn is not None and consent_btn.is_visible():
+                    consent_btn.click()
+                    page.wait_for_timeout(500)
+                page_cards = self._extract_listing_cards(page)
+                if not page_cards:
+                    break
+                cards.extend(page_cards)
+                page_num += 1
+                if page_num > 6:  # safety bound -- don't page forever
+                    break
         finally:
             context.close()
             p.stop()

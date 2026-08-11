@@ -341,23 +341,39 @@ class GupyAdapter(SiteAdapter):
         except Exception:
             return None
 
-    def search_jobs(self, query: str) -> list[JobListing]:
+    def search_jobs(self, query: str, *, max_results: int = 60) -> list[JobListing]:
         """Read-only, no login required (see module docstring) -- callers
         should run the result through jarvis.sites.job_matching before
-        treating it as "matches". Only the first results page (~12 items)
-        is fetched -- pagination is out of scope for this round."""
+        treating it as "matches" (~12 items per page).
+
+        Pagination: real, confirmed live -- page 1 is the bare
+        job-search/term=<query> URL, page N>=2 appends ?page=N (found by
+        clicking the results page's own numbered pagination buttons and
+        reading the resulting URL). Stops once a page returns no new
+        cards (real end of results) or max_results is reached, whichever
+        comes first."""
         import urllib.parse
 
         from jarvis.config import SITES_HEADLESS
 
-        url = f"https://portal.gupy.io/job-search/term={urllib.parse.quote(query)}"
+        base_url = f"https://portal.gupy.io/job-search/term={urllib.parse.quote(query)}"
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
             page = context.new_page()
-            page.goto(url, timeout=45_000, wait_until="domcontentloaded")
-            page.wait_for_timeout(3000)
-            cards = self._extract_listing_cards(page)
+            cards: list[dict] = []
+            page_num = 1
+            while len(cards) < max_results:
+                url = base_url if page_num == 1 else f"{base_url}?page={page_num}"
+                page.goto(url, timeout=45_000, wait_until="domcontentloaded")
+                page.wait_for_timeout(3000)
+                page_cards = self._extract_listing_cards(page)
+                if not page_cards:
+                    break
+                cards.extend(page_cards)
+                page_num += 1
+                if page_num > 6:  # safety bound -- don't page forever
+                    break
         finally:
             context.close()
             p.stop()
