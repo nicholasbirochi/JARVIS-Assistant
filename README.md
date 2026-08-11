@@ -324,15 +324,19 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
   do Playwright mesmo com navegador visível (`net::ERR_CONNECTION_RESET`), sinal mais forte
   de anti-automação que a Gupy. Mesmo raciocínio do LinkedIn (`jarvis/sites/base.py`): não
   vale escalar para técnicas de evasão. Só `check_session`/`login` implementados.
-- InfoJobs: adaptador completo (`jarvis/sites/infojobs.py`) -- o melhor dos três sites
-  testados até agora, Playwright alcança normalmente tanto headless quanto com navegador
-  visível, sem bloqueio nenhum. Nome e telefone mapeados e escreveis de verdade
-  (`inspect_current_profile`/`build_update_plan`/`preview_changes`/`apply_changes`), campos
-  verificados ao vivo numa sessão autenticada real. Falta uma última verificação ao vivo,
-  supervisionada, do clique real em "SALVAR CV" (`a.js_btSend`, um link estilizado de botão
-  em vez de um submit de formulário comum como o da Gupy) antes de confiar em `-apply` para
-  valer -- pedir confirmação explícita do usuário antes desse teste, mesmo que seja um envio
-  sem mudança real (no-op).
+- InfoJobs: leitura completa e confiável (`jarvis/sites/infojobs.py`) -- o melhor dos três
+  sites testados até agora, Playwright alcança normalmente tanto headless quanto com
+  navegador visível, sem bloqueio nenhum. `check_session`/`inspect_current_profile`/
+  `build_update_plan`/`preview_changes` funcionam de verdade contra a sessão real
+  (confirmado ao vivo: achou corretamente que o sobrenome salvo no site, "Biroch", diverge
+  do currículo local, "Birochi"). **Escrita ainda não funciona**: testado ao vivo,
+  supervisionado, e o clique em "SALVAR CV" (`a.js_btSend`) não dispara nenhuma requisição
+  para infojobs.com.br -- `apply_changes` agora recarrega a página antes de reconferir (uma
+  correção real: sem isso, ele lia os próprios `<input>` que tinha acabado de preencher e
+  reportava sucesso falso) e por isso já responde `Falhou` honestamente em vez de mentir,
+  mas a causa raiz de por que o clique não chega no servidor ainda não foi encontrada (sem
+  erro no console, sem `__doPostBack`, sem framework JS reconhecível -- ver o docstring do
+  módulo para os detalhes da investigação).
 - Adaptadores restantes (Indeed, Academia do Universitário) -- cada um precisa da mesma
   verificação ao vivo (domínios, seletores reais, e depois o envio real) feita para a Gupy,
   não dá pra generalizar sem repetir esse processo por site.

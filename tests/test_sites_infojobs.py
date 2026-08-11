@@ -281,6 +281,9 @@ class FakeApplyPage:
     def goto(self, url, timeout=None, wait_until=None):
         pass
 
+    def reload(self, wait_until=None, timeout=None):
+        pass
+
     def wait_for_timeout(self, ms):
         pass
 
@@ -382,6 +385,47 @@ def test_apply_changes_reports_failure_if_site_does_not_reflect_change(monkeypat
     assert result.applied is False
     assert "phone" in result.error
     assert page.save_button.clicked is True  # it did try to save
+
+
+class FakeSilentSaveApplyPage(FakeApplyPage):
+    """Reproduces the real, live-confirmed InfoJobs bug: clicking "SALVAR
+    CV" does nothing server-side, but the <input> elements still hold
+    whatever page.fill() wrote to them since nothing reloaded the DOM. A
+    verify step that re-scrapes WITHOUT reloading first would see its own
+    fill() and wrongly report success -- reload() resets to the
+    pre-save values here, standing in for the real server's unchanged
+    state."""
+
+    def __init__(self, saved_values: dict[str, str]):
+        super().__init__(saved_values)
+        self._server_values = dict(saved_values)
+
+    def reload(self, wait_until=None, timeout=None):
+        self.values = dict(self._server_values)
+
+
+def test_apply_changes_catches_a_save_click_that_never_reaches_the_server(monkeypatch, tmp_path):
+    # The real bug found live on 2026-08-11: clicking a.js_btSend fired zero
+    # requests to infojobs.com.br, yet the unreloaded DOM still showed the
+    # locally-filled value. Without a reload before re-scraping, apply_changes
+    # would falsely report success.
+    monkeypatch.setattr(config, "SITES_EVIDENCE_DIR", tmp_path / "evidence")
+    resume = make_resume(phone="+55 (11) 98888-8888")
+    current = SiteProfileSnapshot(
+        site_name="infojobs", fields={**_map_resume_to_infojobs_fields(resume), "phone": "11 900000000"}
+    )
+    adapter = InfoJobsAdapter()
+    plan = adapter.build_update_plan(resume, current)
+
+    page = FakeSilentSaveApplyPage(_base_profile_values())
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplyPlaywright(), FakeApplyContext(page))
+    )
+
+    result = adapter.apply_changes(plan, confirmed=True)
+
+    assert result.applied is False
+    assert "phone" in result.error
 
 
 def test_apply_changes_reports_missing_save_button(monkeypatch, tmp_path):

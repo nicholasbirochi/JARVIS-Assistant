@@ -37,6 +37,31 @@ logged-in session:
   nothing to guess there. CPF and birth date are visible on this same
   page (next to name/phone) but never read or written -- see
   _scrape_profile_fields() and _record_evidence().
+
+**Known limitation, confirmed live on 2026-08-11: the "SALVAR CV" click
+does not currently reach the server.** apply_changes() reloads the page
+before re-scraping specifically because of this -- an earlier version
+re-scraped the same unreloaded DOM and falsely reported success, since
+the <input> elements still held whatever page.fill() itself had written,
+regardless of whether the site's own save handler ran. With the reload
+in place, a real apply attempt now honestly returns applied=False
+instead of lying. Investigated but not yet root-caused: the click fires
+zero requests to infojobs.com.br (confirmed via Playwright network-event
+logging, both with the normal Playwright .click() and a native
+element.click() via page.evaluate()); no JS console errors or
+page-level exceptions; no window.Page_ClientValidate/__doPostBack
+(so it isn't classic ASP.NET WebForms postback validation blocking it,
+despite the ctl00$phMasterPage$... field naming); no React/Vue/Angular
+globals found; jQuery is present but no delegated handler was found via
+jQuery._data on the element itself. The <a class="js_btSend"> sits
+inside a single big <form id="aspnetForm"> that likely spans far more
+than the personal-data section (the page is >5000px tall, covering
+education/experience/skills too) -- a silent validation failure
+somewhere else in that same form is one live hypothesis, not yet
+confirmed. Until this is resolved, treat apply_changes() for InfoJobs as
+correctly SAFE (never reports a false success) but not yet capable of a
+real write -- same posture as Vagas.com/Catho before their real save
+paths were confirmed.
 """
 
 from __future__ import annotations
@@ -240,6 +265,17 @@ class InfoJobsAdapter(SiteAdapter):
             page.wait_for_timeout(3000)
 
             evidence_path = self._record_evidence(plan)
+
+            # Reload before re-scraping -- otherwise this reads back the same
+            # <input> elements we just wrote via page.fill(), which still
+            # hold our own in-memory value regardless of whether the site's
+            # own save handler actually ran. Confirmed live: the "SALVAR CV"
+            # click can silently do nothing server-side (verified via network
+            # logging -- zero requests to infojobs.com.br after the click)
+            # while the unreloaded DOM still "looks" saved. A real reload
+            # forces us to read the server's own truth.
+            page.reload(wait_until="domcontentloaded", timeout=45_000)
+            page.wait_for_timeout(3000)
 
             fields_after = self._scrape_profile_fields(page)
             failed = [c for c in plan.changes if fields_after.get(c.site_field) != c.new_value]
