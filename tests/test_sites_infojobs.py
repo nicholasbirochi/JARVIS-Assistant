@@ -1,8 +1,184 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from jarvis import config
-from jarvis.sites.base import SessionStatus
-from jarvis.sites.infojobs import InfoJobsAdapter, _is_authenticated
+from jarvis.resume.schema import Bilingual, PersonalInfo, Resume
+from jarvis.sites import session
+from jarvis.sites.base import PlannedFieldChange, SessionStatus, SiteProfileSnapshot, UpdatePlan
+from jarvis.sites.infojobs import (
+    InfoJobsAdapter,
+    _is_authenticated,
+    _map_resume_to_infojobs_fields,
+    _parse_phone,
+    _split_full_name,
+)
+
+
+def make_resume(**personal_info_overrides) -> Resume:
+    defaults = {
+        "full_name": "Nicholas Birochi",
+        "phone": "+55 (11) 95827-5250",
+        "email": "nicholas@example.com",
+    }
+    defaults.update(personal_info_overrides)
+    return Resume(
+        personal_info=PersonalInfo(**defaults),
+        summary=Bilingual(pt="Resumo em português."),
+    )
+
+
+def test_parse_phone_splits_area_code_and_number():
+    # Verified live against the real account: "+55 (11) 95827-5250" ->
+    # txtPhone1Code="11", txtPhone1="958275250".
+    assert _parse_phone("+55 (11) 95827-5250") == ("11", "958275250")
+
+
+def test_parse_phone_without_country_code():
+    assert _parse_phone("(11) 95827-5250") == ("11", "958275250")
+
+
+def test_parse_phone_none():
+    assert _parse_phone(None) == (None, None)
+
+
+def test_split_full_name():
+    assert _split_full_name("Nicholas Birochi") == ("Nicholas", "Birochi")
+    assert _split_full_name("Nicholas Silva Birochi") == ("Nicholas", "Silva Birochi")
+    assert _split_full_name("Cher") == ("Cher", "")
+
+
+def test_map_resume_to_infojobs_fields():
+    resume = make_resume()
+
+    fields = _map_resume_to_infojobs_fields(resume)
+
+    # Email isn't part of this mapping at all -- it's not on the InfoJobs
+    # edit form (see infojobs.py's module docstring), only name/phone are.
+    assert fields == {
+        "full_name": "Nicholas Birochi",
+        "phone": "11 958275250",
+    }
+    assert "email" not in fields
+
+
+class FakePage:
+    """Stand-in for a Playwright Page -- just enough of input_value() to
+    exercise _scrape_profile_fields without a real browser."""
+
+    def __init__(self, values: dict[str, str]):
+        self._values = values
+
+    def input_value(self, selector: str) -> str:
+        return self._values[selector]
+
+
+def test_scrape_profile_fields_combines_name_surname_and_phone():
+    page = FakePage(
+        {
+            "#ctl00_phMasterPage_cPersonalData_txtName": "Nicholas",
+            "#ctl00_phMasterPage_cPersonalData_txtSurname": "Birochi",
+            "#ctl00_phMasterPage_cPersonalData_txtPhone1Code": "11",
+            "#ctl00_phMasterPage_cPersonalData_txtPhone1": "958275250",
+        }
+    )
+    adapter = InfoJobsAdapter()
+
+    fields = adapter._scrape_profile_fields(page)
+
+    assert fields == {
+        "full_name": "Nicholas Birochi",
+        "phone": "11 958275250",
+    }
+
+
+def test_build_update_plan_only_includes_differing_fields():
+    resume = make_resume()
+    current = SiteProfileSnapshot(
+        site_name="infojobs",
+        fields={
+            "full_name": "Nicholas Birochi",  # same -- no change needed
+            "phone": "11 999999999",  # different -- change needed
+        },
+    )
+    adapter = InfoJobsAdapter()
+
+    plan = adapter.build_update_plan(resume, current)
+
+    assert plan.site_name == "infojobs"
+    assert {c.site_field for c in plan.changes} == {"phone"}
+
+
+def test_build_update_plan_empty_when_nothing_differs():
+    resume = make_resume()
+    current = SiteProfileSnapshot(site_name="infojobs", fields=_map_resume_to_infojobs_fields(resume))
+    adapter = InfoJobsAdapter()
+
+    plan = adapter.build_update_plan(resume, current)
+
+    assert plan.changes == []
+
+
+def test_build_update_plan_skips_fields_missing_locally():
+    resume = make_resume(phone=None)
+    current = SiteProfileSnapshot(
+        site_name="infojobs",
+        fields={**_map_resume_to_infojobs_fields(resume), "phone": "11 999999999"},
+    )
+    adapter = InfoJobsAdapter()
+
+    plan = adapter.build_update_plan(resume, current)
+
+    assert plan.changes == []
+
+
+def test_preview_changes_reports_no_changes():
+    adapter = InfoJobsAdapter()
+    resume = make_resume()
+    current = SiteProfileSnapshot(site_name="infojobs", fields=_map_resume_to_infojobs_fields(resume))
+    plan = adapter.build_update_plan(resume, current)
+
+    preview = adapter.preview_changes(plan)
+
+    assert "Nenhuma mudança" in preview.summary_text
+
+
+def test_preview_changes_lists_each_change():
+    adapter = InfoJobsAdapter()
+    resume = make_resume()
+    current = SiteProfileSnapshot(site_name="infojobs", fields={"phone": "11 999999999"})
+    plan = adapter.build_update_plan(resume, current)
+
+    preview = adapter.preview_changes(plan)
+
+    assert "phone" in preview.summary_text
+    assert "11 958275250" in preview.summary_text
+    assert "personal_info.phone" in preview.summary_text
+
+
+def test_apply_changes_refuses_without_confirmation():
+    adapter = InfoJobsAdapter()
+    resume = make_resume()
+    current = SiteProfileSnapshot(site_name="infojobs", fields={"phone": "11 999999999"})
+    plan = adapter.build_update_plan(resume, current)
+
+    result = adapter.apply_changes(plan, confirmed=False)
+
+    assert result.applied is False
+    assert "confirmed=True" in result.error
+
+
+def test_apply_changes_succeeds_trivially_with_no_changes_even_if_confirmed():
+    adapter = InfoJobsAdapter()
+    resume = make_resume()
+    current = SiteProfileSnapshot(site_name="infojobs", fields=_map_resume_to_infojobs_fields(resume))
+    plan = adapter.build_update_plan(resume, current)
+
+    result = adapter.apply_changes(plan, confirmed=True)
+
+    assert result.applied is True
+    assert result.changes_applied == []
 
 
 class FakeAuthPage:
@@ -49,18 +225,200 @@ def test_check_session_not_logged_in_without_a_saved_session(monkeypatch, tmp_pa
     assert InfoJobsAdapter().check_session() == SessionStatus.NOT_LOGGED_IN
 
 
-def test_profile_methods_raise_not_implemented_until_the_real_site_is_inspected():
-    # Deliberate: the profile edit page is only reachable authenticated,
-    # so its real URL/selectors can't be found without a live, logged-in
-    # session -- see infojobs.py's module docstring. Each of these must
-    # say so clearly, not guess.
+def test_apply_changes_refuses_entire_plan_if_any_field_unsupported(monkeypatch):
+    # A plan mixing a supported field (phone) with an unsupported one must
+    # refuse the whole thing, not silently write part of it -- same
+    # precedent as Gupy's equivalent guard.
+    def _fail_open_context(site_name, *, headless):
+        raise AssertionError("should not open a browser session when any field is unsupported")
+
+    monkeypatch.setattr(session, "open_context", _fail_open_context)
+
     adapter = InfoJobsAdapter()
+    plan = UpdatePlan(
+        site_name="infojobs",
+        changes=[
+            PlannedFieldChange(
+                site_field="phone",
+                current_value="11 900000000",
+                new_value="11 988888888",
+                resume_field_path="personal_info.phone",
+            ),
+            PlannedFieldChange(
+                site_field="email",
+                current_value="old@example.com",
+                new_value="new@example.com",
+                resume_field_path="personal_info.email",
+            ),
+        ],
+    )
 
     with pytest.raises(NotImplementedError):
-        adapter.inspect_current_profile()
-    with pytest.raises(NotImplementedError):
-        adapter.build_update_plan(resume=None, current=None)
-    with pytest.raises(NotImplementedError):
-        adapter.preview_changes(plan=None)
-    with pytest.raises(NotImplementedError):
-        adapter.apply_changes(plan=None, confirmed=True)
+        adapter.apply_changes(plan, confirmed=True)
+
+
+class FakeSaveButton:
+    def __init__(self):
+        self.clicked = False
+
+    def click(self):
+        self.clicked = True
+
+
+class FakeApplyPage:
+    """Stand-in for a Playwright Page during apply_changes(). `fill()`
+    writes straight into the same `values` dict `input_value()`/scraping
+    reads from, so a successful fill+save round-trips exactly like the real
+    site does -- unless `apply_fills=False`, which simulates a site that
+    silently didn't persist the change (the failure case we must detect)."""
+
+    def __init__(self, values: dict[str, str], *, has_save_button: bool = True, apply_fills: bool = True):
+        self.values = dict(values)
+        self.has_save_button = has_save_button
+        self.apply_fills = apply_fills
+        self.save_button = FakeSaveButton()
+
+    def goto(self, url, timeout=None, wait_until=None):
+        pass
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def fill(self, selector, value):
+        if self.apply_fills:
+            self.values[selector] = value
+
+    def input_value(self, selector):
+        return self.values[selector]
+
+    def query_selector(self, selector):
+        if selector == "a.js_btSend":
+            return self.save_button if self.has_save_button else None
+        return None
+
+
+class FakeApplyContext:
+    def __init__(self, page):
+        self._page = page
+        self.closed = False
+
+    def new_page(self):
+        return self._page
+
+    def close(self):
+        self.closed = True
+
+
+class FakeApplyPlaywright:
+    def __init__(self):
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+
+
+def _base_profile_values(**overrides) -> dict[str, str]:
+    values = {
+        "#ctl00_phMasterPage_cPersonalData_txtName": "Nicholas",
+        "#ctl00_phMasterPage_cPersonalData_txtSurname": "Birochi",
+        "#ctl00_phMasterPage_cPersonalData_txtPhone1Code": "11",
+        "#ctl00_phMasterPage_cPersonalData_txtPhone1": "900000000",
+    }
+    values.update(overrides)
+    return values
+
+
+def test_apply_changes_writes_phone_and_full_name_when_supported(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "SITES_EVIDENCE_DIR", tmp_path / "evidence")
+    resume = make_resume(full_name="Nicholas Silva", phone="+55 (11) 98888-8888")
+    current = SiteProfileSnapshot(
+        site_name="infojobs",
+        fields={"full_name": "Nicholas Birochi", "phone": "11 900000000"},
+    )
+    adapter = InfoJobsAdapter()
+    plan = adapter.build_update_plan(resume, current)
+    assert {c.site_field for c in plan.changes} == {"full_name", "phone"}
+
+    page = FakeApplyPage(_base_profile_values())
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplyPlaywright(), FakeApplyContext(page))
+    )
+
+    result = adapter.apply_changes(plan, confirmed=True)
+
+    assert result.applied is True
+    assert {c.site_field for c in result.changes_applied} == {"full_name", "phone"}
+    assert page.save_button.clicked is True
+    assert page.values["#ctl00_phMasterPage_cPersonalData_txtName"] == "Nicholas"
+    assert page.values["#ctl00_phMasterPage_cPersonalData_txtSurname"] == "Silva"
+    assert page.values["#ctl00_phMasterPage_cPersonalData_txtPhone1Code"] == "11"
+    assert page.values["#ctl00_phMasterPage_cPersonalData_txtPhone1"] == "988888888"
+    assert result.evidence_path is not None
+
+    # Evidence is a small JSON audit record, deliberately NOT a screenshot --
+    # this same page also shows CPF/birth date, which a screenshot would
+    # capture incidentally even though the write itself never touches them.
+    evidence = json.loads(Path(result.evidence_path).read_text(encoding="utf-8"))
+    assert evidence["site_name"] == "infojobs"
+    assert {c["field"] for c in evidence["changes"]} == {"full_name", "phone"}
+
+
+def test_apply_changes_reports_failure_if_site_does_not_reflect_change(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "SITES_EVIDENCE_DIR", tmp_path / "evidence")
+    resume = make_resume(phone="+55 (11) 98888-8888")
+    current = SiteProfileSnapshot(
+        site_name="infojobs", fields={**_map_resume_to_infojobs_fields(resume), "phone": "11 900000000"}
+    )
+    adapter = InfoJobsAdapter()
+    plan = adapter.build_update_plan(resume, current)
+
+    page = FakeApplyPage(_base_profile_values(), apply_fills=False)
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplyPlaywright(), FakeApplyContext(page))
+    )
+
+    result = adapter.apply_changes(plan, confirmed=True)
+
+    assert result.applied is False
+    assert "phone" in result.error
+    assert page.save_button.clicked is True  # it did try to save
+
+
+def test_apply_changes_reports_missing_save_button(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "SITES_EVIDENCE_DIR", tmp_path / "evidence")
+    resume = make_resume(phone="+55 (11) 98888-8888")
+    current = SiteProfileSnapshot(
+        site_name="infojobs", fields={**_map_resume_to_infojobs_fields(resume), "phone": "11 900000000"}
+    )
+    adapter = InfoJobsAdapter()
+    plan = adapter.build_update_plan(resume, current)
+
+    page = FakeApplyPage(_base_profile_values(), has_save_button=False)
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplyPlaywright(), FakeApplyContext(page))
+    )
+
+    result = adapter.apply_changes(plan, confirmed=True)
+
+    assert result.applied is False
+    assert "Salvar" in result.error
+
+
+def test_apply_changes_closes_context_and_stops_playwright_even_on_success(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "SITES_EVIDENCE_DIR", tmp_path / "evidence")
+    resume = make_resume(phone="+55 (11) 98888-8888")
+    current = SiteProfileSnapshot(
+        site_name="infojobs", fields={**_map_resume_to_infojobs_fields(resume), "phone": "11 900000000"}
+    )
+    adapter = InfoJobsAdapter()
+    plan = adapter.build_update_plan(resume, current)
+
+    page = FakeApplyPage(_base_profile_values())
+    fake_context = FakeApplyContext(page)
+    fake_p = FakeApplyPlaywright()
+    monkeypatch.setattr(session, "open_context", lambda site_name, *, headless: (fake_p, fake_context))
+
+    adapter.apply_changes(plan, confirmed=True)
+
+    assert fake_context.closed is True
+    assert fake_p.stopped is True
