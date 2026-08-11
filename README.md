@@ -329,14 +329,21 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
   navegador visível, sem bloqueio nenhum. `check_session`/`inspect_current_profile`/
   `build_update_plan`/`preview_changes` funcionam de verdade contra a sessão real
   (confirmado ao vivo: achou corretamente que o sobrenome salvo no site, "Biroch", diverge
-  do currículo local, "Birochi"). **Escrita ainda não funciona**: testado ao vivo,
-  supervisionado, e o clique em "SALVAR CV" (`a.js_btSend`) não dispara nenhuma requisição
-  para infojobs.com.br -- `apply_changes` agora recarrega a página antes de reconferir (uma
-  correção real: sem isso, ele lia os próprios `<input>` que tinha acabado de preencher e
-  reportava sucesso falso) e por isso já responde `Falhou` honestamente em vez de mentir,
-  mas a causa raiz de por que o clique não chega no servidor ainda não foi encontrada (sem
-  erro no console, sem `__doPostBack`, sem framework JS reconhecível -- ver o docstring do
-  módulo para os detalhes da investigação).
+  do currículo local, "Birochi"). **Escrita bloqueada por uma causa raiz já identificada, não
+  por um bug do adaptador**: o clique em "SALVAR CV" roda a validação JS da própria InfoJobs
+  (`Validate_CV_Step2`, achada lendo o bundle `HandlerCssJS.ashx` ao vivo) sobre a página
+  inteira antes de mandar qualquer coisa pro servidor -- e a conta tem um campo obrigatório
+  vazio sem relação nenhuma com nome/telefone: "Preferências > Selecione até 3 Áreas de
+  Atuação" (`#ctl00_phMasterPage_cPreferences_hdnCategory`). Isso bloqueia QUALQUER
+  salvamento nessa página, não só os deste adaptador. `apply_changes` agora recarrega a
+  página antes de reconferir (uma correção real: sem isso, ele lia os próprios `<input>` que
+  tinha acabado de preencher e reportava sucesso falso -- aconteceu de verdade numa tentativa
+  antes desse fix) e captura o alerta JS real via `page.on("dialog", ...)`, então já responde
+  `Falhou` com o motivo exato em vez de mentir ou de dar um erro vago. Falta um passo manual,
+  único, do usuário: entrar no InfoJobs, Currículo > Editar > Preferências, escolher pelo
+  menos uma Área de Atuação e salvar uma vez -- depois disso a escrita automatizada deve
+  funcionar (ainda não reverificado, já que é uma escolha de carreira do usuário, não algo
+  que o código deva decidir sozinho).
 - Adaptadores restantes (Indeed, Academia do Universitário) -- cada um precisa da mesma
   verificação ao vivo (domínios, seletores reais, e depois o envio real) feita para a Gupy,
   não dá pra generalizar sem repetir esse processo por site.

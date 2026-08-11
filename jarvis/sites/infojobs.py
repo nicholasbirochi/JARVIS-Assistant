@@ -38,30 +38,43 @@ logged-in session:
   page (next to name/phone) but never read or written -- see
   _scrape_profile_fields() and _record_evidence().
 
-**Known limitation, confirmed live on 2026-08-11: the "SALVAR CV" click
-does not currently reach the server.** apply_changes() reloads the page
-before re-scraping specifically because of this -- an earlier version
-re-scraped the same unreloaded DOM and falsely reported success, since
-the <input> elements still held whatever page.fill() itself had written,
-regardless of whether the site's own save handler ran. With the reload
-in place, a real apply attempt now honestly returns applied=False
-instead of lying. Investigated but not yet root-caused: the click fires
-zero requests to infojobs.com.br (confirmed via Playwright network-event
-logging, both with the normal Playwright .click() and a native
-element.click() via page.evaluate()); no JS console errors or
-page-level exceptions; no window.Page_ClientValidate/__doPostBack
-(so it isn't classic ASP.NET WebForms postback validation blocking it,
-despite the ctl00$phMasterPage$... field naming); no React/Vue/Angular
-globals found; jQuery is present but no delegated handler was found via
-jQuery._data on the element itself. The <a class="js_btSend"> sits
-inside a single big <form id="aspnetForm"> that likely spans far more
-than the personal-data section (the page is >5000px tall, covering
-education/experience/skills too) -- a silent validation failure
-somewhere else in that same form is one live hypothesis, not yet
-confirmed. Until this is resolved, treat apply_changes() for InfoJobs as
-correctly SAFE (never reports a false success) but not yet capable of a
-real write -- same posture as Vagas.com/Catho before their real save
-paths were confirmed.
+**Known limitation, root-caused live on 2026-08-11: EVERY save on this
+page is blocked by one unrelated, pre-existing empty required field on
+the account itself, not by anything this adapter does.** apply_changes()
+reloads the page before re-scraping specifically because of this
+investigation's first finding -- an earlier version re-scraped the same
+unreloaded DOM and falsely reported success, since the <input> elements
+still held whatever page.fill() itself had written, regardless of
+whether the site's own save handler ran.
+
+The real mechanism, traced through InfoJobs' own bundled JS
+(`HandlerCssJS.ashx?fileset=...`, fetched and grepped live): clicking
+`.js_btSend` calls `Validate_CV_Step2(e)`, which runs
+`ValidateHidden('#divTotalContent', ...)` -- a validation pass over
+*every* input on the whole page, not just the personal-data section --
+before ever clicking the real, separate submit trigger
+(`.js_btSrvSend`). If validation fails it calls `alert('Revise os campos
+em vermelho.')` and returns early, without ever touching `.js_btSrvSend`, so
+zero requests reach infojobs.com.br -- which is exactly what earlier,
+narrower network-log/console/ASP.NET-postback probing observed without
+yet explaining. Playwright auto-dismisses JS `alert()` dialogs by
+default, so this was silent until a `page.on("dialog", ...)` listener
+was added to capture the message instead of letting it vanish.
+
+Confirmed live: the one failing field is
+`#ctl00_phMasterPage_cPreferences_hdnCategory` (`rfvrequired="True"`,
+`rfverrormessage="Obrigatório"`) -- a hidden field backing the
+"Preferências" section's "Selecione até 3 Áreas de Atuação" (professional
+category) picker, which is empty on this account. It has nothing to do
+with name/phone/CPF/birth date, and nothing to do with this adapter's
+own code -- it blocks ANY save on this page, including ones that never
+touch Preferências at all. This needs a one-time manual fix: log into
+InfoJobs, go to Currículo > Editar > Preferências, pick at least one
+Área de Atuação, and save once by hand. Automated writes here should
+start working immediately afterward -- not yet re-verified, since this
+is a one-time account fix that has to happen on the user's own account,
+not something this code can or should do on the user's behalf (it's a
+genuine career-preference choice, not derivable from resume.json).
 """
 
 from __future__ import annotations
@@ -125,15 +138,21 @@ def _map_resume_to_infojobs_fields(resume: Resume) -> dict[str, Any]:
 
 
 def _is_authenticated(context) -> bool:
-    """Placeholder until the real post-login page/signal is confirmed live
-    (see the module docstring) -- currently just checks that navigating to
-    the login page itself doesn't stay there."""
+    """Checks that navigating to the login page itself doesn't stay there --
+    an authenticated session gets redirected away from it.
+
+    Uses the same "domcontentloaded + explicit wait" pattern as the edit
+    page (see module docstring): this page also carries the same ad-banner
+    traffic that keeps wait_for_load_state("networkidle") from ever
+    resolving, which was intermittently timing out check_session() with a
+    generic UNKNOWN_ERROR -- confirmed live, not guessed, after check_session
+    failed a few real runs in a row for no real auth reason."""
     from jarvis.config import INFOJOBS_LOGIN_URL
 
     page = context.new_page()
     try:
-        page.goto(INFOJOBS_LOGIN_URL)
-        page.wait_for_load_state("networkidle")
+        page.goto(INFOJOBS_LOGIN_URL, timeout=60_000, wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
         return "Account/Login" not in page.url
     finally:
         page.close()
@@ -247,6 +266,17 @@ class InfoJobsAdapter(SiteAdapter):
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
             page = context.new_page()
+
+            # InfoJobs' own client-side validation (Validate_CV_Step2, see
+            # module docstring) blocks the save with a JS alert() when ANY
+            # field on the page is invalid -- not just the ones this
+            # adapter writes. Playwright auto-dismisses alert()s by
+            # default, so without this listener that failure would be
+            # silent: zero requests fire, and the only symptom is the
+            # post-save verification below not matching.
+            dialog_messages: list[str] = []
+            page.on("dialog", lambda d: (dialog_messages.append(d.message), d.dismiss()))
+
             page.goto(_EDIT_URL, timeout=45_000, wait_until="domcontentloaded")
             page.wait_for_timeout(3000)
 
@@ -263,6 +293,16 @@ class InfoJobsAdapter(SiteAdapter):
                 )
             save_btn.click()
             page.wait_for_timeout(3000)
+
+            if dialog_messages:
+                return UpdateResult(
+                    site_name=self.site_name,
+                    applied=False,
+                    error="InfoJobs recusou o salvamento (validação de outro campo da página, "
+                    "não relacionado a esta mudança): " + " / ".join(dialog_messages) + ". Confira "
+                    "o perfil manualmente no site -- ver o docstring de infojobs.py para o campo "
+                    "vazio já identificado (Preferências > Área de Atuação).",
+                )
 
             evidence_path = self._record_evidence(plan)
 

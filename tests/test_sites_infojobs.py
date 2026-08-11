@@ -186,10 +186,10 @@ class FakeAuthPage:
         self.url = final_url
         self.closed = False
 
-    def goto(self, url):
+    def goto(self, url, timeout=None, wait_until=None):
         pass
 
-    def wait_for_load_state(self, state):
+    def wait_for_timeout(self, ms):
         pass
 
     def close(self):
@@ -277,6 +277,9 @@ class FakeApplyPage:
         self.has_save_button = has_save_button
         self.apply_fills = apply_fills
         self.save_button = FakeSaveButton()
+
+    def on(self, event, handler):
+        pass  # no dialog fires in these fakes -- see FakeBlockingDialogPage below for that case
 
     def goto(self, url, timeout=None, wait_until=None):
         pass
@@ -426,6 +429,67 @@ def test_apply_changes_catches_a_save_click_that_never_reaches_the_server(monkey
 
     assert result.applied is False
     assert "phone" in result.error
+
+
+class FakeDialog:
+    def __init__(self, message: str):
+        self.message = message
+        self.dismissed = False
+
+    def dismiss(self):
+        self.dismissed = True
+
+
+class _DialogFiringSaveButton(FakeSaveButton):
+    def __init__(self, page: "FakeBlockingDialogPage"):
+        super().__init__()
+        self._page = page
+
+    def click(self):
+        super().click()
+        if self._page.dialog_handler is not None:
+            self._page.dialog_handler(FakeDialog(self._page.dialog_message))
+
+
+class FakeBlockingDialogPage(FakeApplyPage):
+    """Reproduces the real, live-confirmed InfoJobs bug: an unrelated empty
+    required field elsewhere on the page (Preferências > Área de Atuação)
+    makes the site's own client-side validation call alert(...) and bail
+    out before the save ever reaches the server -- see infojobs.py's
+    module docstring. save_button.click() here fires the same dialog a
+    real browser would, exactly like the site's own JS does before it
+    would otherwise click the real, separate submit trigger."""
+
+    def __init__(self, values: dict[str, str], dialog_message: str):
+        super().__init__(values)
+        self.dialog_message = dialog_message
+        self.dialog_handler = None
+        self.save_button = _DialogFiringSaveButton(self)
+
+    def on(self, event, handler):
+        if event == "dialog":
+            self.dialog_handler = handler
+
+
+def test_apply_changes_surfaces_the_real_validation_alert_instead_of_a_vague_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "SITES_EVIDENCE_DIR", tmp_path / "evidence")
+    resume = make_resume(phone="+55 (11) 98888-8888")
+    current = SiteProfileSnapshot(
+        site_name="infojobs", fields={**_map_resume_to_infojobs_fields(resume), "phone": "11 900000000"}
+    )
+    adapter = InfoJobsAdapter()
+    plan = adapter.build_update_plan(resume, current)
+
+    page = FakeBlockingDialogPage(_base_profile_values(), dialog_message="Revise os campos em vermelho.")
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplyPlaywright(), FakeApplyContext(page))
+    )
+
+    result = adapter.apply_changes(plan, confirmed=True)
+
+    assert result.applied is False
+    assert "Revise os campos em vermelho." in result.error
+    assert "Preferências" in result.error  # points at the real, known culprit, not a vague "confira manualmente"
 
 
 def test_apply_changes_reports_missing_save_button(monkeypatch, tmp_path):
