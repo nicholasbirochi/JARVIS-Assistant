@@ -19,7 +19,12 @@ non-résumé tools -- respectively jarvis/roadmap.py (appends to this
 project's own README.md "## Roadmap" section) and jarvis/reminders.py
 (a flat local JSON note list). Both act directly, no clipboard hop --
 unlike a real code change, appending one line to a list needs no human
-review step to be safe."""
+review step to be safe.
+
+find_matching_jobs()/list_recent_job_matches() drive jarvis/job_search.py
+-- a real, live search across InfoJobs/Catho/Gupy (bounded on purpose:
+this runs synchronously inside a tool call, see that module's docstring
+for why Indeed/LinkedIn are excluded from this automatic path)."""
 
 from __future__ import annotations
 
@@ -149,6 +154,41 @@ def list_reminders() -> str:
     return "\n".join(f"- {r['text']} ({r['created_at']})" for r in items)
 
 
+def find_matching_jobs() -> str:
+    """Busca vagas de emprego reais que combinam com o currículo do Nicholas,
+    em InfoJobs, Catho e Gupy -- separadas em presencial/híbrido perto dele
+    (São Bernardo do Campo, Centro de São Paulo, região do ABC) e home
+    office (nacional e internacional).
+
+    Use quando o Nicholas pedir para buscar/procurar vagas de emprego.
+    Essa busca é REAL (abre navegador de verdade, pode levar 1 a 2
+    minutos) -- avise que vai demorar um pouco antes de chamar esta
+    ferramenta. Não inclui Indeed (bloqueado no momento, ver roadmap) nem
+    LinkedIn (precisa de login manual supervisionado) -- para esses dois,
+    é preciso um pedido explícito à parte, fora desta ferramenta.
+    """
+    from jarvis.job_search import run_job_search, save_report, summarize
+
+    resume = store.load()
+    report = run_job_search(resume)
+    path = save_report(report)
+    return summarize(report, path)
+
+
+def list_recent_job_matches() -> str:
+    """Mostra o resultado da última busca de vagas já feita, sem buscar de novo.
+
+    Use quando o Nicholas pedir para ver de novo as vagas encontradas
+    antes, ou perguntar o que já tinha achado.
+    """
+    from jarvis.job_search import latest_report_path
+
+    path = latest_report_path()
+    if path is None:
+        return "Ainda não fiz nenhuma busca de vagas. Peça para eu buscar primeiro."
+    return path.read_text(encoding="utf-8")
+
+
 def _log_claude_prompt(prompt: str) -> None:
     """Best-effort durability net so a prompt isn't lost if it isn't
     pasted right away -- never raises, since a logging hiccup here must
@@ -177,4 +217,6 @@ TOOLS = [
     add_roadmap_item,
     add_reminder,
     list_reminders,
+    find_matching_jobs,
+    list_recent_job_matches,
 ]
