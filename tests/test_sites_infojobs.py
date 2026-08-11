@@ -9,6 +9,7 @@ from jarvis.sites import session
 from jarvis.sites.base import PlannedFieldChange, SessionStatus, SiteProfileSnapshot, UpdatePlan
 from jarvis.sites.infojobs import (
     InfoJobsAdapter,
+    _card_to_job_listing,
     _is_authenticated,
     _map_resume_to_infojobs_fields,
     _parse_phone,
@@ -530,3 +531,97 @@ def test_apply_changes_closes_context_and_stops_playwright_even_on_success(monke
 
     assert fake_context.closed is True
     assert fake_p.stopped is True
+
+
+def test_card_to_job_listing_converts_a_real_shaped_card():
+    card = {
+        "external_id": "11898997",
+        "title": "Analista De Dados Jr",
+        "href": "/vaga-de-analista-dados-jr-em-sao-paulo__11898997.aspx",
+        "company": "Empresa X",
+        "location": "São Paulo - SP",
+        "snippet": "Trabalhe com Python, SQL e Power BI.",
+    }
+
+    listing = _card_to_job_listing(card)
+
+    assert listing.site_name == "infojobs"
+    assert listing.external_id == "11898997"
+    assert listing.title == "Analista De Dados Jr"
+    assert listing.url == "https://www.infojobs.com.br/vaga-de-analista-dados-jr-em-sao-paulo__11898997.aspx"
+    assert listing.company == "Empresa X"
+
+
+def test_card_to_job_listing_none_for_a_card_missing_title_or_href():
+    # The real bug found live: div[id^="vacancy"] also matches at least one
+    # unrelated employer-detail widget with no title/href -- must be
+    # dropped, not turned into a bogus JobListing.
+    assert _card_to_job_listing({"external_id": "1", "title": None, "href": "https://x.com"}) is None
+    assert _card_to_job_listing({"external_id": "1", "title": "X", "href": None}) is None
+    assert _card_to_job_listing({"external_id": "", "title": "X", "href": "https://x.com"}) is None
+
+
+def test_card_to_job_listing_keeps_an_already_absolute_url_as_is():
+    card = {
+        "external_id": "1",
+        "title": "Analista De Dados",
+        "href": "https://www.infojobs.com.br/vaga-de-x__1.aspx",
+        "company": None,
+        "location": None,
+        "snippet": None,
+    }
+
+    listing = _card_to_job_listing(card)
+
+    assert listing.url == "https://www.infojobs.com.br/vaga-de-x__1.aspx"
+
+
+class FakeSearchPage:
+    def __init__(self, cards: list[dict]):
+        self._cards = cards
+        self.goto_calls = []
+
+    def goto(self, url, timeout=None, wait_until=None):
+        self.goto_calls.append(url)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def evaluate(self, script):
+        return self._cards
+
+
+class FakeSearchContext:
+    def __init__(self, page):
+        self._page = page
+        self.closed = False
+
+    def new_page(self):
+        return self._page
+
+    def close(self):
+        self.closed = True
+
+
+def test_search_jobs_builds_the_real_query_url_and_converts_valid_cards(monkeypatch):
+    cards = [
+        {
+            "external_id": "1",
+            "title": "Analista De Dados",
+            "href": "/vaga-de-x__1.aspx",
+            "company": "Empresa",
+            "location": "São Paulo - SP",
+            "snippet": None,
+        },
+        {"external_id": "", "title": None, "href": None, "company": None, "location": None, "snippet": None},
+    ]
+    page = FakeSearchPage(cards)
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplyPlaywright(), FakeSearchContext(page))
+    )
+
+    listings = InfoJobsAdapter().search_jobs("Analista de Dados")
+
+    assert len(listings) == 1
+    assert listings[0].external_id == "1"
+    assert page.goto_calls == ["https://www.infojobs.com.br/empregos.aspx?palabra=Analista+de+Dados&provincia=64"]

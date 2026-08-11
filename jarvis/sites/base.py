@@ -95,6 +95,24 @@ class UpdateResult:
     evidence_path: str | None = None  # screenshot/log captured for the audit trail
 
 
+@dataclass
+class JobListing:
+    """One search result from a site's own job search -- read-only, no
+    relation to the candidate-profile types above. site_name + external_id
+    together are the natural dedupe key across repeated searches; url is
+    always absolute (adapters must resolve any site-relative href before
+    constructing this)."""
+
+    site_name: str
+    external_id: str
+    title: str
+    company: str | None
+    location: str | None
+    url: str
+    snippet: str | None = None
+    salary: str | None = None
+
+
 class SiteAdapter(ABC):
     """One adapter per job site. Implementations live in
     jarvis/sites/<site_name>.py (e.g. jarvis/sites/gupy.py), each backed by

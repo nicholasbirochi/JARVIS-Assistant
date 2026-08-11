@@ -75,17 +75,36 @@ start working immediately afterward -- not yet re-verified, since this
 is a one-time account fix that has to happen on the user's own account,
 not something this code can or should do on the user's behalf (it's a
 genuine career-preference choice, not derivable from resume.json).
+
+Job search (search_jobs(), added 2026-08-11): the real query URL is
+https://www.infojobs.com.br/empregos.aspx?palabra=<query>&provincia=<id>
+-- found by watching where the homepage's own search box navigates to
+after a REAL simulated keystroke sequence (page.type(), not page.fill();
+the #keywordsCombo field silently resets to empty on a plain .fill() +
+click, confirmed live). provincia=64 is São Paulo state, found the same
+way. Listing cards are `div[id^="vacancy"]` (a naive `.js_rowCard`
+selector double-counts every listing -- that class is present on both
+the card and its outer wrapper). Confirmed live and important: InfoJobs'
+own search is loose free-text matching, not filtering -- searching the
+literal target role "Analista de Dados Júnior" returned zero genuinely
+relevant listings (finance/HR/warehouse roles that only share the word
+"Júnior"), while the shorter "Analista de Dados" returned real ones. So
+search_jobs() always queries on the bare keyword, and relevance
+filtering happens locally afterward (jarvis/sites/job_matching.py) --
+never trust the site's own result set as pre-filtered.
 """
 
 from __future__ import annotations
 
 import re
+import urllib.parse
 from typing import Any
 
 from jarvis.resume.schema import Resume
 from jarvis.sites import session
 from jarvis.sites.base import (
     ChangePreview,
+    JobListing,
     SessionStatus,
     SiteAdapter,
     SiteProfileSnapshot,
@@ -96,6 +115,10 @@ from jarvis.sites.base import (
 SITE_NAME = "infojobs"
 
 _EDIT_URL = "https://www.infojobs.com.br/Candidate/CV/insert2.aspx"
+_SEARCH_URL = "https://www.infojobs.com.br/empregos.aspx"
+# São Paulo state -- found live by submitting the homepage's location field
+# with "São Paulo, SP" and reading the resulting query string.
+SAO_PAULO_PROVINCIA_ID = 64
 
 # Only these site_field values have a real, live-verified write path (see
 # module docstring). Anything else in a plan makes apply_changes() refuse
@@ -380,3 +403,79 @@ class InfoJobsAdapter(SiteAdapter):
             return str(path)
         except Exception:
             return None
+
+    def search_jobs(self, query: str, *, province: int | None = SAO_PAULO_PROVINCIA_ID) -> list[JobListing]:
+        """Read-only: runs InfoJobs' own job search and returns whatever it
+        gives back, unfiltered -- callers should run the result through
+        jarvis.sites.job_matching.filter_relevant() before treating it as
+        "matches", since InfoJobs' own search is loose (see module
+        docstring). Never touches apply_changes()'s login-writing machinery
+        -- entirely separate, read-only flow."""
+        from jarvis.config import SITES_HEADLESS
+
+        params = {"palabra": query}
+        if province is not None:
+            params["provincia"] = str(province)
+        url = f"{_SEARCH_URL}?{urllib.parse.urlencode(params)}"
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            page = context.new_page()
+            page.goto(url, timeout=45_000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+            cards = self._extract_listing_cards(page)
+        finally:
+            context.close()
+            p.stop()
+
+        listings = []
+        for card in cards:
+            listing = _card_to_job_listing(card)
+            if listing is not None:
+                listings.append(listing)
+        return listings
+
+    def _extract_listing_cards(self, page) -> list[dict]:
+        """Raw card data, straight off the DOM -- kept as a thin, separate
+        method so _card_to_job_listing()'s conversion/validation logic
+        (below) can be unit-tested without a real page.evaluate() call."""
+        return page.evaluate(
+            """
+            () => Array.from(document.querySelectorAll("div[id^='vacancy']")).map(c => {
+                const title = c.querySelector('.js_vacancyTitle');
+                const link = c.querySelector('a.text-decoration-none[href]');
+                const companySpan = c.querySelector('.text-body a.text-body span.text-nowrap');
+                const locationDiv = c.querySelector('.mb-8');
+                const descDivs = Array.from(c.querySelectorAll('.text-medium'))
+                    .filter(d => !d.classList.contains('small'));
+                return {
+                    external_id: c.id.replace('vacancy', ''),
+                    title: title ? title.textContent.trim() : null,
+                    href: link ? link.getAttribute('href') : null,
+                    company: companySpan ? companySpan.childNodes[0].textContent.trim() : null,
+                    location: locationDiv ? locationDiv.childNodes[0].textContent.trim() : null,
+                    snippet: descDivs.length ? descDivs[descDivs.length - 1].textContent.trim() : null,
+                };
+            })
+            """
+        )
+
+
+def _card_to_job_listing(card: dict) -> JobListing | None:
+    """None for cards that aren't real listings -- confirmed live: a
+    `div[id^="vacancy"]` selector also catches at least one unrelated
+    employer-detail widget with no title/href, which must be dropped
+    rather than turned into a bogus JobListing."""
+    if not card.get("title") or not card.get("href") or not card.get("external_id"):
+        return None
+    href = card["href"]
+    url = href if href.startswith("http") else f"https://www.infojobs.com.br{href}"
+    return JobListing(
+        site_name=SITE_NAME,
+        external_id=card["external_id"],
+        title=card["title"],
+        company=card.get("company"),
+        location=card.get("location"),
+        url=url,
+        snippet=card.get("snippet"),
+    )

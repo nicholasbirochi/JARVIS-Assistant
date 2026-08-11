@@ -1,0 +1,103 @@
+"""Site-agnostic job-search relevance logic -- keyword derivation from the
+résumé and a local relevance filter, kept separate from any one site's
+scraping code so it can be reused across adapters and tested without a
+browser.
+
+Real finding driving why this exists (InfoJobs, live, 2026-08-11): the
+site's own free-text search is loose enough that a literal
+"Analista de Dados Júnior" query returned zero actually-relevant listings
+(finance/HR/warehouse roles matched purely on "Júnior"), while the shorter
+"Analista de Dados" query returned genuinely relevant ones. So a site's own
+search can't be trusted alone -- results still need a local relevance
+check against the résumé before being called a "match"."""
+
+from __future__ import annotations
+
+import re
+
+from jarvis.resume.schema import Resume
+from jarvis.sites.base import JobListing
+
+# Fallback search terms used only when the résumé has no explicit
+# job_preferences.target_roles set -- derived from the "Data Analysis"/
+# "BI & Analytics Tools" skill categories, which is what resume.json
+# actually has today (see jarvis/resume/schema.py's SkillCategory). Kept
+# deliberately short: broad enough to catch real listings (confirmed live),
+# specific enough not to pull in unrelated "Analista" roles.
+_DEFAULT_DATA_ANALYST_TERMS = ["Analista de Dados", "Business Intelligence", "Power BI"]
+
+# Title/snippet signals that the role is above the résumé's actual level
+# (current student, one internship completed + one in progress -- no
+# full-time professional experience yet). Matched case-insensitively as
+# whole-ish tokens, not substrings of unrelated words.
+_SENIOR_EXCLUSION_TERMS = [
+    "pleno",
+    "sênior",
+    "senior",
+    " sr ",
+    " sr.",
+    "especialista",
+    "coordenador",
+    "coordenadora",
+    "gerente",
+    "gerência",
+    "head de",
+    "diretor",
+    "diretora",
+]
+
+
+def derive_search_terms(resume: Resume) -> list[str]:
+    """job_preferences.target_roles, if the user has ever set it, always
+    wins -- it's an explicit statement of intent. Otherwise falls back to
+    a short, data-analysis-specific term list; this fallback is a
+    heuristic, not a general-purpose resume-to-role inference (see module
+    docstring) -- it's only correct for a résumé like this one, whose
+    skills are already data-analysis-flavored."""
+    if resume.job_preferences.target_roles:
+        return list(resume.job_preferences.target_roles)
+    return list(_DEFAULT_DATA_ANALYST_TERMS)
+
+
+def is_relevant_match(title: str, snippet: str | None, keywords: list[str]) -> bool:
+    """True if the listing text actually mentions one of the search
+    keywords' core topic (not just an incidental word overlap like
+    "Júnior") AND doesn't look like a role above the résumé's level.
+
+    Keyword matching: for a multi-word keyword (e.g. "Analista de Dados"),
+    require the LAST word (the most specific term, "dados") to appear --
+    this is what separates real matches from noise, confirmed live: a
+    plain "Analista" match alone pulled in finance/HR/warehouse listings
+    that have nothing to do with data. Matched on a whole-word boundary,
+    not a bare substring -- a short acronym like "BI" (from "Power BI")
+    would otherwise false-positive inside ordinary words like
+    "recebimento" (confirmed live, a real false match before this fix)."""
+    haystack = f"{title} {snippet or ''}".lower()
+
+    if any(term in haystack for term in _SENIOR_EXCLUSION_TERMS):
+        return False
+
+    for keyword in keywords:
+        core_term = keyword.strip().split()[-1].lower()
+        if re.search(rf"\b{re.escape(core_term)}\b", haystack):
+            return True
+    return False
+
+
+def filter_relevant(listings: list[JobListing], keywords: list[str]) -> list[JobListing]:
+    return [listing for listing in listings if is_relevant_match(listing.title, listing.snippet, keywords)]
+
+
+def dedupe(listings: list[JobListing]) -> list[JobListing]:
+    """Keeps first occurrence per (site_name, external_id) -- searching
+    multiple keyword variants against the same site will legitimately
+    return the same real listing more than once."""
+    seen: set[tuple[str, str]] = set()
+    result = []
+    for listing in listings:
+        key = (listing.site_name, listing.external_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(listing)
+    return result
