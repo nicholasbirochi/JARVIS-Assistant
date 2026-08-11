@@ -19,12 +19,19 @@ from jarvis.resume.schema import Resume
 from jarvis.sites.base import JobListing
 
 # Fallback search terms used only when the résumé has no explicit
-# job_preferences.target_roles set -- derived from the "Data Analysis"/
-# "BI & Analytics Tools" skill categories, which is what resume.json
-# actually has today (see jarvis/resume/schema.py's SkillCategory). Kept
-# deliberately short: broad enough to catch real listings (confirmed live),
-# specific enough not to pull in unrelated "Analista" roles.
-_DEFAULT_DATA_ANALYST_TERMS = ["Analista de Dados", "Business Intelligence", "Power BI"]
+# job_preferences.target_roles set -- derived from the "Programming"/
+# "Data Analysis"/"BI & Analytics Tools" skill categories, which is what
+# resume.json actually has today (see jarvis/resume/schema.py's
+# SkillCategory). Widened 2026-08-11 at the user's explicit request to
+# not search BI/Power BI tooling alone -- "Python"/"SQL" added so roles
+# that use those without ever saying "BI" also surface (e.g. a listing
+# titled "Analista de Dados" that only mentions Python/SQL in the body).
+# core_term matching in is_relevant_match() still requires the listing to
+# actually mention the term, so a bare "Python" search doesn't turn into
+# an unfiltered firehose of unrelated backend-dev roles -- see that
+# function's docstring for how the senior-exclusion filter still applies
+# regardless of which term matched.
+_DEFAULT_DATA_ANALYST_TERMS = ["Analista de Dados", "Business Intelligence", "Power BI", "Python", "SQL"]
 
 # Title/snippet signals that the role is above the résumé's actual level
 # (current student, one internship completed + one in progress -- no
@@ -149,6 +156,51 @@ def rank_junior_first(listings: list[JobListing]) -> list[JobListing]:
     -- relative order within each group is preserved, so a site's own
     "Relevantes" ranking still matters as the tiebreaker."""
     return sorted(listings, key=lambda listing: not has_junior_signal(listing.title, listing.snippet))
+
+
+# "home office pra gringa" (2026-08-11): fully-remote roles, typically at
+# LatAm-staffing companies serving international clients (BairesDev is a
+# real, recurring example already seen live in Catho results, titled
+# "Trabalhe de Casa"/"Work From Home" in mixed PT/EN). Two separate
+# signals rather than one: REMOTE_TERMS alone just means "not commuting
+# anywhere" (could easily be a normal Brazilian company's WFH policy);
+# INTERNATIONAL_TERMS (foreign currency, "global"/"international" framing)
+# is what actually suggests "pra gringa" specifically, so listings get
+# tagged differently depending on which signals are present rather than
+# guessing "remote" always means "international".
+_REMOTE_TERMS = [
+    "100% remoto",
+    "totalmente remoto",
+    "remoto",
+    "home office",
+    "trabalhe de casa",
+    "work from home",
+    "remote",
+]
+_INTERNATIONAL_TERMS = [
+    "us$",
+    "usd",
+    "dólar",
+    "dolar",
+    "international",
+    "internacional",
+    "global",
+    "worldwide",
+]
+
+
+def is_remote(title: str, snippet: str | None, location: str | None = None) -> bool:
+    haystack = f"{title} {snippet or ''} {location or ''}".lower()
+    return any(term in haystack for term in _REMOTE_TERMS)
+
+
+def has_international_signal(title: str, snippet: str | None) -> bool:
+    haystack = f"{title} {snippet or ''}".lower()
+    return any(term in haystack for term in _INTERNATIONAL_TERMS)
+
+
+def filter_remote(listings: list[JobListing]) -> list[JobListing]:
+    return [listing for listing in listings if is_remote(listing.title, listing.snippet, listing.location)]
 
 
 def is_in_target_region(location: str | None, region_terms: list[str] = _TARGET_REGION_TERMS) -> bool:

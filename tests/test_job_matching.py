@@ -5,9 +5,12 @@ from jarvis.sites.job_matching import (
     derive_search_terms,
     filter_by_location,
     filter_relevant,
+    filter_remote,
+    has_international_signal,
     has_junior_signal,
     is_in_target_region,
     is_relevant_match,
+    is_remote,
     rank_junior_first,
 )
 
@@ -135,6 +138,36 @@ def test_filter_by_location_keeps_only_nearby_listings():
     listings[1].location = "Piracicaba - SP"
 
     result = filter_by_location(listings)
+
+    assert [listing.external_id for listing in result] == ["1"]
+
+
+def test_is_remote_true_for_common_phrasings():
+    assert is_remote("Analista de Dados", "100% Remoto, home office", None)
+    assert is_remote("Work From Home Business Intelligence", None, None)
+    assert is_remote("Analista de Dados", None, "Remoto")
+
+
+def test_is_remote_false_without_a_remote_signal():
+    assert not is_remote("Analista de Dados", "Presencial, São Paulo", "São Paulo - SP")
+
+
+def test_has_international_signal_true_for_foreign_currency_or_framing():
+    assert has_international_signal("Analista de Dados", "Salário em USD, cliente internacional")
+    assert has_international_signal("Data Analyst", "Global team, worldwide clients")
+
+
+def test_has_international_signal_false_for_a_plain_local_listing():
+    assert not has_international_signal("Analista de Dados", "Salário R$ 4.000, CLT")
+
+
+def test_filter_remote_keeps_only_remote_listings():
+    listings = [
+        make_listing("1", "Analista De Dados", snippet="100% remoto"),
+        make_listing("2", "Analista De BI", snippet="Presencial"),
+    ]
+
+    result = filter_remote(listings)
 
     assert [listing.external_id for listing in result] == ["1"]
 
