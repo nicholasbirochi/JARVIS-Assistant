@@ -13,7 +13,9 @@ docstring); `catho-login` / `catho-preview` / `catho-apply` drive Catho
 (jarvis/sites/catho.py); `infojobs-login` / `infojobs-preview` /
 `infojobs-apply` drive InfoJobs (jarvis/sites/infojobs.py);
 `indeed-login` / `indeed-preview` / `indeed-apply` drive Indeed
-(jarvis/sites/indeed.py)."""
+(jarvis/sites/indeed.py); `linkedin-login` opens LinkedIn for manual login
+(jarvis/sites/linkedin.py, search_jobs() only -- profile editing is
+permanently out of scope there, so there's no linkedin-preview/-apply)."""
 
 from __future__ import annotations
 
@@ -144,6 +146,9 @@ def main() -> None:
     subparsers.add_parser(
         "indeed-apply", help="Aplica de verdade as mudanças no perfil do Indeed, após confirmação explícita."
     )
+    subparsers.add_parser(
+        "linkedin-login", help="Abre um navegador para login manual (uma vez só) no LinkedIn (só busca de vagas)."
+    )
     args = parser.parse_args()
 
     if args.command == "index":
@@ -223,6 +228,12 @@ def main() -> None:
 
     if args.command in ("indeed-preview", "indeed-apply"):
         _run_indeed(apply_changes=args.command == "indeed-apply")
+        return
+
+    if args.command == "linkedin-login":
+        from jarvis.sites.linkedin import LinkedInAdapter
+
+        LinkedInAdapter().login()
         return
 
     from jarvis.assistant.conversation import run_text_loop, run_voice_loop

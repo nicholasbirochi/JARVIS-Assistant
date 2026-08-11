@@ -46,6 +46,24 @@ _SENIOR_EXCLUSION_TERMS = [
     "diretora",
 ]
 
+# Explicit junior/entry-level signals -- deliberately NOT folded into the
+# search query itself (see module docstring: combining "Júnior" into the
+# InfoJobs query made results worse, not better). Used only for local
+# tagging/sorting after the fact.
+_JUNIOR_SIGNAL_TERMS = [
+    "júnior",
+    "junior",
+    " jr ",
+    " jr)",
+    " jr.",
+    " jr-",
+    "estágio",
+    "estagiário",
+    "estagiária",
+    "trainee",
+    "aprendiz",
+]
+
 
 def derive_search_terms(resume: Resume) -> list[str]:
     """job_preferences.target_roles, if the user has ever set it, always
@@ -86,6 +104,23 @@ def is_relevant_match(title: str, snippet: str | None, keywords: list[str]) -> b
 
 def filter_relevant(listings: list[JobListing], keywords: list[str]) -> list[JobListing]:
     return [listing for listing in listings if is_relevant_match(listing.title, listing.snippet, keywords)]
+
+
+def has_junior_signal(title: str, snippet: str | None) -> bool:
+    """True if the listing explicitly says júnior/jr/estágio/trainee/
+    aprendiz. False doesn't mean "not junior" -- plenty of real entry-level
+    postings never state a level at all -- it just means the signal isn't
+    there to sort on."""
+    haystack = f"{title} {snippet or ''}".lower()
+    return any(term in haystack for term in _JUNIOR_SIGNAL_TERMS)
+
+
+def rank_junior_first(listings: list[JobListing]) -> list[JobListing]:
+    """Stable sort: listings with an explicit junior/estágio/trainee signal
+    first, everything else (already senior-filtered, just unlabeled) after
+    -- relative order within each group is preserved, so a site's own
+    "Relevantes" ranking still matters as the tiebreaker."""
+    return sorted(listings, key=lambda listing: not has_junior_signal(listing.title, listing.snippet))
 
 
 def dedupe(listings: list[JobListing]) -> list[JobListing]:

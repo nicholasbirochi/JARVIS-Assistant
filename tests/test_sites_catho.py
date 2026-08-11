@@ -1,8 +1,9 @@
 import pytest
 
 from jarvis import config
+from jarvis.sites import session
 from jarvis.sites.base import SessionStatus
-from jarvis.sites.catho import CathoAdapter, _is_authenticated
+from jarvis.sites.catho import CathoAdapter, _card_to_job_listing, _is_authenticated, _slugify
 
 
 class FakeAuthPage:
@@ -98,3 +99,120 @@ def test_profile_methods_raise_not_implemented_until_the_real_site_is_inspected(
         adapter.preview_changes(plan=None)
     with pytest.raises(NotImplementedError):
         adapter.apply_changes(plan=None, confirmed=True)
+
+
+def test_slugify():
+    # Verified live: these exact slugs return real, correctly-titled Catho
+    # search-results pages.
+    assert _slugify("Analista de Dados") == "analista-de-dados"
+    assert _slugify("Business Intelligence") == "business-intelligence"
+    assert _slugify("Power BI") == "power-bi"
+    assert _slugify("Análise de Dados Júnior") == "analise-de-dados-junior"
+
+
+def test_card_to_job_listing_converts_a_real_shaped_card():
+    card = {
+        "external_id": "37907324",
+        "title": "Analista de Banco de Dados",
+        "href": "/vagas/analista-de-banco-de-dados/37907324",
+        "company": "LUANDRE SERVICOS TEMPORARIOS LTDA. (C-I)",
+        "location": "4 vagas - Piracicaba",
+    }
+
+    listing = _card_to_job_listing(card)
+
+    assert listing.site_name == "catho"
+    assert listing.external_id == "37907324"
+    assert listing.url == "https://www.catho.com.br/vagas/analista-de-banco-de-dados/37907324"
+    assert listing.company == "LUANDRE SERVICOS TEMPORARIOS LTDA. (C-I)"
+
+
+def test_card_to_job_listing_none_for_a_card_missing_title_or_href():
+    assert _card_to_job_listing({"external_id": "1", "title": None, "href": "/x"}) is None
+    assert _card_to_job_listing({"external_id": "1", "title": "X", "href": None}) is None
+    assert _card_to_job_listing({"external_id": None, "title": "X", "href": "/x"}) is None
+
+
+class FakeConsentButton:
+    def __init__(self, visible: bool):
+        self._visible = visible
+        self.clicked = False
+
+    def is_visible(self):
+        return self._visible
+
+    def click(self):
+        self.clicked = True
+
+
+class FakeSearchPage:
+    def __init__(self, cards: list[dict], *, consent_button: FakeConsentButton | None = None):
+        self._cards = cards
+        self.consent_button = consent_button
+        self.goto_calls = []
+
+    def goto(self, url, timeout=None, wait_until=None):
+        self.goto_calls.append(url)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def query_selector(self, selector):
+        if selector == "button.acceptAll":
+            return self.consent_button
+        return None
+
+    def evaluate(self, script):
+        return self._cards
+
+
+class FakeSearchContext:
+    def __init__(self, page):
+        self._page = page
+        self.closed = False
+
+    def new_page(self):
+        return self._page
+
+    def close(self):
+        self.closed = True
+
+
+class FakeSearchPlaywright:
+    def stop(self):
+        pass
+
+
+def test_search_jobs_builds_the_real_slug_url_and_converts_valid_cards(monkeypatch):
+    cards = [
+        {
+            "external_id": "1",
+            "title": "Analista de Dados",
+            "href": "/vagas/analista-de-dados/1",
+            "company": "Empresa",
+            "location": "São Paulo",
+        },
+        {"external_id": None, "title": None, "href": None, "company": None, "location": None},
+    ]
+    page = FakeSearchPage(cards, consent_button=FakeConsentButton(visible=True))
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
+    )
+
+    listings = CathoAdapter().search_jobs("Analista de Dados")
+
+    assert len(listings) == 1
+    assert listings[0].external_id == "1"
+    assert page.goto_calls == ["https://www.catho.com.br/vagas/analista-de-dados/"]
+    assert page.consent_button.clicked is True
+
+
+def test_search_jobs_skips_consent_click_when_banner_not_present(monkeypatch):
+    page = FakeSearchPage([], consent_button=None)
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
+    )
+
+    listings = CathoAdapter().search_jobs("Analista de Dados")
+
+    assert listings == []

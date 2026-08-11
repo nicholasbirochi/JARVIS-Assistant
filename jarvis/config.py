@@ -230,6 +230,16 @@ INFOJOBS_LOGIN_URL = "https://login.infojobs.com.br/Account/Login"
 # (confirmed live) -- indeed.py hardcodes headless=False for that reason,
 # same as catho.py.
 INDEED_LOGIN_URL = "https://secure.indeed.com/auth?hl=pt_BR&co=BR&continue=https%3A%2F%2Fbr.indeed.com%2F"
+# LinkedIn -- explicitly kept OUT of apply_changes/profile-editing per
+# jarvis/sites/base.py's own module docstring (real, well-documented
+# account-restriction risk from aggressive anti-automation, and the user
+# already handles LinkedIn profile updates manually themselves). Only
+# read-only search_jobs() is in scope here, revisited 2026-08-11 at the
+# user's explicit request, after confirming they understand the risk.
+# Login is a real, isolated Playwright profile (same pattern as every
+# other adapter here) -- NOT the user's real daily-driver browser, which
+# Playwright has no way to read cookies/sessions from anyway.
+LINKEDIN_LOGIN_URL = "https://www.linkedin.com/login"
 # Headless by default so a normal `preview`/`apply` run doesn't pop a window;
 # `login` always forces headed regardless, since it needs a human present.
 SITES_HEADLESS = os.environ.get("SITES_HEADLESS", "true").lower() != "false"

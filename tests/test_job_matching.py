@@ -1,6 +1,13 @@
 from jarvis.resume.schema import Bilingual, JobPreferences, PersonalInfo, Resume
 from jarvis.sites.base import JobListing
-from jarvis.sites.job_matching import dedupe, derive_search_terms, filter_relevant, is_relevant_match
+from jarvis.sites.job_matching import (
+    dedupe,
+    derive_search_terms,
+    filter_relevant,
+    has_junior_signal,
+    is_relevant_match,
+    rank_junior_first,
+)
 
 
 def make_resume(**job_preferences_overrides) -> Resume:
@@ -83,3 +90,27 @@ def test_dedupe_keeps_first_occurrence_per_site_and_id():
     result = dedupe(listings)
 
     assert [listing.external_id for listing in result] == ["1", "2"]
+
+
+def test_has_junior_signal_true_for_explicit_level_words():
+    assert has_junior_signal("Analista De Dados Júnior", None)
+    assert has_junior_signal("Analista De Dados Jr", None)
+    assert has_junior_signal("Estagiário De BI", None)
+    assert has_junior_signal("Programa Trainee 2026", None)
+
+
+def test_has_junior_signal_false_when_level_is_unstated():
+    assert not has_junior_signal("Analista De Dados", "Trabalhe com Python e SQL")
+
+
+def test_rank_junior_first_moves_explicit_junior_signals_to_the_front():
+    listings = [
+        make_listing("1", "Analista De Dados"),  # unspecified level
+        make_listing("2", "Analista De Dados Júnior"),
+        make_listing("3", "Analista De BI"),  # unspecified level
+        make_listing("4", "Estagiário De Dados"),
+    ]
+
+    result = rank_junior_first(listings)
+
+    assert [listing.external_id for listing in result] == ["2", "4", "1", "3"]

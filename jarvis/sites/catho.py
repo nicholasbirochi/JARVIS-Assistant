@@ -19,14 +19,32 @@ selectors, the actual save mechanism -- is intentionally NOT filled in
 yet, same reasoning as Gupy/Vagas.com originally: no way to find those
 without an authenticated session, so they get discovered and verified
 live rather than guessed.
-"""
+
+Job search (search_jobs(), added 2026-08-11): unlike profile editing,
+Catho's job search needs NO login at all -- confirmed live, a plain
+unauthenticated context browses results fine. Real URL pattern:
+https://www.catho.com.br/vagas/<slug>/ where <slug> is the query
+lowercased, accents stripped, non-alphanumerics collapsed to hyphens
+(found by watching where the homepage's own search box navigates to,
+same method as InfoJobs). A first-visit LGPD cookie-consent overlay
+(`#lgpd-consent-widget`) blocks clicks on anything behind it until
+dismissed via `button.acceptAll` -- confirmed live, not present on every
+navigation (cookie-gated), so dismissal is conditional. Listing cards are
+real `<article>` elements with clean, already-structured selectors
+(`h2.title_offer a` for title/link, `p.mb-2 span.text-12` for company,
+a `<p>` containing `.i_job_location` for the location text) -- no
+truncated-snippet or double-counted-selector issues like InfoJobs had."""
 
 from __future__ import annotations
+
+import re
+import unicodedata
 
 from jarvis.resume.schema import Resume
 from jarvis.sites import session
 from jarvis.sites.base import (
     ChangePreview,
+    JobListing,
     SessionStatus,
     SiteAdapter,
     SiteProfileSnapshot,
@@ -35,6 +53,12 @@ from jarvis.sites.base import (
 )
 
 SITE_NAME = "catho"
+
+
+def _slugify(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", normalized.lower()).strip("-")
+    return slug
 
 
 def _is_authenticated(context) -> bool:
@@ -92,3 +116,70 @@ class CathoAdapter(SiteAdapter):
 
     def apply_changes(self, plan: UpdatePlan, confirmed: bool) -> UpdateResult:
         raise NotImplementedError("Ainda não implementado -- ver inspect_current_profile().")
+
+    def search_jobs(self, query: str) -> list[JobListing]:
+        """Read-only, no login required (see module docstring) -- goes
+        through session.open_context() anyway, same as every other
+        adapter, even though there's no saved state to load for Catho
+        search specifically; keeps this testable/consistent the same way
+        as apply_changes() rather than a one-off raw Playwright call.
+        headless=False, matching this file's confirmed 403-on-headless
+        constraint everywhere else."""
+        url = f"https://www.catho.com.br/vagas/{_slugify(query)}/"
+
+        p, context = session.open_context(self.site_name, headless=False)
+        try:
+            page = context.new_page()
+            page.goto(url, timeout=45_000, wait_until="domcontentloaded")
+            page.wait_for_timeout(2500)
+            consent_btn = page.query_selector("button.acceptAll")
+            if consent_btn is not None and consent_btn.is_visible():
+                consent_btn.click()
+                page.wait_for_timeout(500)
+            cards = self._extract_listing_cards(page)
+        finally:
+            context.close()
+            p.stop()
+
+        listings = []
+        for card in cards:
+            listing = _card_to_job_listing(card)
+            if listing is not None:
+                listings.append(listing)
+        return listings
+
+    def _extract_listing_cards(self, page) -> list[dict]:
+        """Raw card data, straight off the DOM -- kept as a thin, separate
+        method so _card_to_job_listing()'s conversion/validation logic
+        (below) can be unit-tested without a real page.evaluate() call."""
+        return page.evaluate(
+            """
+            () => Array.from(document.querySelectorAll('article')).map(c => {
+                const a = c.querySelector('h2.title_offer a');
+                const company = c.querySelector('p.mb-2 span.text-12');
+                const locP = Array.from(c.querySelectorAll('p')).find(p => p.querySelector('.i_job_location'));
+                return {
+                    external_id: a ? (a.getAttribute('href') || '').split('/').filter(Boolean).pop() : null,
+                    title: a ? a.textContent.trim() : null,
+                    href: a ? a.getAttribute('href') : null,
+                    company: company ? company.textContent.trim() : null,
+                    location: locP ? locP.textContent.trim().replace(/\\s+/g, ' ') : null,
+                };
+            })
+            """
+        )
+
+
+def _card_to_job_listing(card: dict) -> JobListing | None:
+    if not card.get("title") or not card.get("href") or not card.get("external_id"):
+        return None
+    href = card["href"]
+    url = href if href.startswith("http") else f"https://www.catho.com.br{href}"
+    return JobListing(
+        site_name=SITE_NAME,
+        external_id=card["external_id"],
+        title=card["title"],
+        company=card.get("company"),
+        location=card.get("location"),
+        url=url,
+    )
