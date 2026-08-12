@@ -239,15 +239,45 @@ def _publish_jobs_chart(report) -> None:
 
 
 def _publish_finance_chart(snapshot) -> None:
-    """Pushes a live bar chart (patrimônio por conta) to the HUD --
-    best-effort, see _publish_jobs_chart's docstring for why."""
+    """Pushes live charts (patrimônio por conta, maiores despesas, salário
+    por mês) to the HUD -- best-effort, see _publish_jobs_chart's
+    docstring for why."""
     try:
-        from jarvis.finance import format_brl
+        from jarvis.finance import expenses_by_category, format_brl, format_month, salary_by_month
         from jarvis.visualizer import state as visualizer_state
 
-        bars = [{"label": b.bank, "value": round(b.total_brl, 2)} for b in snapshot.banks]
+        sections = []
+        if snapshot.banks:
+            sections.append(
+                {
+                    "type": "bar",
+                    "title": "Por conta",
+                    "bars": [{"label": b.bank, "value": round(b.total_brl, 2)} for b in snapshot.banks],
+                }
+            )
+        top_expenses = expenses_by_category(snapshot, top_n=5)
+        if top_expenses:
+            sections.append(
+                {
+                    "type": "bar",
+                    "title": "Maiores despesas",
+                    "bars": [{"label": kind, "value": round(total, 2)} for kind, total in top_expenses],
+                }
+            )
+        salary_trend = salary_by_month(snapshot)
+        if len(salary_trend) >= 2:
+            sections.append(
+                {
+                    "type": "line",
+                    "title": "Salário por mês",
+                    "points": [
+                        {"label": format_month(when), "value": round(amount, 2)} for when, amount in salary_trend
+                    ],
+                }
+            )
+
         title = f"Patrimônio: R$ {format_brl(snapshot.final_money)}" if snapshot.final_money is not None else "Patrimônio"
-        visualizer_state.publish_data("finance", {"title": title, "bars": bars})
+        visualizer_state.publish_data("finance", {"title": title, "sections": sections})
     except Exception:
         pass
 

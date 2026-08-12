@@ -117,8 +117,8 @@
     top: 50%;
     right: 4%;
     transform: translateY(-50%);
-    width: min(300px, 26vw);
-    max-height: 74vh;
+    width: min(320px, 28vw);
+    max-height: 82vh;
     overflow-y: auto;
     opacity: 0;
     pointer-events: none;
@@ -127,7 +127,22 @@
     scrollbar-color: rgba(127,227,255,0.35) transparent;
   }
   #chart-panel.visible { opacity: 1; pointer-events: auto; }
-  #chart-canvas {
+  .chart-panel-title {
+    font: 600 14px "SF Mono", Menlo, monospace;
+    color: #cdeeff;
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .chart-section + .chart-section { margin-top: 22px; }
+  .chart-section-title {
+    font: 11px "SF Mono", Menlo, monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .chart-canvas {
     /* The bare `canvas` rule above (position: absolute; inset: 0) is
        written for #orb inside its own positioned #stage -- it also
        matches this element by tag, which silently pulled it out of
@@ -138,7 +153,7 @@
     position: static;
     display: block;
     width: 100%;
-    height: 260px;
+    height: 170px;
   }
 
   #clock {
@@ -170,7 +185,7 @@
     <div id="status">Desligado</div>
   </div>
   <div id="transcript-wrap"><div id="transcript"></div></div>
-  <div id="chart-panel"><canvas id="chart-canvas"></canvas></div>
+  <div id="chart-panel"></div>
 
 <script>
 const canvas = document.getElementById("orb");
@@ -387,14 +402,17 @@ function setState(newState, text) {
 
 // Real-time charts/analyses (jarvis/finance.py, jarvis/job_search.py) --
 // a second, independent event type on the same SSE stream (see
-// jarvis/visualizer/state.py's DataEvent). Rendered as a plain Canvas 2D
-// bar chart, same "no new dependency" approach as the sphere above. Lives
+// jarvis/visualizer/state.py's DataEvent). Rendered as plain Canvas 2D
+// charts, same "no new dependency" approach as the sphere above. Lives
 // in its own side panel (#chart-panel), and only ever shown once the
 // window is genuinely maximized/enlarged -- the default small window has
 // no real room for a legible chart beside the sphere.
+//
+// Payload shape: {title, sections: [{type: "bar"|"line", title, bars: [{label,
+// value}]} | {type: "line", title, points: [{label, value}]}]}. A plain
+// {title, bars: [...]} (no "sections") is also accepted as a single
+// implicit bar section, for a simpler caller that only ever has one chart.
 const chartPanel = document.getElementById("chart-panel");
-const chartCanvas = document.getElementById("chart-canvas");
-const chartCtx = chartCanvas.getContext("2d");
 let currentChart = null; // last-received payload, kept even while hidden -- a later resize-up can still reveal it
 const MAXIMIZED_WIDTH_THRESHOLD = 900;
 
@@ -418,25 +436,56 @@ function updateChartVisibility() {
 
 function drawChart() {
   if (!currentChart) return;
-  const cdpr = Math.max(1, window.devicePixelRatio || 1);
-  const rect = chartCanvas.getBoundingClientRect();
-  chartCanvas.width = rect.width * cdpr;
-  chartCanvas.height = rect.height * cdpr;
-  const w = chartCanvas.width, h = chartCanvas.height;
-  chartCtx.clearRect(0, 0, w, h);
+  chartPanel.innerHTML = ""; // rebuilt from scratch each time -- simplest way to handle a varying section count
 
-  const bars = currentChart.bars || [];
-  let top = 6 * cdpr;
   if (currentChart.title) {
-    chartCtx.fillStyle = "#cdeeff";
-    chartCtx.font = `600 ${13 * cdpr}px "SF Mono", Menlo, monospace`;
-    chartCtx.textAlign = "center";
-    chartCtx.fillText(currentChart.title, w / 2, top + 12 * cdpr);
-    top += 26 * cdpr;
+    const titleEl = document.createElement("div");
+    titleEl.className = "chart-panel-title";
+    titleEl.textContent = currentChart.title;
+    chartPanel.appendChild(titleEl);
   }
+
+  const sections = currentChart.sections || (currentChart.bars ? [{ type: "bar", bars: currentChart.bars }] : []);
+  const cdpr = Math.max(1, window.devicePixelRatio || 1);
+
+  for (const section of sections) {
+    const wrap = document.createElement("div");
+    wrap.className = "chart-section";
+    if (section.title) {
+      const sTitle = document.createElement("div");
+      sTitle.className = "chart-section-title";
+      sTitle.textContent = section.title;
+      wrap.appendChild(sTitle);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.className = "chart-canvas";
+    wrap.appendChild(canvas);
+    chartPanel.appendChild(wrap);
+
+    // One frame's delay so the canvas has already taken on its real
+    // layout size (percentage/CSS height) before getBoundingClientRect()
+    // is read -- querying it synchronously right after insertion is fine
+    // in practice, but this is the safer, always-correct order.
+    requestAnimationFrame(() => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * cdpr;
+      canvas.height = rect.height * cdpr;
+      const ctx = canvas.getContext("2d");
+      if (section.type === "line") {
+        drawLineChart(ctx, canvas.width, canvas.height, section.points || [], cdpr);
+      } else {
+        drawBarChart(ctx, canvas.width, canvas.height, section.bars || [], cdpr);
+      }
+    });
+  }
+}
+
+function drawBarChart(ctx, w, h, bars, cdpr) {
+  ctx.clearRect(0, 0, w, h);
   if (!bars.length) return;
 
-  const bottomLabels = 22 * cdpr;
+  const top = 14 * cdpr;
+  const bottomLabels = 24 * cdpr;
   const barAreaHeight = Math.max(10, h - top - bottomLabels);
   const maxVal = Math.max(1, ...bars.map((b) => b.value || 0));
   const gap = w / (bars.length * 4);
@@ -449,24 +498,96 @@ function drawChart() {
     const barHeight = (val / maxVal) * barAreaHeight;
     const x = xOffset + gap + i * (barWidth + gap);
     const y = top + (barAreaHeight - barHeight);
-    const grad = chartCtx.createLinearGradient(0, y, 0, y + barHeight);
+    const grad = ctx.createLinearGradient(0, y, 0, y + barHeight);
     grad.addColorStop(0, "rgba(127,227,255,0.9)");
     grad.addColorStop(1, "rgba(47,182,232,0.35)");
-    chartCtx.fillStyle = grad;
-    chartCtx.fillRect(x, y, barWidth, Math.max(1, barHeight));
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, y, barWidth, Math.max(1, barHeight));
 
-    chartCtx.fillStyle = "#7fe3ff";
-    chartCtx.font = `${10 * cdpr}px "SF Mono", Menlo, monospace`;
-    chartCtx.textAlign = "center";
-    chartCtx.fillText(formatChartValue(val), x + barWidth / 2, Math.max(top, y - 4 * cdpr));
+    ctx.fillStyle = "#7fe3ff";
+    ctx.font = `${10 * cdpr}px "SF Mono", Menlo, monospace`;
+    ctx.textAlign = "center";
+    ctx.fillText(formatChartValue(val), x + barWidth / 2, Math.max(top + 8 * cdpr, y - 4 * cdpr));
 
-    chartCtx.fillStyle = "#a9d8ee";
-    chartCtx.font = `${9 * cdpr}px "SF Mono", Menlo, monospace`;
-    wrapLabel(b.label || "", x + barWidth / 2, top + barAreaHeight + 12 * cdpr, barWidth + gap, cdpr);
+    ctx.fillStyle = "#a9d8ee";
+    ctx.font = `${9 * cdpr}px "SF Mono", Menlo, monospace`;
+    wrapLabel(ctx, b.label || "", x + barWidth / 2, top + barAreaHeight + 12 * cdpr, barWidth + gap, cdpr);
   });
 }
 
-function wrapLabel(text, cx, cy, maxWidth, cdpr) {
+function drawLineChart(ctx, w, h, points, cdpr) {
+  ctx.clearRect(0, 0, w, h);
+  if (points.length < 2) {
+    if (points.length === 1) drawBarChart(ctx, w, h, points, cdpr); // not enough for a trend line -- one bar still says something
+    return;
+  }
+
+  const top = 16 * cdpr;
+  const bottomLabels = 22 * cdpr;
+  const plotHeight = Math.max(10, h - top - bottomLabels);
+  const sidePad = 10 * cdpr;
+  const plotWidth = w - sidePad * 2;
+  const values = points.map((p) => p.value || 0);
+  const maxVal = Math.max(...values, 1);
+  const minVal = Math.min(...values, 0);
+  const range = Math.max(1, maxVal - minVal);
+  const stepX = plotWidth / (points.length - 1);
+
+  const coords = points.map((p, i) => ({
+    x: sidePad + i * stepX,
+    y: top + plotHeight - ((((p.value || 0) - minVal) / range) * plotHeight),
+    value: p.value || 0,
+    label: p.label || "",
+  }));
+
+  // Soft fill under the line, then the line itself, then endpoint dots --
+  // same visual language (glow, gradient) as the bars for a consistent feel.
+  ctx.beginPath();
+  ctx.moveTo(coords[0].x, top + plotHeight);
+  for (const c of coords) ctx.lineTo(c.x, c.y);
+  ctx.lineTo(coords[coords.length - 1].x, top + plotHeight);
+  ctx.closePath();
+  const fillGrad = ctx.createLinearGradient(0, top, 0, top + plotHeight);
+  fillGrad.addColorStop(0, "rgba(127,227,255,0.28)");
+  fillGrad.addColorStop(1, "rgba(127,227,255,0.02)");
+  ctx.fillStyle = fillGrad;
+  ctx.fill();
+
+  ctx.beginPath();
+  coords.forEach((c, i) => (i === 0 ? ctx.moveTo(c.x, c.y) : ctx.lineTo(c.x, c.y)));
+  ctx.strokeStyle = "rgba(127,227,255,0.9)";
+  ctx.lineWidth = 1.6 * cdpr;
+  ctx.stroke();
+
+  ctx.fillStyle = "#7fe3ff";
+  coords.forEach((c) => {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 2 * cdpr, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Endpoint value + a handful of x-axis labels (every point would
+  // overlap on a typical month-by-month series) -- first, middle, last.
+  // The first/last labels are edge- rather than center-aligned so they
+  // don't clip past the canvas's own left/right edge (a canvas simply
+  // doesn't render anything drawn outside its own pixel bounds).
+  ctx.font = `${9 * cdpr}px "SF Mono", Menlo, monospace`;
+  ctx.fillStyle = "#a9d8ee";
+  const midIdx = Math.floor((coords.length - 1) / 2);
+  ctx.textAlign = "left";
+  ctx.fillText(coords[0].label, coords[0].x, top + plotHeight + 12 * cdpr);
+  if (midIdx !== 0 && midIdx !== coords.length - 1) {
+    ctx.textAlign = "center";
+    ctx.fillText(coords[midIdx].label, coords[midIdx].x, top + plotHeight + 12 * cdpr);
+  }
+  ctx.textAlign = "right";
+  ctx.fillText(coords[coords.length - 1].label, coords[coords.length - 1].x, top + plotHeight + 12 * cdpr);
+
+  ctx.fillStyle = "#cdeeff";
+  ctx.fillText(formatChartValue(coords[coords.length - 1].value), coords[coords.length - 1].x, top - 4 * cdpr);
+}
+
+function wrapLabel(ctx, text, cx, cy, maxWidth, cdpr) {
   // Labels here are short (site names, bank names) but occasionally wrap
   // to two lines rather than overflowing into the next bar.
   const words = text.split(" ");
@@ -474,7 +595,7 @@ function wrapLabel(text, cx, cy, maxWidth, cdpr) {
   const lines = [];
   for (const word of words) {
     const test = line ? `${line} ${word}` : word;
-    if (chartCtx.measureText(test).width > maxWidth && line) {
+    if (ctx.measureText(test).width > maxWidth && line) {
       lines.push(line);
       line = word;
     } else {
@@ -482,7 +603,7 @@ function wrapLabel(text, cx, cy, maxWidth, cdpr) {
     }
   }
   if (line) lines.push(line);
-  lines.slice(0, 2).forEach((l, i) => chartCtx.fillText(l, cx, cy + i * 10 * cdpr));
+  lines.slice(0, 2).forEach((l, i) => ctx.fillText(l, cx, cy + i * 10 * cdpr));
 }
 
 function formatChartValue(v) {

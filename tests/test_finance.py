@@ -3,7 +3,7 @@ from datetime import datetime
 import openpyxl
 import pytest
 
-from jarvis.finance import expenses_by_category, load_snapshot, summarize_finances
+from jarvis.finance import expenses_by_category, format_month, load_snapshot, salary_by_month, summarize_finances
 
 
 def _build_workbook(path):
@@ -32,6 +32,9 @@ def _build_workbook(path):
 
     # A second income-only row, no expense/bank data on it.
     ws.append(["Salário", 1100.0, datetime(2026, 2, 1), None, None, None, None])
+    # A one-off, non-Salário income entry -- must be excluded from the
+    # salary trend (it would make the line noisy, not informative).
+    ws.append(["Reembolso", 500.0, datetime(2026, 2, 15), None, None, None, None])
     # A future, unfilled income row -- must be excluded (Dinheiro is empty).
     ws.append(["Salário", None, datetime(2026, 3, 1), None, None, None, None])
 
@@ -52,10 +55,11 @@ def workbook_path(tmp_path):
 def test_load_snapshot_parses_income_excluding_future_empty_rows(workbook_path):
     snapshot = load_snapshot(workbook_path)
 
-    assert len(snapshot.income) == 2  # not the 3rd, empty-amount row
+    assert len(snapshot.income) == 3  # not the 4th, empty-amount row
     assert snapshot.income[0].kind == "Salário"
     assert snapshot.income[0].amount == 1000.0
     assert snapshot.income[1].amount == 1100.0
+    assert snapshot.income[2].kind == "Reembolso"
 
 
 def test_load_snapshot_expense_total_multiplies_by_quantity(workbook_path):
@@ -106,3 +110,17 @@ def test_summarize_finances_mentions_total_and_banks(workbook_path):
     assert "Inter BR" in text
     assert "Inter US" in text
     assert "Academia" in text
+
+
+def test_format_month_uses_portuguese_abbreviations():
+    assert format_month(datetime(2026, 2, 1)) == "fev/26"
+    assert format_month(datetime(2025, 12, 15)) == "dez/25"
+
+
+def test_salary_by_month_excludes_non_salary_income_and_sorts_chronologically(workbook_path):
+    snapshot = load_snapshot(workbook_path)
+
+    result = salary_by_month(snapshot)
+
+    assert [amount for _when, amount in result] == [1000.0, 1100.0]  # not the Reembolso entry
+    assert result[0][0] < result[1][0]  # chronological order

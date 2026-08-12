@@ -158,6 +158,25 @@ def expenses_by_category(snapshot: FinanceSnapshot, *, top_n: int = 5) -> list[t
     return sorted(((e.kind, e.total) for e in snapshot.expenses), key=lambda pair: pair[1], reverse=True)[:top_n]
 
 
+_PT_MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
+
+
+def format_month(when: datetime) -> str:
+    """2026-02-01 -> "fev/26" -- Portuguese month abbreviations, since
+    Python's own strftime("%b") is locale-dependent and defaults to
+    English regardless of this project's own PT-BR convention."""
+    return f"{_PT_MONTHS[when.month - 1]}/{when.strftime('%y')}"
+
+
+def salary_by_month(snapshot: FinanceSnapshot) -> list[tuple[datetime, float]]:
+    """Chronological (month, amount) pairs for "Salário" income only --
+    the recurring line worth trending, as opposed to one-off entries
+    ("Reembolso", "Venda X") that would make a trend noisy rather than
+    informative."""
+    salary = [(e.when, e.amount) for e in snapshot.income if e.kind == "Salário"]
+    return sorted(salary, key=lambda pair: pair[0])
+
+
 def format_brl(value: float) -> str:
     """1234.5 -> "1.234,50" -- Brazilian thousands/decimal separators,
     swapped from Python's US-style `:,.2f` output rather than pulling in
