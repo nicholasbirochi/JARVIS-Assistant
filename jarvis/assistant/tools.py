@@ -24,7 +24,12 @@ review step to be safe.
 find_matching_jobs()/list_recent_job_matches() drive jarvis/job_search.py
 -- a real, live search across InfoJobs/Catho/Gupy (bounded on purpose:
 this runs synchronously inside a tool call, see that module's docstring
-for why Indeed/LinkedIn are excluded from this automatic path)."""
+for why Indeed/LinkedIn are excluded from this automatic path).
+
+evaluate_investments() drives jarvis/finance.py -- reads the user's own
+manually-maintained net-worth spreadsheet (Patrimônio.xlsx) as a local
+stand-in for real bank integration, which is still pending the user
+creating a Meu Pluggy account themselves."""
 
 from __future__ import annotations
 
@@ -189,6 +194,25 @@ def list_recent_job_matches() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def evaluate_investments() -> str:
+    """Avalia o patrimônio e os investimentos do Nicholas, lendo a planilha
+    Patrimônio.xlsx que ele mesmo mantém (enquanto não há integração direta
+    com os bancos).
+
+    Use quando ele perguntar sobre patrimônio, investimentos, quanto tem
+    guardado, quanto gastou, ou pedir uma avaliação financeira geral.
+    """
+    from jarvis.finance import load_snapshot, summarize_finances
+
+    try:
+        snapshot = load_snapshot()
+    except FileNotFoundError:
+        return "Não encontrei a planilha Patrimônio.xlsx no caminho esperado."
+    except Exception as exc:
+        return f"Não consegui ler a planilha: {exc}"
+    return summarize_finances(snapshot)
+
+
 def _log_claude_prompt(prompt: str) -> None:
     """Best-effort durability net so a prompt isn't lost if it isn't
     pasted right away -- never raises, since a logging hiccup here must
@@ -219,4 +243,5 @@ TOOLS = [
     list_reminders,
     find_matching_jobs,
     list_recent_job_matches,
+    evaluate_investments,
 ]
