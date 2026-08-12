@@ -111,16 +111,25 @@ class WakeWordListener:
     def read_frame(self) -> list[int]:
         return self._recorder.read()
 
-    def check_trigger(self, frame: list[int]) -> Trigger | None:
+    def check_trigger(self, frame: list[int], *, include_clap: bool = True) -> Trigger | None:
         """Runs one already-read frame through the wake-word engine + clap
         detector -- the same checks `wait()`'s loop body does, exposed
         separately so a caller can read frames on its own schedule instead
-        of blocking inside wait(). Used by conversation.py to watch for a
-        barge-in (wake word or clap) while JARVIS is speaking, without
-        duplicating the detection logic."""
+        of blocking inside wait().
+
+        include_clap=False skips the clap detector entirely, checking only
+        the neural wake-word engine. Used by conversation.py's barge-in
+        watcher (while JARVIS is speaking): the clap detector is plain
+        peak-amplitude detection (see clap_detector.py's module docstring),
+        not real voice recognition -- any sufficiently loud, sharp noise
+        (a dropped object, a door) would false-positive as two claps and
+        cut JARVIS off mid-sentence for no real reason. Initial activation
+        from idle (wait(), below) still checks both -- clap-to-activate is
+        a deliberate, real feature there, just not a safe barge-in signal
+        while JARVIS is already actively engaged and talking."""
         if self._engine.process(frame):
             return "wake_word"
-        if self._clap_detector is not None and self._clap_detector.process(frame, self._frame_seconds):
+        if include_clap and self._clap_detector is not None and self._clap_detector.process(frame, self._frame_seconds):
             return "clap"
         return None
 

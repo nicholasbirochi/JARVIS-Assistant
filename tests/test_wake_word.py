@@ -299,6 +299,31 @@ def test_check_trigger_returns_none_when_nothing_fires(monkeypatch):
     assert listener.check_trigger([0] * 1280) is None
 
 
+def test_check_trigger_include_clap_false_suppresses_a_real_clap(monkeypatch):
+    # Real complaint this fixes: clap detection is plain peak-amplitude
+    # noise detection, not real voice recognition -- conversation.py's
+    # barge-in watcher passes include_clap=False specifically so a random
+    # loud sound can't interrupt JARVIS mid-sentence.
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine(detect_on_call=None)
+    clap_detector = FakeClapDetector(detect_on_call=0)
+
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=clap_detector)
+
+    assert listener.check_trigger([0] * 1280, include_clap=False) is None
+
+
+def test_check_trigger_include_clap_false_still_returns_wake_word(monkeypatch):
+    # The exclusion is specific to the clap detector -- real voice
+    # recognition must still interrupt regardless of include_clap.
+    monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
+    engine = FakeEngine(detect_on_call=0)
+
+    listener = wake_word.WakeWordListener(engine=engine, clap_detector=FakeClapDetector())
+
+    assert listener.check_trigger([0] * 1280, include_clap=False) == "wake_word"
+
+
 def test_listener_disables_clap_detector_when_config_flag_off(monkeypatch):
     monkeypatch.setattr(wake_word, "PvRecorder", FakeRecorder)
     monkeypatch.setattr(config, "CLAP_ACTIVATION_ENABLED", False)

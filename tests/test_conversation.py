@@ -23,7 +23,7 @@ class FakeListener:
     def read_frame(self):
         return [0]
 
-    def check_trigger(self, frame):
+    def check_trigger(self, frame, *, include_clap=True):
         return None
 
 
@@ -39,13 +39,22 @@ class _ScriptedTriggerListener:
     def __init__(self, triggers):
         self._triggers = list(triggers)
         self.read_frame_calls = 0
+        self.include_clap_values = []
 
     def read_frame(self):
         self.read_frame_calls += 1
         return [0]
 
-    def check_trigger(self, frame):
-        return self._triggers.pop(0) if self._triggers else None
+    def check_trigger(self, frame, *, include_clap=True):
+        self.include_clap_values.append(include_clap)
+        if not self._triggers:
+            return None
+        # Mirrors the real WakeWordListener.check_trigger's contract: a
+        # clap is only ever reported when include_clap=True.
+        if self._triggers[0] == "clap" and not include_clap:
+            self._triggers.pop(0)
+            return None
+        return self._triggers.pop(0)
 
 
 def test_speak_with_barge_in_returns_none_when_speech_finishes_uninterrupted():
@@ -72,15 +81,22 @@ def test_speak_with_barge_in_interrupts_speech_and_returns_wake_word():
     assert result == "wake_word"
 
 
-def test_speak_with_barge_in_interrupts_speech_and_returns_clap():
+def test_speak_with_barge_in_ignores_a_clap_and_does_not_interrupt():
+    # Real complaint this fixes: clap detection is plain peak-amplitude
+    # noise detection, not real voice recognition -- a random loud sound
+    # must not cut JARVIS off mid-sentence. A short but real block (not an
+    # instant no-op) gives the watcher thread a guaranteed chance to run
+    # at least once before speech ends, without the multi-second wait a
+    # longer timeout would need.
     listener = _ScriptedTriggerListener(triggers=["clap"])
 
-    def blocking_speak(text, stop_event):
-        stop_event.wait(timeout=2)
+    def brief_speak(text, stop_event):
+        stop_event.wait(timeout=0.3)
 
-    result = conversation._speak_with_barge_in(blocking_speak, "uma frase longa", listener)
+    result = conversation._speak_with_barge_in(brief_speak, "uma frase longa", listener)
 
-    assert result == "clap"
+    assert result is None
+    assert listener.include_clap_values and all(v is False for v in listener.include_clap_values)
 
 
 def test_speak_with_barge_in_stops_watching_once_speech_ends_on_its_own():

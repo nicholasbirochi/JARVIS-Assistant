@@ -25,9 +25,13 @@ long after the user had stopped talking, indistinguishable from actually
 still listening.
 
 Every reply/greeting/briefing is spoken through `_speak_with_barge_in`,
-which watches the mic concurrently while talking: saying the wake word or
-clapping again mid-sentence interrupts JARVIS immediately, same as the
-menu bar's off-toggle already did for `stop_event`.
+which watches the mic concurrently while talking: saying the wake word
+mid-sentence interrupts JARVIS immediately, same as the menu bar's
+off-toggle already did for `stop_event`. Deliberately NOT a clap, even
+though a clap can activate JARVIS from idle -- clap detection is plain
+peak-amplitude noise detection, not real voice recognition, so it's not
+a safe signal to interrupt an in-progress reply on (see
+_speak_with_barge_in's own docstring for the real complaint this fixes).
 """
 
 from __future__ import annotations
@@ -47,25 +51,32 @@ def _is_stop_phrase(text: str) -> bool:
 
 
 def _speak_with_barge_in(speak, text: str, listener, stop_event: threading.Event | None = None):
-    """Speaks `text`, but concurrently watches the mic (the wake word or a
-    clap -- the same two triggers that activate JARVIS in the first
-    place) for a deliberate interruption. The moment either fires, speech
-    is cut short right away instead of finishing the current sentence --
-    the caller doesn't need to do anything special afterward: the loops in
-    this module already go straight back to listening next, whether
-    speech ran to completion or was barged in on.
+    """Speaks `text`, but concurrently watches the mic for a deliberate
+    interruption -- the wake word ONLY, not a clap. The moment it fires,
+    speech is cut short right away instead of finishing the current
+    sentence -- the caller doesn't need to do anything special afterward:
+    the loops in this module already go straight back to listening next,
+    whether speech ran to completion or was barged in on.
+
+    Deliberately excludes the clap trigger here (check_trigger(...,
+    include_clap=False)) -- real complaint this fixes: clap detection is
+    plain peak-amplitude noise detection (see clap_detector.py), not
+    actual voice recognition, so any sufficiently loud, sharp sound (a
+    dropped object, a door) could cut JARVIS off mid-sentence with nothing
+    said at all. Clap-to-activate from idle is unaffected -- see wait()
+    and check_trigger()'s own docstring.
 
     Known limitation, not attempted here: no acoustic echo cancellation,
     so JARVIS's own voice playing through the speakers could in principle
     trigger a false interrupt if it happens to say something close enough
-    to the wake phrase, or a sharp enough consonant reads as a clap. Both
-    engines are tuned against real claps/speech, not JARVIS's own TTS
-    output, so this is expected to be rare in practice -- worth
-    revisiting with a real headset/AEC setup if it turns out not to be.
+    to the wake phrase. The wake-word engine is tuned against real speech,
+    not JARVIS's own TTS output, so this is expected to be rare in
+    practice -- worth revisiting with a real headset/AEC setup if it
+    turns out not to be.
 
-    Returns the trigger that interrupted speech ("wake_word" or "clap"),
-    or None if speech completed normally or was stopped via `stop_event`
-    (e.g. "Desligar JARVIS")."""
+    Returns "wake_word" if that's what interrupted speech, or None if
+    speech completed normally or was stopped via `stop_event` (e.g.
+    "Desligar JARVIS")."""
     watch_event = threading.Event()
     detected: list[str | None] = [None]
 
@@ -75,7 +86,7 @@ def _speak_with_barge_in(speak, text: str, listener, stop_event: threading.Event
                 watch_event.set()
                 return
             frame = listener.read_frame()
-            trigger = listener.check_trigger(frame)
+            trigger = listener.check_trigger(frame, include_clap=False)
             if trigger is not None:
                 detected[0] = trigger
                 watch_event.set()
