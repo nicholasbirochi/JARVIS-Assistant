@@ -283,8 +283,14 @@ _BIGTECH_COMPANIES = [
 # which matched ~84% of everything and wasn't a meaningful filter). Skews
 # toward data/analytics-relevant ones (Semantix, Indicium, Datarisk,
 # Neoway, Take Blip, Pipefy) given the résumé's own focus, alongside the
-# better-known consumer unicorns/scale-ups.
+# better-known consumer unicorns/scale-ups. "bairesdev" added 2026-08-12,
+# found live: a real, VC-backed LatAm dev-staffing scale-up, and the
+# single largest source of genuinely relevant, remote, junior-friendly
+# Python/Power BI listings ("Trabalhe de Casa"/"Work From Home") in this
+# project's own search results -- directly on point for the user's own
+# "home office pra gringa" request, not an arbitrary addition.
 _STARTUP_COMPANIES = [
+    "bairesdev",
     "rappi",
     "quinto andar",
     "quintoandar",
@@ -333,6 +339,18 @@ _STARTUP_COMPANIES = [
 ]
 
 
+def _matches_known_name(haystack: str, names: list[str]) -> bool:
+    """Whole-word match, not a bare substring -- the real bug found live
+    (2026-08-12) building the bank/bigtech/startup lists: "CADERNO
+    INTELIGENTE" matched _BIGTECH_COMPANIES's "intel" (Intel Corp) as a
+    substring of "INTELIGENTE", and "REDE ANCORA" matched
+    _STARTUP_COMPANIES's "cora" (the fintech Cora) as a substring of
+    "ANCORA" -- neither company has anything to do with the real Intel or
+    Cora. Same class of bug as is_relevant_match's "BI"/"recebimento"
+    false positive, fixed the same way: \\b word boundaries."""
+    return any(re.search(rf"\b{re.escape(name)}\b", haystack) for name in names)
+
+
 def company_tier(company: str | None) -> str | None:
     """"banco"/"bigtech"/"startup" if the company name matches a known one
     from the lists above, else None -- never guesses on an unrecognized
@@ -341,11 +359,11 @@ def company_tier(company: str | None) -> str | None:
     if not company:
         return None
     haystack = company.lower()
-    if any(name in haystack for name in _BANK_COMPANIES):
+    if _matches_known_name(haystack, _BANK_COMPANIES):
         return "banco"
-    if any(name in haystack for name in _BIGTECH_COMPANIES):
+    if _matches_known_name(haystack, _BIGTECH_COMPANIES):
         return "bigtech"
-    if any(name in haystack for name in _STARTUP_COMPANIES):
+    if _matches_known_name(haystack, _STARTUP_COMPANIES):
         return "startup"
     return None
 

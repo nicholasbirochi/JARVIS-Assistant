@@ -206,6 +206,7 @@ def test_company_tier_none_for_an_unrecognized_or_missing_company():
 def test_company_tier_recognizes_known_startups():
     assert company_tier("Gupy") == "startup"
     assert company_tier("Semantix Tecnologia") == "startup"
+    assert company_tier("BAIRESDEV") == "startup"
 
 
 def test_company_tier_none_for_an_unrecognized_named_company():
@@ -214,6 +215,16 @@ def test_company_tier_none_for_an_unrecognized_named_company():
     # other unrecognized name -- there's no company-size database here to
     # check against, only the three named lists.
     assert company_tier("Housi") is None
+
+
+def test_company_tier_does_not_false_positive_on_a_bare_substring():
+    # Real bugs found live, 2026-08-12: "CADERNO INTELIGENTE" matched
+    # _BIGTECH_COMPANIES's "intel" as a substring of "INTELIGENTE", and
+    # "REDE ANCORA" matched _STARTUP_COMPANIES's "cora" (the fintech Cora)
+    # as a substring of "ANCORA" -- neither is related to the real
+    # company. Both must come back None now that matching is whole-word.
+    assert company_tier("CADERNO INTELIGENTE") is None
+    assert company_tier("REDE ANCORA") is None
 
 
 def test_rank_bank_bigtech_first_orders_banco_then_bigtech_then_startup_then_rest():
