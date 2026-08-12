@@ -15,6 +15,7 @@ def _reset(monkeypatch):
     monkeypatch.setattr(server, "_server", None)
     monkeypatch.setattr(state, "_subscribers", [])
     monkeypatch.setattr(state, "_current", state.StateEvent(state="idle"))
+    monkeypatch.setattr(state, "_current_data", None)
 
 
 def _read_data_line(resp) -> str:
@@ -57,7 +58,7 @@ def test_events_endpoint_streams_current_state_immediately():
     state.publish("listening")
 
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/events", timeout=5) as resp:
-        assert json.loads(_read_data_line(resp)) == {"state": "listening", "text": ""}
+        assert json.loads(_read_data_line(resp)) == {"type": "state", "state": "listening", "text": ""}
 
 
 def test_events_endpoint_streams_subsequent_publishes():
@@ -66,7 +67,33 @@ def test_events_endpoint_streams_subsequent_publishes():
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/events", timeout=5) as resp:
         _read_data_line(resp)  # the initial "idle" snapshot -- not under test here
         state.publish("speaking", text="olá, Senhor Nicholas")
-        assert json.loads(_read_data_line(resp)) == {"state": "speaking", "text": "olá, Senhor Nicholas"}
+        assert json.loads(_read_data_line(resp)) == {
+            "type": "state",
+            "state": "speaking",
+            "text": "olá, Senhor Nicholas",
+        }
+
+
+def test_events_endpoint_streams_current_chart_immediately_after_state():
+    port = server.start(port=0)
+    state.publish_data("finance", {"title": "Patrimônio", "bars": [{"label": "Inter BR", "value": 100}]})
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/events", timeout=5) as resp:
+        _read_data_line(resp)  # the state snapshot always comes first -- not under test here
+        assert json.loads(_read_data_line(resp)) == {
+            "type": "data",
+            "kind": "finance",
+            "payload": {"title": "Patrimônio", "bars": [{"label": "Inter BR", "value": 100}]},
+        }
+
+
+def test_events_endpoint_streams_subsequent_chart_publishes():
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/events", timeout=5) as resp:
+        _read_data_line(resp)  # the initial "idle" state snapshot -- not under test here
+        state.publish_data("jobs", {"title": "Vagas", "bars": []})
+        assert json.loads(_read_data_line(resp)) == {"type": "data", "kind": "jobs", "payload": {"title": "Vagas", "bars": []}}
 
 
 def test_url_returns_a_reachable_localhost_address():

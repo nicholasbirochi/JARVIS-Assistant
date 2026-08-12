@@ -7,6 +7,7 @@ from jarvis.visualizer import state
 def _reset(monkeypatch):
     monkeypatch.setattr(state, "_subscribers", [])
     monkeypatch.setattr(state, "_current", state.StateEvent(state="off"))
+    monkeypatch.setattr(state, "_current_data", None)
 
 
 def test_current_defaults_to_off():
@@ -73,3 +74,40 @@ def test_multiple_subscribers_each_get_their_own_copy():
     state.publish("listening")
 
     assert q1.get_nowait() == q2.get_nowait() == state.StateEvent(state="listening", text="")
+
+
+def test_current_data_defaults_to_none():
+    assert state.current_data() is None
+
+
+def test_publish_data_updates_current_data():
+    state.publish_data("finance", {"title": "Patrimônio", "bars": []})
+
+    assert state.current_data() == state.DataEvent(kind="finance", payload={"title": "Patrimônio", "bars": []})
+
+
+def test_clear_data_resets_current_data_to_none():
+    state.publish_data("jobs", {"bars": []})
+
+    state.clear_data()
+
+    assert state.current_data() is None
+
+
+def test_publish_data_is_independent_of_state_publish():
+    # The real reason these are two separate channels: an unrelated
+    # publish("listening") elsewhere in the codebase must never wipe out
+    # whatever chart is currently on screen.
+    state.publish_data("finance", {"bars": []})
+
+    state.publish("listening")
+
+    assert state.current_data() == state.DataEvent(kind="finance", payload={"bars": []})
+
+
+def test_data_subscriber_receives_published_chart_events():
+    q = state.subscribe()
+
+    state.publish_data("jobs", {"bars": [{"label": "InfoJobs", "value": 5}]})
+
+    assert q.get_nowait() == state.DataEvent(kind="jobs", payload={"bars": [{"label": "InfoJobs", "value": 5}]})

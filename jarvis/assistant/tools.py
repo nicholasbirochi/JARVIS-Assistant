@@ -177,6 +177,7 @@ def find_matching_jobs() -> str:
     resume = store.load()
     report = run_job_search(resume)
     path = save_report(report)
+    _publish_jobs_chart(report)
     return summarize(report, path)
 
 
@@ -210,7 +211,45 @@ def evaluate_investments() -> str:
         return "Não encontrei a planilha Patrimônio.xlsx no caminho esperado."
     except Exception as exc:
         return f"Não consegui ler a planilha: {exc}"
+    _publish_finance_chart(snapshot)
     return summarize_finances(snapshot)
+
+
+def _publish_jobs_chart(report) -> None:
+    """Pushes a live bar chart (vagas por site, local vs. home office) to
+    the HUD (jarvis/visualizer/) -- best-effort, same reasoning as
+    _log_claude_prompt below: a visualization failing (HUD not open, or
+    running headless in a test) must never break the actual tool result
+    it's illustrating."""
+    try:
+        from collections import Counter
+
+        from jarvis.visualizer import state as visualizer_state
+
+        local_counts = Counter(listing.site_name for listing in report.local)
+        remote_counts = Counter(listing.site_name for listing in report.remote)
+        bars = []
+        for site in report.sites_searched:
+            bars.append({"label": f"{site} local", "value": local_counts.get(site, 0)})
+            bars.append({"label": f"{site} remoto", "value": remote_counts.get(site, 0)})
+        title = f"{len(report.local)} presencial + {len(report.remote)} home office"
+        visualizer_state.publish_data("jobs", {"title": title, "bars": bars})
+    except Exception:
+        pass
+
+
+def _publish_finance_chart(snapshot) -> None:
+    """Pushes a live bar chart (patrimônio por conta) to the HUD --
+    best-effort, see _publish_jobs_chart's docstring for why."""
+    try:
+        from jarvis.finance import format_brl
+        from jarvis.visualizer import state as visualizer_state
+
+        bars = [{"label": b.bank, "value": round(b.total_brl, 2)} for b in snapshot.banks]
+        title = f"Patrimônio: R$ {format_brl(snapshot.final_money)}" if snapshot.final_money is not None else "Patrimônio"
+        visualizer_state.publish_data("finance", {"title": title, "bars": bars})
+    except Exception:
+        pass
 
 
 def _log_claude_prompt(prompt: str) -> None:

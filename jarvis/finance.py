@@ -158,7 +158,7 @@ def expenses_by_category(snapshot: FinanceSnapshot, *, top_n: int = 5) -> list[t
     return sorted(((e.kind, e.total) for e in snapshot.expenses), key=lambda pair: pair[1], reverse=True)[:top_n]
 
 
-def _fmt_brl(value: float) -> str:
+def format_brl(value: float) -> str:
     """1234.5 -> "1.234,50" -- Brazilian thousands/decimal separators,
     swapped from Python's US-style `:,.2f` output rather than pulling in
     locale machinery for two separator characters."""
@@ -169,24 +169,24 @@ def summarize_finances(snapshot: FinanceSnapshot) -> str:
     """Short text summary meant for a voice/text reply."""
     lines = []
     if snapshot.final_money is not None:
-        lines.append(f"Patrimônio total: R$ {_fmt_brl(snapshot.final_money)}.")
+        lines.append(f"Patrimônio total: R$ {format_brl(snapshot.final_money)}.")
     if snapshot.banks:
         bank_parts = []
         for b in snapshot.banks:
             if b.currency == "USD" and b.invested:
-                bank_parts.append(f"{b.bank}: R$ {_fmt_brl(b.total_brl)} (US$ {_fmt_brl(b.invested)} + rendimento)")
+                bank_parts.append(f"{b.bank}: R$ {format_brl(b.total_brl)} (US$ {format_brl(b.invested)} + rendimento)")
             else:
-                bank_parts.append(f"{b.bank}: R$ {_fmt_brl(b.total_brl)}")
+                bank_parts.append(f"{b.bank}: R$ {format_brl(b.total_brl)}")
         lines.append("Por conta: " + "; ".join(bank_parts) + ".")
     if snapshot.gross_value is not None and snapshot.total_expenses is not None:
         lines.append(
-            f"Ganhou R$ {_fmt_brl(snapshot.gross_value)} no total registrado, gastou "
-            f"R$ {_fmt_brl(-snapshot.total_expenses)}."
+            f"Ganhou R$ {format_brl(snapshot.gross_value)} no total registrado, gastou "
+            f"R$ {format_brl(-snapshot.total_expenses)}."
         )
     if snapshot.luxuries is not None:
-        lines.append(f"Rendimento/ganho além do previsto: R$ {_fmt_brl(snapshot.luxuries)}.")
+        lines.append(f"Rendimento/ganho além do previsto: R$ {format_brl(snapshot.luxuries)}.")
     top_expenses = expenses_by_category(snapshot, top_n=3)
     if top_expenses:
-        formatted = ", ".join(f"{kind} (R$ {_fmt_brl(total)})" for kind, total in top_expenses)
+        formatted = ", ".join(f"{kind} (R$ {format_brl(total)})" for kind, total in top_expenses)
         lines.append(f"Maiores gastos: {formatted}.")
     return " ".join(lines) if lines else "Não consegui ler dados financeiros da planilha."

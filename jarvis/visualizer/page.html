@@ -105,6 +105,42 @@
     text-shadow: 0 0 10px rgba(127,227,255,0.35);
   }
 
+  /* Charts/analyses (jarvis/finance.py, jarvis/job_search.py) live in
+     their own side panel, not the center stage -- deliberately separate
+     from the sphere/transcript so they never compete for the same
+     vertical space. Only ever shown once the window is genuinely
+     maximized/enlarged (see MAXIMIZED_WIDTH_THRESHOLD below) -- the
+     default 560px-wide window has no real room for a legible chart
+     beside the sphere. */
+  #chart-panel {
+    position: fixed;
+    top: 50%;
+    right: 4%;
+    transform: translateY(-50%);
+    width: min(300px, 26vw);
+    max-height: 74vh;
+    overflow-y: auto;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(127,227,255,0.35) transparent;
+  }
+  #chart-panel.visible { opacity: 1; pointer-events: auto; }
+  #chart-canvas {
+    /* The bare `canvas` rule above (position: absolute; inset: 0) is
+       written for #orb inside its own positioned #stage -- it also
+       matches this element by tag, which silently pulled it out of
+       normal flow and collapsed the containing panel to zero height
+       (found live: getBoundingClientRect() reported the canvas itself at
+       the right size, but its parent at height 0). Opting back into
+       static flow here is the actual fix. */
+    position: static;
+    display: block;
+    width: 100%;
+    height: 260px;
+  }
+
   #clock {
     position: fixed;
     top: 22px;
@@ -134,6 +170,7 @@
     <div id="status">Desligado</div>
   </div>
   <div id="transcript-wrap"><div id="transcript"></div></div>
+  <div id="chart-panel"><canvas id="chart-canvas"></canvas></div>
 
 <script>
 const canvas = document.getElementById("orb");
@@ -340,14 +377,132 @@ function setState(newState, text) {
   } else if (newState === "idle") {
     transcriptWrap.classList.remove("visible");
   }
+  // A chart stays up through the rest of the turn it was shown for (e.g.
+  // while JARVIS speaks the analysis out loud) -- but once the session
+  // actually ends, it shouldn't linger into whatever comes next.
+  if (newState === "idle" || newState === "off") {
+    renderChart(null, null);
+  }
 }
+
+// Real-time charts/analyses (jarvis/finance.py, jarvis/job_search.py) --
+// a second, independent event type on the same SSE stream (see
+// jarvis/visualizer/state.py's DataEvent). Rendered as a plain Canvas 2D
+// bar chart, same "no new dependency" approach as the sphere above. Lives
+// in its own side panel (#chart-panel), and only ever shown once the
+// window is genuinely maximized/enlarged -- the default small window has
+// no real room for a legible chart beside the sphere.
+const chartPanel = document.getElementById("chart-panel");
+const chartCanvas = document.getElementById("chart-canvas");
+const chartCtx = chartCanvas.getContext("2d");
+let currentChart = null; // last-received payload, kept even while hidden -- a later resize-up can still reveal it
+const MAXIMIZED_WIDTH_THRESHOLD = 900;
+
+function isWideEnoughForChart() {
+  return window.innerWidth >= MAXIMIZED_WIDTH_THRESHOLD;
+}
+
+function renderChart(kind, payload) {
+  currentChart = kind ? payload : null;
+  updateChartVisibility();
+}
+
+function updateChartVisibility() {
+  if (currentChart && isWideEnoughForChart()) {
+    chartPanel.classList.add("visible");
+    drawChart();
+  } else {
+    chartPanel.classList.remove("visible");
+  }
+}
+
+function drawChart() {
+  if (!currentChart) return;
+  const cdpr = Math.max(1, window.devicePixelRatio || 1);
+  const rect = chartCanvas.getBoundingClientRect();
+  chartCanvas.width = rect.width * cdpr;
+  chartCanvas.height = rect.height * cdpr;
+  const w = chartCanvas.width, h = chartCanvas.height;
+  chartCtx.clearRect(0, 0, w, h);
+
+  const bars = currentChart.bars || [];
+  let top = 6 * cdpr;
+  if (currentChart.title) {
+    chartCtx.fillStyle = "#cdeeff";
+    chartCtx.font = `600 ${13 * cdpr}px "SF Mono", Menlo, monospace`;
+    chartCtx.textAlign = "center";
+    chartCtx.fillText(currentChart.title, w / 2, top + 12 * cdpr);
+    top += 26 * cdpr;
+  }
+  if (!bars.length) return;
+
+  const bottomLabels = 22 * cdpr;
+  const barAreaHeight = Math.max(10, h - top - bottomLabels);
+  const maxVal = Math.max(1, ...bars.map((b) => b.value || 0));
+  const gap = w / (bars.length * 4);
+  const barWidth = Math.min(46 * cdpr, (w - gap * (bars.length + 1)) / bars.length);
+  const usedWidth = barWidth * bars.length + gap * (bars.length + 1);
+  const xOffset = (w - usedWidth) / 2;
+
+  bars.forEach((b, i) => {
+    const val = b.value || 0;
+    const barHeight = (val / maxVal) * barAreaHeight;
+    const x = xOffset + gap + i * (barWidth + gap);
+    const y = top + (barAreaHeight - barHeight);
+    const grad = chartCtx.createLinearGradient(0, y, 0, y + barHeight);
+    grad.addColorStop(0, "rgba(127,227,255,0.9)");
+    grad.addColorStop(1, "rgba(47,182,232,0.35)");
+    chartCtx.fillStyle = grad;
+    chartCtx.fillRect(x, y, barWidth, Math.max(1, barHeight));
+
+    chartCtx.fillStyle = "#7fe3ff";
+    chartCtx.font = `${10 * cdpr}px "SF Mono", Menlo, monospace`;
+    chartCtx.textAlign = "center";
+    chartCtx.fillText(formatChartValue(val), x + barWidth / 2, Math.max(top, y - 4 * cdpr));
+
+    chartCtx.fillStyle = "#a9d8ee";
+    chartCtx.font = `${9 * cdpr}px "SF Mono", Menlo, monospace`;
+    wrapLabel(b.label || "", x + barWidth / 2, top + barAreaHeight + 12 * cdpr, barWidth + gap, cdpr);
+  });
+}
+
+function wrapLabel(text, cx, cy, maxWidth, cdpr) {
+  // Labels here are short (site names, bank names) but occasionally wrap
+  // to two lines rather than overflowing into the next bar.
+  const words = text.split(" ");
+  let line = "";
+  const lines = [];
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (chartCtx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  lines.slice(0, 2).forEach((l, i) => chartCtx.fillText(l, cx, cy + i * 10 * cdpr));
+}
+
+function formatChartValue(v) {
+  if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1).replace(".", ",") + "k";
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(2).replace(".", ",");
+}
+
+window.addEventListener("resize", updateChartVisibility);
 
 function connect() {
   const es = new EventSource("/events");
   es.onmessage = (ev) => {
     try {
-      const data = JSON.parse(ev.data);
-      setState(data.state, data.text);
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "data") {
+        renderChart(msg.kind, msg.payload);
+      } else {
+        setState(msg.state, msg.text);
+      }
     } catch (e) { /* ignore malformed/keepalive lines */ }
   };
   es.onerror = () => {

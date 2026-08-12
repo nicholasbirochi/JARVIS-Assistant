@@ -56,6 +56,9 @@ class _Handler(BaseHTTPRequestHandler):
         q = state.subscribe()
         try:
             self._write_event(state.current())  # so a new tab isn't blank until the next transition
+            data_event = state.current_data()
+            if data_event is not None:
+                self._write_event(data_event)  # likewise for whatever chart was last shown
             while True:
                 try:
                     event = q.get(timeout=_KEEPALIVE_SECONDS)
@@ -69,9 +72,12 @@ class _Handler(BaseHTTPRequestHandler):
         finally:
             state.unsubscribe(q)
 
-    def _write_event(self, event: state.StateEvent) -> None:
-        payload = json.dumps({"state": event.state, "text": event.text})
-        self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+    def _write_event(self, event: state.StateEvent | state.DataEvent) -> None:
+        if isinstance(event, state.DataEvent):
+            body = {"type": "data", "kind": event.kind, "payload": event.payload}
+        else:
+            body = {"type": "state", "state": event.state, "text": event.text}
+        self.wfile.write(f"data: {json.dumps(body)}\n\n".encode("utf-8"))
         self.wfile.flush()
 
 
