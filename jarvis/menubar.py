@@ -181,6 +181,29 @@ class JarvisMenuBarApp(rumps.App):
                 NSWorkspaceDidWakeNotification, None, None, lambda _note: self._controller.notify_system_wake()
             )
         )
+        # Daily job-search refresh, at the user's explicit request -- see
+        # jarvis/job_search.py's module docstring for the real limits
+        # (only fires while this app is actually running; no OS-level
+        # scheduler). Checked hourly rather than once at startup, so a
+        # session that stays open all day still gets the day's refresh
+        # once it's actually due, not just whenever the app happened to
+        # launch. Runs in a background thread -- a real search takes
+        # 1-2+ minutes of live browser automation, which would otherwise
+        # freeze the whole menu bar (rumps' main loop) for that long.
+        rumps.Timer(self._maybe_run_daily_job_search, 3600).start()
+
+    def _maybe_run_daily_job_search(self, _timer: rumps.Timer) -> None:
+        threading.Thread(target=self._run_daily_job_search_worker, daemon=True).start()
+
+    @staticmethod
+    def _run_daily_job_search_worker() -> None:
+        try:
+            from jarvis.job_search import run_daily_search_if_due
+            from jarvis.resume import store
+
+            run_daily_search_if_due(store.load())
+        except Exception:
+            pass  # best-effort background refresh -- must never crash the menu bar app
 
     def _sync_with_reality(self, _timer: rumps.Timer) -> None:
         if self._toggle_item.title == "Desligar" and not self._controller.is_running:

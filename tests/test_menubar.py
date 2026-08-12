@@ -4,7 +4,7 @@ import threading
 import time
 
 from jarvis import config
-from jarvis.menubar import VoiceLoopController, _acquire_singleton_lock, _pid_is_alive
+from jarvis.menubar import JarvisMenuBarApp, VoiceLoopController, _acquire_singleton_lock, _pid_is_alive
 
 
 def _cooperative_target(stop_event: threading.Event, wake_event: threading.Event | None = None) -> None:
@@ -148,3 +148,30 @@ def test_acquire_singleton_lock_succeeds_when_file_is_corrupt(tmp_path, monkeypa
     (tmp_path / "jarvis.pid").write_text("not-a-pid", encoding="utf-8")
 
     assert _acquire_singleton_lock() is True
+
+
+def test_run_daily_job_search_worker_calls_run_daily_search_if_due_with_the_loaded_resume(monkeypatch):
+    # A staticmethod, so it's callable directly without building a real
+    # rumps.App/AppKit instance -- same reasoning VoiceLoopController was
+    # split out for.
+    calls = []
+    fake_resume = object()
+    monkeypatch.setattr("jarvis.resume.store.load", lambda: fake_resume)
+    monkeypatch.setattr("jarvis.job_search.run_daily_search_if_due", lambda resume: calls.append(resume))
+
+    JarvisMenuBarApp._run_daily_job_search_worker()
+
+    assert calls == [fake_resume]
+
+
+def test_run_daily_job_search_worker_swallows_exceptions(monkeypatch):
+    # Best-effort background refresh -- a broken site adapter or a network
+    # hiccup must never crash the menu bar app it runs inside.
+    monkeypatch.setattr("jarvis.resume.store.load", lambda: object())
+
+    def _boom(resume):
+        raise RuntimeError("site indisponível")
+
+    monkeypatch.setattr("jarvis.job_search.run_daily_search_if_due", _boom)
+
+    JarvisMenuBarApp._run_daily_job_search_worker()  # must not raise

@@ -1,5 +1,14 @@
+from datetime import datetime, timedelta, timezone
+
 from jarvis import config
-from jarvis.job_search import latest_report_path, run_job_search, save_report, summarize
+from jarvis.job_search import (
+    is_daily_search_due,
+    latest_report_path,
+    run_daily_search_if_due,
+    run_job_search,
+    save_report,
+    summarize,
+)
 from jarvis.resume.schema import Bilingual, PersonalInfo, Resume
 from jarvis.sites.base import JobListing
 
@@ -139,3 +148,50 @@ def test_summarize_mentions_counts_failed_sites_and_saved_path():
     assert "gupy" in text
     assert "/tmp/vagas_20260811.md" in text
     assert "Analista De Dados" in text
+
+
+def test_is_daily_search_due_true_when_never_run(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+
+    assert is_daily_search_due() is True
+
+
+def test_is_daily_search_due_false_within_24h(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+    run_daily_search_if_due(make_resume(), adapters={"infojobs": FakeAdapter([])}, now=now)
+
+    assert is_daily_search_due(now=now + timedelta(hours=2)) is False
+
+
+def test_is_daily_search_due_true_after_24h(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+    run_daily_search_if_due(make_resume(), adapters={"infojobs": FakeAdapter([])}, now=now)
+
+    assert is_daily_search_due(now=now + timedelta(hours=25)) is True
+
+
+def test_run_daily_search_if_due_skips_a_second_call_the_same_day(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    adapter = FakeAdapter([])
+    now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+
+    first = run_daily_search_if_due(make_resume(), adapters={"infojobs": adapter}, now=now)
+    calls_after_first = len(adapter.calls)
+    second = run_daily_search_if_due(make_resume(), adapters={"infojobs": adapter}, now=now + timedelta(hours=1))
+
+    assert first is not None
+    assert second is None
+    assert len(adapter.calls) == calls_after_first  # no new searches ran
+
+
+def test_run_daily_search_if_due_runs_again_after_24h(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    adapter = FakeAdapter([])
+    now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
+
+    run_daily_search_if_due(make_resume(), adapters={"infojobs": adapter}, now=now)
+    second = run_daily_search_if_due(make_resume(), adapters={"infojobs": adapter}, now=now + timedelta(hours=25))
+
+    assert second is not None

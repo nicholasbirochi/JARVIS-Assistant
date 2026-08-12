@@ -25,12 +25,26 @@ or international) -- these are NOT mutually exclusive in principle, but
 in practice a listing rarely matches both filters at once (a location-
 tagged city and a remote-work phrase together), so no de-duplication
 between the two lists is done.
+
+is_daily_search_due()/run_daily_search_if_due() (added 2026-08-12): a
+once-a-day automatic refresh, at the user's explicit request. Tracked via
+a single timestamp file (data/job_matches/last_run.json), not a real OS
+scheduler (cron/launchd) -- this only fires while JARVIS's menu-bar app
+is actually running and checks in periodically (see jarvis/menubar.py),
+same real-world limit any local, non-daemonized scheduled task has: if
+the Mac is asleep or the app isn't open at all for a whole day, that
+day's refresh is simply skipped, not queued up. Real, worth knowing
+before relying on it: Catho's adapter hardcodes headless=False (see
+catho.py), so a due refresh pops up a real, visible browser window --
+this can happen at any point while JARVIS is running, not just at a
+convenient moment.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from jarvis.resume.schema import Resume
@@ -195,3 +209,51 @@ def summarize(report: JobSearchReport, saved_path: str, *, top_n: int = 5) -> st
         )
     parts.append(f"Lista completa salva em {saved_path}.")
     return "\n".join(parts)
+
+
+def _last_run_path() -> Path:
+    return _reports_dir() / "last_run.json"
+
+
+def _read_last_run() -> datetime | None:
+    path = _last_run_path()
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return datetime.fromisoformat(data["last_run"])
+    except Exception:
+        return None
+
+
+def _write_last_run(when: datetime) -> None:
+    path = _last_run_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"last_run": when.isoformat()}), encoding="utf-8")
+
+
+def is_daily_search_due(*, now: datetime | None = None) -> bool:
+    """True if a search has never run, or the last one was 24h+ ago."""
+    now = now or datetime.now(timezone.utc)
+    last_run = _read_last_run()
+    if last_run is None:
+        return True
+    return (now - last_run) >= timedelta(hours=24)
+
+
+def run_daily_search_if_due(
+    resume: Resume, *, adapters: dict[str, object] | None = None, now: datetime | None = None
+) -> JobSearchReport | None:
+    """Runs and saves a real search only if is_daily_search_due() -- None
+    otherwise, so a caller polling this often (e.g. every hour while
+    JARVIS is running, see jarvis/menubar.py) doesn't re-search needlessly.
+    Updates the "last run" timestamp regardless of whether any site
+    actually succeeded -- a site being temporarily down shouldn't make
+    this retry every poll for the rest of the day."""
+    now = now or datetime.now(timezone.utc)
+    if not is_daily_search_due(now=now):
+        return None
+    report = run_job_search(resume, adapters=adapters)
+    save_report(report)
+    _write_last_run(now)
+    return report
