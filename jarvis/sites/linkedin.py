@@ -18,14 +18,46 @@ skeletons -- they're permanently out of scope for this site specifically,
 and raise a distinct message saying so, per base.py's explicit guidance:
 "If LinkedIn is ever revisited, restrict it to check_session/
 preview_changes only -- never wire apply_changes for it."
+
+Job search (search_jobs(), added 2026-08-12): real URL, found live by
+using the site's own top-nav search box rather than guessing:
+https://www.linkedin.com/jobs/search-results/?keywords=<query>. Listing
+cards are genuinely harder to scrape than the other four adapters here
+-- LinkedIn's markup uses hashed, build-specific class names throughout
+(e.g. `_6f09d0c0 c9837f6e ...`), a real anti-scraping-flavored signal
+even if not the primary intent, so nothing here selects on those classes
+at all. Instead: every card-ish element carries a `componentkey`
+attribute ending in `-<jobId>` (confirmed live); the SHORTEST such
+element per unique jobId that still contains at least two blank-line
+(`\n\n`) separators is the actual card text block, cleanly parseable as
+title / company / location. (The shortest-without-that-guard heuristic
+was tried first and picked a tiny badge element with just the company
+name as text for one real card -- the two-separator check is the actual
+fix, not a nicety.) No stable per-card href exists (cards are click-
+handler-driven, updating a `currentJobId` query param rather than
+linking out) -- but /jobs/view/<jobId>/ is a real, confirmed direct URL
+once the id is known.
+
+Given this is the highest-risk site in this project (see base.py) and
+its DOM is comparatively fragile/likely to drift, search_jobs() here
+stays deliberately low-volume (no pagination, default max_results caps
+at whatever a single results page returns, ~25) rather than pushed as
+hard as the other four -- and is NOT wired into jarvis/job_search.py's
+automatic, unattended find_matching_jobs() tool, only reachable via an
+explicit, direct call. Same reasoning as never automating profile edits
+here: an unattended, repeated automatic search is exactly the kind of
+unsupervised use that risk profile argues against.
 """
 
 from __future__ import annotations
+
+import re
 
 from jarvis.resume.schema import Resume
 from jarvis.sites import session
 from jarvis.sites.base import (
     ChangePreview,
+    JobListing,
     SessionStatus,
     SiteAdapter,
     SiteProfileSnapshot,
@@ -34,6 +66,8 @@ from jarvis.sites.base import (
 )
 
 SITE_NAME = "linkedin"
+_SEARCH_URL = "https://www.linkedin.com/jobs/search-results/"
+_VERIFIED_BADGE_SUFFIX = " (Vaga verificada)"
 
 _PROFILE_EDITING_OUT_OF_SCOPE = (
     "Edição de perfil no LinkedIn é intencionalmente fora de escopo (não é 'ainda não "
@@ -92,3 +126,83 @@ class LinkedInAdapter(SiteAdapter):
 
     def apply_changes(self, plan: UpdatePlan, confirmed: bool) -> UpdateResult:
         raise NotImplementedError(_PROFILE_EDITING_OUT_OF_SCOPE)
+
+    def search_jobs(self, query: str) -> list[JobListing]:
+        """Read-only -- callers should run the result through
+        jarvis.sites.job_matching before treating it as "matches". No
+        pagination, deliberately low-volume -- see module docstring."""
+        import urllib.parse
+
+        url = f"{_SEARCH_URL}?{urllib.parse.urlencode({'keywords': query})}"
+
+        p, context = session.open_context(self.site_name, headless=False)
+        try:
+            page = context.new_page()
+            page.goto(url, timeout=45_000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3500)
+            cards = self._extract_listing_cards(page)
+        finally:
+            context.close()
+            p.stop()
+
+        listings = []
+        for card in cards:
+            listing = _card_to_job_listing(card)
+            if listing is not None:
+                listings.append(listing)
+        return listings
+
+    def _extract_listing_cards(self, page) -> list[dict]:
+        """Raw card data, straight off the DOM -- kept as a thin, separate
+        method so _card_to_job_listing()'s conversion/validation logic
+        (below) can be unit-tested without a real page.evaluate() call."""
+        return page.evaluate(
+            r"""
+            () => {
+                const byId = {};
+                const elems = Array.from(document.querySelectorAll('[componentkey]'));
+                for (const el of elems) {
+                    const m = el.getAttribute('componentkey').match(/-(\d{6,})$/);
+                    if (!m) continue;
+                    const jobId = m[1];
+                    const text = el.innerText || '';
+                    if ((text.match(/\n\n/g) || []).length < 2) continue;
+                    if (!byId[jobId] || text.length < byId[jobId].length) byId[jobId] = text;
+                }
+                return Object.entries(byId).map(([jobId, text]) => ({ jobId, text }));
+            }
+            """
+        )
+
+
+def _parse_card_text(text: str) -> dict[str, str | None]:
+    """title/company/location out of the card's plain innerText -- see
+    module docstring for the real, live-confirmed shape. Split on blank
+    lines rather than any class-based selector, since none of LinkedIn's
+    classes here are stable across builds."""
+    segments = [s.strip() for s in text.split("\n\n") if s.strip()]
+    title_block = segments[0] if segments else ""
+    title = title_block.split("\n")[0].strip()
+    if title.endswith(_VERIFIED_BADGE_SUFFIX):
+        title = title[: -len(_VERIFIED_BADGE_SUFFIX)].strip()
+    company = segments[1] if len(segments) > 1 else None
+    location = segments[2] if len(segments) > 2 else None
+    return {"title": title or None, "company": company, "location": location}
+
+
+def _card_to_job_listing(card: dict) -> JobListing | None:
+    job_id = card.get("jobId")
+    text = card.get("text") or ""
+    if not job_id or not re.fullmatch(r"\d{6,}", job_id):
+        return None
+    fields = _parse_card_text(text)
+    if not fields["title"]:
+        return None
+    return JobListing(
+        site_name=SITE_NAME,
+        external_id=job_id,
+        title=fields["title"],
+        company=fields["company"],
+        location=fields["location"],
+        url=f"https://www.linkedin.com/jobs/view/{job_id}/",
+    )

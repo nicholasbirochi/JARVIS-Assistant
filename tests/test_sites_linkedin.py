@@ -1,8 +1,9 @@
 import pytest
 
 from jarvis import config
+from jarvis.sites import session
 from jarvis.sites.base import SessionStatus
-from jarvis.sites.linkedin import LinkedInAdapter, _is_authenticated
+from jarvis.sites.linkedin import LinkedInAdapter, _card_to_job_listing, _is_authenticated, _parse_card_text
 
 
 class FakeAuthPage:
@@ -63,3 +64,100 @@ def test_profile_editing_methods_are_permanently_out_of_scope():
         adapter.preview_changes(plan=None)
     with pytest.raises(NotImplementedError, match="fora de escopo"):
         adapter.apply_changes(plan=None, confirmed=True)
+
+
+def test_parse_card_text_with_verified_badge_and_duplicate_title_line():
+    # Real, live-confirmed shape: the title appears twice (once inside a
+    # visually-hidden accessibility duplicate), and a "(Vaga verificada)"
+    # badge is appended only to the first occurrence.
+    text = (
+        "DATA ANALYST I (Vaga verificada)\nDATA ANALYST I \n\nInter\n\n"
+        "Belo Horizonte, MG (Presencial)\n\nAvaliando candidaturas\n\nVisto"
+    )
+
+    fields = _parse_card_text(text)
+
+    assert fields == {"title": "DATA ANALYST I", "company": "Inter", "location": "Belo Horizonte, MG (Presencial)"}
+
+
+def test_parse_card_text_without_badge_or_duplicate_line():
+    text = "ANALISTA DADOS JR\n\nGrupo Ri Happy\n\nSão Paulo, SP (Híbrido)\n\n1 ex-aluno da instituição trabalha aqui"
+
+    fields = _parse_card_text(text)
+
+    assert fields == {"title": "ANALISTA DADOS JR", "company": "Grupo Ri Happy", "location": "São Paulo, SP (Híbrido)"}
+
+
+def test_parse_card_text_missing_fields_default_to_none():
+    assert _parse_card_text("Só Um Título") == {"title": "Só Um Título", "company": None, "location": None}
+    assert _parse_card_text("") == {"title": None, "company": None, "location": None}
+
+
+def test_card_to_job_listing_converts_a_real_shaped_card():
+    card = {
+        "jobId": "4441485838",
+        "text": "DATA ANALYST I (Vaga verificada)\nDATA ANALYST I \n\nInter\n\nBelo Horizonte, MG (Presencial)",
+    }
+
+    listing = _card_to_job_listing(card)
+
+    assert listing.site_name == "linkedin"
+    assert listing.external_id == "4441485838"
+    assert listing.title == "DATA ANALYST I"
+    assert listing.company == "Inter"
+    assert listing.url == "https://www.linkedin.com/jobs/view/4441485838/"
+
+
+def test_card_to_job_listing_none_for_malformed_or_titleless_cards():
+    assert _card_to_job_listing({"jobId": "not-a-number", "text": "Título\n\nEmpresa"}) is None
+    assert _card_to_job_listing({"jobId": "123456", "text": ""}) is None
+    assert _card_to_job_listing({"jobId": None, "text": "Título\n\nEmpresa"}) is None
+
+
+class FakeSearchPage:
+    def __init__(self, cards: list[dict]):
+        self._cards = cards
+        self.goto_calls = []
+
+    def goto(self, url, timeout=None, wait_until=None):
+        self.goto_calls.append(url)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def evaluate(self, script):
+        return self._cards
+
+
+class FakeSearchContext:
+    def __init__(self, page):
+        self._page = page
+        self.closed = False
+
+    def new_page(self):
+        return self._page
+
+    def close(self):
+        self.closed = True
+
+
+class FakeSearchPlaywright:
+    def stop(self):
+        pass
+
+
+def test_search_jobs_builds_the_real_query_url_and_converts_valid_cards(monkeypatch):
+    cards = [
+        {"jobId": "4441485838", "text": "Analista De Dados\n\nEmpresa X\n\nSão Paulo, SP"},
+        {"jobId": "not-a-number", "text": "Lixo\n\nEmpresa"},
+    ]
+    page = FakeSearchPage(cards)
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
+    )
+
+    listings = LinkedInAdapter().search_jobs("Analista de Dados")
+
+    assert len(listings) == 1
+    assert listings[0].external_id == "4441485838"
+    assert page.goto_calls == ["https://www.linkedin.com/jobs/search-results/?keywords=Analista+de+Dados"]
