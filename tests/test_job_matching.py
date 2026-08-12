@@ -10,7 +10,6 @@ from jarvis.sites.job_matching import (
     has_international_signal,
     has_junior_signal,
     is_in_target_region,
-    is_likely_startup,
     is_relevant_match,
     is_remote,
     rank_bank_bigtech_first,
@@ -204,30 +203,26 @@ def test_company_tier_none_for_an_unrecognized_or_missing_company():
     assert company_tier(None) is None
 
 
-def test_is_likely_startup_false_for_known_bank_or_bigtech():
-    listing = make_listing("1", "X")
-    listing.company = "Itaú"
-    assert not is_likely_startup(listing)
+def test_company_tier_recognizes_known_startups():
+    assert company_tier("Gupy") == "startup"
+    assert company_tier("Semantix Tecnologia") == "startup"
 
 
-def test_is_likely_startup_false_for_generic_recruiting_agency_markers():
-    listing = make_listing("1", "X")
-    listing.company = "RH"
-    assert not is_likely_startup(listing)
+def test_company_tier_none_for_an_unrecognized_named_company():
+    # Real limitation, not a bug: a genuine, real startup that just isn't
+    # in the curated list (e.g. "Housi") comes back None, same as any
+    # other unrecognized name -- there's no company-size database here to
+    # check against, only the three named lists.
+    assert company_tier("Housi") is None
 
 
-def test_is_likely_startup_true_for_an_unrecognized_named_company():
-    listing = make_listing("1", "X")
-    listing.company = "Housi"
-    assert is_likely_startup(listing)
-
-
-def test_rank_bank_bigtech_first_orders_banco_then_bigtech_then_rest():
-    listings = [make_listing("1", "X"), make_listing("2", "X"), make_listing("3", "X")]
+def test_rank_bank_bigtech_first_orders_banco_then_bigtech_then_startup_then_rest():
+    listings = [make_listing(str(i), "X") for i in range(1, 5)]
     listings[0].company = "Empresa Qualquer"
     listings[1].company = "Google"
     listings[2].company = "Itaú"
+    listings[3].company = "Gupy"
 
     result = rank_bank_bigtech_first(listings)
 
-    assert [listing.external_id for listing in result] == ["3", "2", "1"]
+    assert [listing.external_id for listing in result] == ["3", "2", "4", "1"]

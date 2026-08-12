@@ -204,11 +204,12 @@ def filter_remote(listings: list[JobListing]) -> list[JobListing]:
 
 
 # "foque em trabalhos de bancos e bigtechs e startup" (2026-08-12) --
-# named lists for the two categories that are actually nameable (a
-# company either is a known bank/fintech or it isn't); "startup" has no
-# equivalent list here because there's no reliable signal to check a
-# company name against -- see is_likely_startup()'s own docstring for
-# how that one is approximated instead, and its real limits.
+# three named lists, each checked the same way: a company either matches
+# a known name or it doesn't, never a guess/elimination heuristic. An
+# earlier version of the startup category tried to approximate it as
+# "not bank/bigtech and not an obvious staffing agency" -- that matched
+# ~84% of every real result and wasn't a meaningful filter, replaced here
+# with a real, curated list.
 _BANK_COMPANIES = [
     "itaú",
     "itau",
@@ -244,6 +245,13 @@ _BANK_COMPANIES = [
     "xp investimentos",
 ]
 
+# Established, large, mostly publicly-traded tech companies -- global
+# giants plus the handful of Brazilian tech platforms that are genuinely
+# "big" by any normal measure (headcount, market cap, years operating),
+# as opposed to _STARTUP_COMPANIES below (younger, VC-funded scale-ups).
+# The line between the two lists is a real judgment call, not a precise
+# classification -- Stone/TOTVS/VTEX are publicly traded, which is the
+# concrete reason they're here and not in the startup list.
 _BIGTECH_COMPANIES = [
     "google",
     "microsoft",
@@ -267,6 +275,16 @@ _BIGTECH_COMPANIES = [
     "stone",
     "totvs",
     "vtex",
+]
+
+# Real, named Brazilian startups/scale-ups -- a genuine list (same
+# "matches or it doesn't" principle as banks/bigtechs), not the earlier
+# elimination-based guess ("not bank/bigtech and not a staffing agency",
+# which matched ~84% of everything and wasn't a meaningful filter). Skews
+# toward data/analytics-relevant ones (Semantix, Indicium, Datarisk,
+# Neoway, Take Blip, Pipefy) given the résumé's own focus, alongside the
+# better-known consumer unicorns/scale-ups.
+_STARTUP_COMPANIES = [
     "rappi",
     "quinto andar",
     "quintoandar",
@@ -274,12 +292,52 @@ _BIGTECH_COMPANIES = [
     "gympass",
     "movile",
     "hotmart",
+    "loft",
+    "ebanx",
+    "wildlife studios",
+    "olist",
+    "contaazul",
+    "conta azul",
+    "rd station",
+    "resultados digitais",
+    "cora",
+    "conta simples",
+    "facily",
+    "merama",
+    "madeiramadeira",
+    "madeira madeira",
+    "printi",
+    "petlove",
+    "buser",
+    "sami",
+    "alice saude",
+    "alice saúde",
+    "take blip",
+    "pipefy",
+    "jusbrasil",
+    "gupy",
+    "docket",
+    "sallve",
+    "inloco",
+    "in loco",
+    "unico",
+    "justos",
+    "kovi",
+    "cargox",
+    "frete.com",
+    "contabilizei",
+    "neoway",
+    "datarisk",
+    "semantix",
+    "indicium",
 ]
 
 
 def company_tier(company: str | None) -> str | None:
-    """"banco" or "bigtech" if the company name matches a known one from
-    the lists above, else None -- never guesses on an unrecognized name."""
+    """"banco"/"bigtech"/"startup" if the company name matches a known one
+    from the lists above, else None -- never guesses on an unrecognized
+    name. Checked in that order (a fintech that's both a household-name
+    bank and young/VC-funded, e.g. Nubank, is classified as a bank first)."""
     if not company:
         return None
     haystack = company.lower()
@@ -287,35 +345,19 @@ def company_tier(company: str | None) -> str | None:
         return "banco"
     if any(name in haystack for name in _BIGTECH_COMPANIES):
         return "bigtech"
+    if any(name in haystack for name in _STARTUP_COMPANIES):
+        return "startup"
     return None
 
 
-def is_likely_startup(listing: JobListing) -> bool:
-    """Approximation, not a real classification -- there's no company-size
-    database here to check against, so this can only say "doesn't look
-    like a known bank/bigtech, and doesn't look like a generic staffing
-    agency/unidentified employer either" (the same "fragment" pattern
-    already used for InfoJobs' broken company-name extraction, e.g. "RH",
-    "Ltda", "Empresa Confidencial" -- see the artifact-building code this
-    module feeds). Real false positives are expected (this will call a
-    large traditional non-tech company a "startup" if it just isn't in
-    the two named lists) -- treat this as "not a bank/bigtech and not
-    obviously a staffing intermediary", not as ground truth."""
-    if company_tier(listing.company) is not None:
-        return False
-    if not listing.company:
-        return False
-    generic_markers = {"ltda", "s.a", "(matriz)", "(c-i)", "rh", "vagas", "recrutamento", "empresa confidencial"}
-    return listing.company.strip().lower() not in generic_markers
-
-
 def rank_bank_bigtech_first(listings: list[JobListing]) -> list[JobListing]:
-    """Stable sort: known banks first, known bigtechs next, everything
-    else after -- relative order within each group is preserved."""
+    """Stable sort: known banks first, known bigtechs next, known startups
+    after that, everything else last -- relative order within each group
+    is preserved."""
 
     def sort_key(listing: JobListing) -> int:
         tier = company_tier(listing.company)
-        return {"banco": 0, "bigtech": 1}.get(tier, 2)
+        return {"banco": 0, "bigtech": 1, "startup": 2}.get(tier, 3)
 
     return sorted(listings, key=sort_key)
 
