@@ -1,6 +1,7 @@
 from jarvis.resume.schema import Bilingual, JobPreferences, PersonalInfo, Resume
 from jarvis.sites.base import JobListing
 from jarvis.sites.job_matching import (
+    company_tier,
     dedupe,
     derive_search_terms,
     filter_by_location,
@@ -9,8 +10,10 @@ from jarvis.sites.job_matching import (
     has_international_signal,
     has_junior_signal,
     is_in_target_region,
+    is_likely_startup,
     is_relevant_match,
     is_remote,
+    rank_bank_bigtech_first,
     rank_junior_first,
 )
 
@@ -183,3 +186,48 @@ def test_rank_junior_first_moves_explicit_junior_signals_to_the_front():
     result = rank_junior_first(listings)
 
     assert [listing.external_id for listing in result] == ["2", "4", "1", "3"]
+
+
+def test_company_tier_recognizes_known_banks_case_insensitively():
+    assert company_tier("Itaú Unibanco") == "banco"
+    assert company_tier("BRADESCO") == "banco"
+    assert company_tier("Nubank") == "banco"
+
+
+def test_company_tier_recognizes_known_bigtechs():
+    assert company_tier("Google Brasil") == "bigtech"
+    assert company_tier("iFood") == "bigtech"
+
+
+def test_company_tier_none_for_an_unrecognized_or_missing_company():
+    assert company_tier("Empresa Qualquer Ltda") is None
+    assert company_tier(None) is None
+
+
+def test_is_likely_startup_false_for_known_bank_or_bigtech():
+    listing = make_listing("1", "X")
+    listing.company = "Itaú"
+    assert not is_likely_startup(listing)
+
+
+def test_is_likely_startup_false_for_generic_recruiting_agency_markers():
+    listing = make_listing("1", "X")
+    listing.company = "RH"
+    assert not is_likely_startup(listing)
+
+
+def test_is_likely_startup_true_for_an_unrecognized_named_company():
+    listing = make_listing("1", "X")
+    listing.company = "Housi"
+    assert is_likely_startup(listing)
+
+
+def test_rank_bank_bigtech_first_orders_banco_then_bigtech_then_rest():
+    listings = [make_listing("1", "X"), make_listing("2", "X"), make_listing("3", "X")]
+    listings[0].company = "Empresa Qualquer"
+    listings[1].company = "Google"
+    listings[2].company = "Itaú"
+
+    result = rank_bank_bigtech_first(listings)
+
+    assert [listing.external_id for listing in result] == ["3", "2", "1"]

@@ -95,6 +95,38 @@ def test_latest_report_path_none_when_no_search_has_run(monkeypatch, tmp_path):
     assert latest_report_path() is None
 
 
+def test_run_job_search_ranks_bank_bigtech_after_junior_but_before_unknown():
+    # rank_junior_first is the primary key, rank_bank_bigtech_first the
+    # tiebreaker within it -- a realistic-level role matters more than
+    # which company it's at, but among similarly-leveled roles, known
+    # employers come first.
+    unranked = make_listing("1", "Analista De Dados", site_name="infojobs")
+    unranked.company = "Empresa Qualquer"
+    bigtech = make_listing("2", "Analista De Dados", site_name="infojobs")
+    bigtech.company = "Google"
+    bank = make_listing("3", "Analista De Dados", site_name="infojobs")
+    bank.company = "Itaú"
+    junior_unranked = make_listing("4", "Analista De Dados Júnior", site_name="infojobs")
+    junior_unranked.company = "Empresa Qualquer"
+
+    adapters = {"infojobs": FakeAdapter([unranked, bigtech, bank, junior_unranked])}
+    report = run_job_search(make_resume(), adapters=adapters)
+
+    assert [listing.external_id for listing in report.local] == ["4", "3", "2", "1"]
+
+
+def test_render_listing_lines_tags_known_bank_and_bigtech(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    bank_listing = make_listing("1", "Analista De Dados", location="São Paulo - SP")
+    bank_listing.company = "Itaú"
+    report = run_job_search(make_resume(), adapters={"infojobs": FakeAdapter([bank_listing])})
+
+    path = save_report(report)
+    content = open(path, encoding="utf-8").read()
+
+    assert "🏦" in content
+
+
 def test_summarize_mentions_counts_failed_sites_and_saved_path():
     local_listing = make_listing("1", "Analista De Dados", location="São Bernardo do Campo - SP")
     report = run_job_search(

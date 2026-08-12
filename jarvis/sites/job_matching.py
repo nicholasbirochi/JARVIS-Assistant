@@ -203,6 +203,123 @@ def filter_remote(listings: list[JobListing]) -> list[JobListing]:
     return [listing for listing in listings if is_remote(listing.title, listing.snippet, listing.location)]
 
 
+# "foque em trabalhos de bancos e bigtechs e startup" (2026-08-12) --
+# named lists for the two categories that are actually nameable (a
+# company either is a known bank/fintech or it isn't); "startup" has no
+# equivalent list here because there's no reliable signal to check a
+# company name against -- see is_likely_startup()'s own docstring for
+# how that one is approximated instead, and its real limits.
+_BANK_COMPANIES = [
+    "itaú",
+    "itau",
+    "bradesco",
+    "santander",
+    "banco do brasil",
+    "caixa econômica",
+    "caixa economica",
+    "nubank",
+    "banco inter",
+    "c6 bank",
+    "btg pactual",
+    "original",
+    "neon",
+    "picpay",
+    "banco pan",
+    "safra",
+    "banco votorantim",
+    "daycoval",
+    "banco modal",
+    "banco bmg",
+    "will bank",
+    "banco next",
+    "banco sofisa",
+    "credit suisse",
+    "jpmorgan",
+    "jp morgan",
+    "goldman sachs",
+    "hsbc",
+    "citibank",
+    "banco abc",
+    "banrisul",
+    "xp investimentos",
+]
+
+_BIGTECH_COMPANIES = [
+    "google",
+    "microsoft",
+    "amazon",
+    "meta platforms",
+    "apple",
+    "netflix",
+    "ibm",
+    "oracle",
+    "sap",
+    "salesforce",
+    "nvidia",
+    "intel",
+    "adobe",
+    "uber",
+    "airbnb",
+    "spotify",
+    "mercado livre",
+    "mercadolivre",
+    "ifood",
+    "stone",
+    "totvs",
+    "vtex",
+    "rappi",
+    "quinto andar",
+    "quintoandar",
+    "creditas",
+    "gympass",
+    "movile",
+    "hotmart",
+]
+
+
+def company_tier(company: str | None) -> str | None:
+    """"banco" or "bigtech" if the company name matches a known one from
+    the lists above, else None -- never guesses on an unrecognized name."""
+    if not company:
+        return None
+    haystack = company.lower()
+    if any(name in haystack for name in _BANK_COMPANIES):
+        return "banco"
+    if any(name in haystack for name in _BIGTECH_COMPANIES):
+        return "bigtech"
+    return None
+
+
+def is_likely_startup(listing: JobListing) -> bool:
+    """Approximation, not a real classification -- there's no company-size
+    database here to check against, so this can only say "doesn't look
+    like a known bank/bigtech, and doesn't look like a generic staffing
+    agency/unidentified employer either" (the same "fragment" pattern
+    already used for InfoJobs' broken company-name extraction, e.g. "RH",
+    "Ltda", "Empresa Confidencial" -- see the artifact-building code this
+    module feeds). Real false positives are expected (this will call a
+    large traditional non-tech company a "startup" if it just isn't in
+    the two named lists) -- treat this as "not a bank/bigtech and not
+    obviously a staffing intermediary", not as ground truth."""
+    if company_tier(listing.company) is not None:
+        return False
+    if not listing.company:
+        return False
+    generic_markers = {"ltda", "s.a", "(matriz)", "(c-i)", "rh", "vagas", "recrutamento", "empresa confidencial"}
+    return listing.company.strip().lower() not in generic_markers
+
+
+def rank_bank_bigtech_first(listings: list[JobListing]) -> list[JobListing]:
+    """Stable sort: known banks first, known bigtechs next, everything
+    else after -- relative order within each group is preserved."""
+
+    def sort_key(listing: JobListing) -> int:
+        tier = company_tier(listing.company)
+        return {"banco": 0, "bigtech": 1}.get(tier, 2)
+
+    return sorted(listings, key=sort_key)
+
+
 def is_in_target_region(location: str | None, region_terms: list[str] = _TARGET_REGION_TERMS) -> bool:
     """True if the listing's location text names the user's home city, its
     ABC-region neighbors, or São Paulo city itself. False for anything

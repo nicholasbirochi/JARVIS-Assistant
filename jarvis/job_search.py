@@ -67,6 +67,7 @@ def run_job_search(resume: Resume, *, adapters: dict[str, object] | None = None)
         filter_by_location,
         filter_relevant,
         filter_remote,
+        rank_bank_bigtech_first,
         rank_junior_first,
     )
 
@@ -91,8 +92,13 @@ def run_job_search(resume: Resume, *, adapters: dict[str, object] | None = None)
     deduped = dedupe(all_listings)
     relevant = filter_relevant(deduped, terms)
 
-    local = rank_junior_first(filter_by_location(relevant))
-    remote = rank_junior_first(filter_remote(relevant))
+    # rank_bank_bigtech_first runs first (inner), rank_junior_first last
+    # (outer) -- sorted() is stable, so this makes junior-fit the primary
+    # key and known-employer the tiebreaker within each junior tier,
+    # rather than the other way around: a role realistically at his level
+    # matters more than which company it's at.
+    local = rank_junior_first(rank_bank_bigtech_first(filter_by_location(relevant)))
+    remote = rank_junior_first(rank_bank_bigtech_first(filter_remote(relevant)))
 
     return JobSearchReport(
         generated_at=datetime.now(timezone.utc).isoformat(),
@@ -152,13 +158,19 @@ def _render_markdown(report: JobSearchReport) -> str:
 
 
 def _render_listing_lines(listings: list[JobListing]) -> list[str]:
+    from jarvis.sites.job_matching import company_tier
+
     if not listings:
         return ["_Nenhuma vaga encontrada nesta categoria._"]
-    return [
-        f"- **{listing.title}** -- {listing.company or 'empresa não identificada'} -- "
-        f"{listing.location or 'localização não informada'} -- [{listing.site_name}]({listing.url})"
-        for listing in listings
-    ]
+    lines = []
+    for listing in listings:
+        tier = company_tier(listing.company)
+        tag = " 🏦" if tier == "banco" else " 💻" if tier == "bigtech" else ""
+        lines.append(
+            f"- **{listing.title}**{tag} -- {listing.company or 'empresa não identificada'} -- "
+            f"{listing.location or 'localização não informada'} -- [{listing.site_name}]({listing.url})"
+        )
+    return lines
 
 
 def summarize(report: JobSearchReport, saved_path: str, *, top_n: int = 5) -> str:
