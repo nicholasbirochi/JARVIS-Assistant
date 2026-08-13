@@ -78,9 +78,17 @@ _JUNIOR_SIGNAL_TERMS = [
 # district-level detail (nearly everything just says "São Paulo - SP"),
 # so the city itself is the finest resolution available, not "Centro"
 # specifically. Deliberately does NOT include Grande São Paulo cities on
-# the opposite side of the metro region (Guarulhos, Barueri, Osasco,
-# Jundiaí, etc.) even though they showed up in real search results --
-# the user asked to focus, not to keep everything "sort of near SP".
+# the opposite side of the metro region (Guarulhos, Barueri, Jundiaí,
+# etc.) even though they showed up in real search results -- the user
+# asked to focus, not to keep everything "sort of near SP".
+#
+# Osasco and Cajamar added 2026-08-13, a narrow, explicit exception to
+# the rule above: real bigtech listings (Amazon) kept showing up there
+# specifically, and the user confirmed he wants them counted as "perto
+# de você" -- Osasco borders São Paulo city directly (much closer than
+# Guarulhos/Barueri, which stay excluded), and Cajamar is a real,
+# recurring Amazon logistics/data hub in this project's own search
+# results, not an arbitrary addition.
 _TARGET_REGION_TERMS = [
     "são bernardo do campo",
     "sao bernardo do campo",
@@ -97,6 +105,8 @@ _TARGET_REGION_TERMS = [
     "ribeirão pires",
     "ribeirao pires",
     "rio grande da serra",
+    "osasco",
+    "cajamar",
 ]
 
 

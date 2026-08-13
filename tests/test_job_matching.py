@@ -118,6 +118,16 @@ def test_is_in_target_region_true_for_home_city_and_abc_neighbors():
     assert is_in_target_region("São Paulo - SP")
 
 
+def test_is_in_target_region_true_for_osasco_and_cajamar():
+    # Narrow, explicit exception added 2026-08-13: real bigtech listings
+    # (Amazon) kept showing up in these two specifically, and the user
+    # confirmed he wants them counted as "perto de você" -- unlike
+    # Guarulhos/Barueri/Jundiaí, which stay excluded (see the module's
+    # own docstring for the reasoning).
+    assert is_in_target_region("Osasco, SP")
+    assert is_in_target_region("Cajamar, SP, BRA")
+
+
 def test_is_in_target_region_false_for_the_state_suffix_alone():
     # The real risk: every location string ends in "- SP" (the state
     # abbreviation), which must never itself count as a match -- only the
