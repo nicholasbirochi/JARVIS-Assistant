@@ -108,9 +108,20 @@ candidate). Real, confirmed findings:
   can_submit=True yet, and there is no apply_to_job() in this file --
   writing one now would mean guessing the final click, which this
   project's whole methodology (live-verify, never guess) exists to
-  avoid. Needs one more live, human-supervised session against a real
-  listing with zero company-specific questions before that can be built
-  honestly.
+  avoid.
+- **Real finding, 2026-08-13, that changes the outlook here**: a SECOND
+  real, different, live-tested listing (BIP Brasil, unrelated to Itaú)
+  ALSO hit a company-specific question step -- this one asked "Qual sua
+  pretensão salarial atual?" (current salary expectation) plus two
+  company-culture questions. Two for two real companies tested both
+  blocked on a financial/custom question before ever reaching a final
+  submit screen. This is a real signal, not a coincidence: Gupy-hosted
+  employers commonly attach at least one custom screening question
+  (often salary), which means the "completes fully automatically" path
+  may be rare or nonexistent in practice, not just untested. Worth
+  knowing before investing more effort chasing a fully-automated
+  end-to-end submission here -- the honest, buildable ceiling right now
+  is preview_application()'s safety check, not a true one-click apply.
 """
 
 from __future__ import annotations
