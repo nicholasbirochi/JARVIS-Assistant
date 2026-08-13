@@ -88,6 +88,18 @@ candidate). Real, confirmed findings:
   simple -- only Gupy's own two standard referral questions are
   auto-answered (both always "Não" -- factually true for any external
   candidate applying cold).
+- Company questions are extracted INDIVIDUALLY (2026-08-13, real DOM
+  confirmed live): each is its own `<h3>` whose text starts with "N."
+  (e.g. `<h3 class="sc-bklklh aRUgP">1.Qual sua pretensão salarial
+  atual?</h3>` -- the class is build-hashed and unstable, so matching is
+  on the numbered-prefix text pattern instead). Each question is
+  individually classified via base.py's is_hard_pii_question() (RG/CPF/
+  birth date -- never even received from Nicholas) vs the broader
+  question_requires_stop() (also covers salary/marital status -- still a
+  stop today, but reported with a different, more precise reason).
+  Confirmed live against BOTH real listings tested: Itaú's RG question
+  correctly flags is_hard_pii=True; BIP Brasil's "pretensão salarial"
+  question correctly flags is_hard_pii=False while still blocking.
 - DOM quirk: the "Sim"/"Não" choices for both the standard referral
   questions and (presumably) company yes/no questions are `<span>` text
   nodes inside `<label>` elements -- there is NO native, visible
@@ -143,6 +155,7 @@ from jarvis.sites.base import (
     SiteProfileSnapshot,
     UpdatePlan,
     UpdateResult,
+    is_hard_pii_question,
     question_requires_stop,
 )
 
@@ -527,16 +540,36 @@ class GupyAdapter(SiteAdapter):
             if "Perguntas criadas pela empresa" in step_text or "Responder agora" in step_text:
                 self._click_text_button(page, "Responder agora")
                 page.wait_for_timeout(1500)
-                company_text = self._extract_step_text(page)
-                questions.append(ApplicationQuestion(text=company_text, answered=False))
-                reason = (
-                    "Essa vaga tem pergunta(s) própria(s) da empresa que pedem dado sensível "
-                    "(RG, CPF ou remuneração) -- o JARVIS nunca responde isso sozinho."
-                    if question_requires_stop(company_text)
-                    else "Essa vaga tem pergunta(s) própria(s) da empresa -- o JARVIS não "
-                    "responde nenhuma pergunta específica de empresa sozinho, mesmo que "
-                    "pareça simples."
-                )
+                company_questions = self._extract_company_questions(page)
+                if not company_questions:
+                    # Real selector (h3 whose text starts with "N.") found
+                    # nothing -- fall back to the whole block so nothing
+                    # is silently lost, same as before this change.
+                    company_questions = [self._extract_step_text(page)]
+                for q_text in company_questions:
+                    questions.append(
+                        ApplicationQuestion(text=q_text, answered=False, is_hard_pii=is_hard_pii_question(q_text))
+                    )
+
+                pii_questions = [q for q in questions if q.is_hard_pii]
+                other_blocking = [q for q in questions if not q.is_hard_pii and question_requires_stop(q.text)]
+                if pii_questions:
+                    reason = (
+                        "Essa vaga pede documento oficial (RG/CPF) ou data de nascimento numa "
+                        "pergunta própria da empresa -- o JARVIS nunca recebe nem repassa esse "
+                        "dado, mesmo que você queira ditar a resposta."
+                    )
+                elif other_blocking:
+                    reason = (
+                        "Essa vaga tem pergunta(s) própria(s) sobre dado sensível (salário, "
+                        "estado civil) -- o JARVIS ainda não responde isso sozinho."
+                    )
+                else:
+                    reason = (
+                        "Essa vaga tem pergunta(s) própria(s) da empresa -- o JARVIS não "
+                        "responde nenhuma pergunta específica de empresa sozinho, mesmo que "
+                        "pareça simples."
+                    )
                 return ApplicationPreview(
                     site_name=self.site_name,
                     job_url=job_url,
@@ -606,10 +639,32 @@ class GupyAdapter(SiteAdapter):
     def _extract_step_text(self, page) -> str:
         return page.evaluate("() => (document.querySelector('main') || document.body).innerText.trim()")
 
+    def _extract_company_questions(self, page) -> list[str]:
+        """Individual company-specific questions, one per real <h3>
+        element whose text starts with "N." -- confirmed live 2026-08-13
+        against a real listing (BIP Brasil): each question is its own
+        <h3 class="sc-bklklh aRUgP">1.Question text</h3>. The class name
+        is build-hashed and NOT stable across Gupy deploys (same caveat
+        as the "Não" radio labels elsewhere in this file), so matching is
+        done on the numbered-prefix TEXT PATTERN instead, which is far
+        more likely to survive a redeploy."""
+        return page.evaluate(
+            """
+            () => Array.from(document.querySelectorAll('main h3, body h3'))
+                .map(h => h.textContent.trim())
+                .filter(t => /^\\d+\\./.test(t))
+            """
+        )
+
     def _render_application_summary(self, reason: str, questions: list[ApplicationQuestion]) -> str:
         lines = [f"Candidatura em {self.site_name}: BLOQUEADA -- {reason}"]
         for q in questions:
-            status = f"respondida automaticamente ({q.answer})" if q.answered else "NÃO respondida -- precisa de você"
+            if q.answered:
+                status = f"respondida automaticamente ({q.answer})"
+            elif q.is_hard_pii:
+                status = "NÃO respondida -- documento oficial, o JARVIS nunca pede isso"
+            else:
+                status = "NÃO respondida -- precisa de você"
             lines.append(f"- {status}: {q.text[:200]}")
         return "\n".join(lines)
 

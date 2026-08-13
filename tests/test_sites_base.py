@@ -7,6 +7,7 @@ from jarvis.sites.base import (
     SiteProfileSnapshot,
     UpdatePlan,
     UpdateResult,
+    is_hard_pii_question,
     question_requires_stop,
 )
 
@@ -73,3 +74,18 @@ def test_question_requires_stop_false_for_an_unrelated_question():
 def test_question_requires_stop_case_insensitive():
     assert question_requires_stop("QUAL O SEU RG?")
     assert question_requires_stop("qual sua remuneração?")
+
+
+def test_is_hard_pii_question_true_only_for_government_id_and_birth_date():
+    # Real, confirmed live 2026-08-13: BIP Brasil's own "pretensão
+    # salarial" question is sensitive but NOT a government-ID question --
+    # it must be classified differently from Itaú's real RG question.
+    assert is_hard_pii_question("Qual é o seu RG?")
+    assert is_hard_pii_question("Informe seu CPF completo")
+    assert is_hard_pii_question("Qual sua data de nascimento?")
+    assert not is_hard_pii_question("Qual sua pretensão salarial atual?")
+    assert not is_hard_pii_question("Qual seu estado civil?")
+
+
+def test_is_hard_pii_question_false_for_an_unrelated_question():
+    assert not is_hard_pii_question("Você tem disponibilidade para trabalho híbrido?")

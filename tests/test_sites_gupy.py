@@ -497,20 +497,22 @@ def test_card_to_job_listing_converts_a_real_shaped_card():
 # Shapes real, live-confirmed script content (see gupy.py's module
 # docstring): _get_apply_href's script mentions "apply-link";
 # _extract_step_text's mentions "innerText"; _answer_referral_labels'
-# mentions "querySelectorAll('label')"; _click_text_button's embeds the
-# target text as a Python repr() (e.g. 'Continuar') -- FakeApplicationPage
+# mentions "querySelectorAll('label')"; _extract_company_questions'
+# mentions "main h3, body h3"; _click_text_button's embeds the target
+# text as a Python repr() (e.g. 'Continuar') -- FakeApplicationPage
 # dispatches on those same markers instead of guessing at exact JS.
 
 
 class FakeApplicationPage:
     def __init__(self, *, apply_href="/candidates/jobs/123/apply", step_texts, referral_answer_count=0,
-                 click_results=None):
+                 click_results=None, company_questions=None):
         self.apply_href = apply_href
         self.url = "https://empresa.gupy.io/job/xyz"
         self.step_texts = step_texts
         self._step_text_idx = 0
         self.referral_answer_count = referral_answer_count
         self.click_results = click_results or {}
+        self.company_questions = company_questions or []
         self.clicked: list[str] = []
 
     def goto(self, url, timeout=None, wait_until=None):
@@ -525,6 +527,8 @@ class FakeApplicationPage:
     def evaluate(self, script):
         if "apply-link" in script:
             return self.apply_href
+        if "main h3, body h3" in script:
+            return self.company_questions
         if "innerText" in script:
             text = self.step_texts[self._step_text_idx]
             self._step_text_idx = min(self._step_text_idx + 1, len(self.step_texts) - 1)
@@ -579,26 +583,28 @@ def test_preview_application_blocked_when_apply_link_is_missing(monkeypatch):
 def test_preview_application_answers_referral_then_stops_at_company_questions_with_pii(monkeypatch):
     # Shapes the real Itaú pilot, 2026-08-12: referral questions answered
     # automatically, then a company-specific question step asking for RG
-    # -- must stop, never fabricate an answer.
+    # -- must stop, never fabricate an answer, and be flagged as hard PII
+    # specifically (not just "sensitive").
     page = FakeApplicationPage(
         step_texts=[
             "Alguém te indicou?\nSim\nNão\nVocê trabalha na empresa?\nSim\nNão",
-            "Perguntas criadas pela empresa\n1. Qual é o seu RG?\nResponder agora",
-            "Perguntas criadas pela empresa\n1. Qual é o seu RG? *",
+            "Perguntas criadas pela empresa\n1.Qual é o seu RG?\nResponder agora",
         ],
         referral_answer_count=2,
         click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual é o seu RG?"],
     )
     _patch_open_context(monkeypatch, page)
 
     preview = GupyAdapter().preview_application("https://empresa.gupy.io/job/xyz")
 
     assert preview.can_submit is False
-    assert "RG" in preview.blocked_reason or "sensível" in preview.blocked_reason
+    assert "documento oficial" in preview.blocked_reason
     assert len(preview.questions) == 2
     assert preview.questions[0].answered is True
     assert preview.questions[0].answer == "Não (para todas)"
     assert preview.questions[1].answered is False
+    assert preview.questions[1].is_hard_pii is True
     assert "Continuar" in page.clicked
     assert "Responder agora" in page.clicked
 
@@ -606,15 +612,16 @@ def test_preview_application_answers_referral_then_stops_at_company_questions_wi
 def test_preview_application_stops_at_company_questions_even_without_pii_terms(monkeypatch):
     # The broader rule: ANY company-specific question is a stop, not just
     # ones that hit the PII/financial blocklist -- see base.py's
-    # question_requires_stop() docstring.
+    # question_requires_stop() docstring. Not flagged as hard PII either,
+    # since "CNH" (driver's license) isn't a government-ID/birth-date term.
     page = FakeApplicationPage(
         step_texts=[
             "Alguém te indicou?\nSim\nNão",
-            "Perguntas criadas pela empresa\n1. Você tem CNH?\nResponder agora",
-            "Perguntas criadas pela empresa\n1. Você tem CNH?",
+            "Perguntas criadas pela empresa\n1.Você tem CNH?\nResponder agora",
         ],
         referral_answer_count=1,
         click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Você tem CNH?"],
     )
     _patch_open_context(monkeypatch, page)
 
@@ -622,6 +629,30 @@ def test_preview_application_stops_at_company_questions_even_without_pii_terms(m
 
     assert preview.can_submit is False
     assert "não responde nenhuma pergunta específica" in preview.blocked_reason
+    assert preview.questions[-1].is_hard_pii is False
+
+
+def test_preview_application_flags_sensitive_non_pii_questions_distinctly(monkeypatch):
+    # Real, confirmed live 2026-08-13 (BIP Brasil): a salary-expectation
+    # question is sensitive but NOT a government-ID question -- the
+    # reason shown must reflect that distinction, not lump it with RG/CPF.
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual sua pretensão salarial atual?"],
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().preview_application("https://empresa.gupy.io/job/xyz")
+
+    assert preview.can_submit is False
+    assert "dado sensível" in preview.blocked_reason
+    assert "documento oficial" not in preview.blocked_reason
+    assert preview.questions[-1].is_hard_pii is False
 
 
 def test_preview_application_never_claims_can_submit_even_with_no_company_questions(monkeypatch):

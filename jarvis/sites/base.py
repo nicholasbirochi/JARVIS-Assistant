@@ -139,12 +139,30 @@ class JobListing:
 # (referral / "do you work here") are auto-answered, because their
 # meaning is fixed platform-wide and both are unambiguously "Não" for any
 # external candidate applying cold -- never a per-company guess.
-_PII_OR_FINANCIAL_TERMS = [
+# Genuine government ID / birth date terms -- the exact class of data
+# this project has refused to capture or store since its very first
+# design decision (CPF/birth date). These stay an absolute hard stop
+# even if Nicholas offers to just tell JARVIS the answer himself: relaying
+# a real RG/CPF number through JARVIS's own pipeline (voice transcript,
+# tool-call args, evidence logs) is still capturing it, which the
+# project's original rule forbids regardless of source.
+_HARD_PII_TERMS = [
     "rg",
     "cpf",
     "registro geral",
     "carteira de identidade",
     "data de nascimento",
+]
+
+# Sensitive-but-not-government-ID terms (financial specifics, marital
+# status) -- still a stop today (no relay-the-user's-real-answer flow
+# exists yet, see gupy.py's module docstring for why: two real,
+# different companies tested both hit one of these, and there's still no
+# verified final-submit click to build toward). Kept separate from
+# _HARD_PII_TERMS so reporting can be precise about WHY something is
+# blocked -- "isso é um documento oficial, nem me diga" reads very
+# differently from "isso é sobre salário".
+_SENSITIVE_NON_PII_TERMS = [
     "estado civil",
     "remuneração",
     "remuneracao",
@@ -154,20 +172,34 @@ _PII_OR_FINANCIAL_TERMS = [
     "pretensao salarial",
     "renda",
 ]
+_PII_OR_FINANCIAL_TERMS = _HARD_PII_TERMS + _SENSITIVE_NON_PII_TERMS
+
+
+def _matches_any_term(question_text: str, terms: list[str]) -> bool:
+    haystack = question_text.lower()
+    return any(re.search(rf"\b{re.escape(term)}\b", haystack) for term in terms)
+
+
+def is_hard_pii_question(question_text: str) -> bool:
+    """True only for genuine government ID/birth date questions (RG,
+    CPF, data de nascimento) -- the narrow subset JARVIS must never even
+    receive from Nicholas, let alone guess, no matter how this feature
+    evolves later."""
+    return _matches_any_term(question_text, _HARD_PII_TERMS)
 
 
 def question_requires_stop(question_text: str) -> bool:
     """True if a screening question's text mentions PII (RG/CPF/birth
     date/marital status) or a financial specific (current salary/salary
-    expectation) -- confirmed live 2026-08-12 against a real Itaú Gupy
-    listing's actual custom questions. A hard stop, not a warning: any
-    match here means apply_to_job() must refuse rather than guess.
-    Deliberately biased toward over-triggering -- a false-positive stop
-    just means "ask Nicholas," which is always the safe failure mode
+    expectation) -- confirmed live 2026-08-12 against two real, different
+    Gupy listings' actual custom questions (Itaú: RG + remuneração; BIP
+    Brasil: pretensão salarial + culture-fit). A hard stop, not a
+    warning: any match here means apply_to_job() must refuse rather than
+    guess. Deliberately biased toward over-triggering -- a false-positive
+    stop just means "ask Nicholas," which is always the safe failure mode
     here, unlike, say, company_tier()'s substring-match bug, where a
     false positive was actively misleading."""
-    haystack = question_text.lower()
-    return any(re.search(rf"\b{re.escape(term)}\b", haystack) for term in _PII_OR_FINANCIAL_TERMS)
+    return _matches_any_term(question_text, _PII_OR_FINANCIAL_TERMS)
 
 
 @dataclass
@@ -175,11 +207,16 @@ class ApplicationQuestion:
     """One question encountered while walking a real job-application
     flow -- logged whether it was safely auto-answered (Gupy's own
     standard referral questions) or caused a stop (any company-specific
-    question, unconditionally -- see module note above)."""
+    question, unconditionally -- see module note above). is_hard_pii
+    distinguishes "JARVIS must never even receive this" (RG/CPF/birth
+    date) from other sensitive-but-relayable questions (salary,
+    culture-fit) for clearer reporting -- both currently cause the same
+    stop, but the reason shown to Nicholas differs."""
 
     text: str
     answered: bool
     answer: Any = None
+    is_hard_pii: bool = False
 
 
 @dataclass

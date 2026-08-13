@@ -32,15 +32,18 @@ stand-in for real bank integration, which is still pending the user
 creating a Meu Pluggy account themselves.
 
 check_job_application() drives GupyAdapter.preview_application()
-(jarvis/sites/gupy.py) -- a real, live, human-supervised pilot
-(2026-08-12) found that the very first genuine listing tested (a bank's
-Gupy application) asked for the candidate's RG and current salary in a
-company-specific screening question, with an on-page warning that
-answers can't be edited afterward. There is NO real auto-submit tool
-here on purpose: this only walks the safe, verified steps (Gupy's own
-standard referral questions, always answered "Não") and stops -- never
-guesses -- the instant any company-specific question appears. Gupy-only
-for now; other sites need their own live investigation first."""
+(jarvis/sites/gupy.py) -- two real, live, human-supervised pilots
+(2026-08-12/13, two unrelated companies) both hit a company-specific
+screening question before any submit screen was reachable (RG + salary
+at one; salary expectation + culture-fit at the other) -- a real signal
+that this is the Gupy norm, not an edge case. There is NO real
+auto-submit tool here on purpose: this only walks the safe, verified
+steps (Gupy's own standard referral questions, always answered "Não")
+and stops -- never guesses -- at the first company-specific question,
+reporting each one individually with whether it's genuine government-ID/
+birth-date data (never even received from Nicholas) or another
+sensitive-but-different kind of block (salary, etc.). Gupy-only for now;
+other sites need their own live investigation first."""
 
 from __future__ import annotations
 
