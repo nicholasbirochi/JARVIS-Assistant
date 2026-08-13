@@ -34,6 +34,7 @@ engineering time. If LinkedIn is ever revisited, restrict it to
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
@@ -111,6 +112,96 @@ class JobListing:
     url: str
     snippet: str | None = None
     salary: str | None = None
+
+
+# --- Job-application flow (as opposed to profile editing above) -----------
+#
+# Added 2026-08-12 after a real, live, human-supervised pilot against a
+# genuine Gupy listing (Itaú Unibanco, "Tech Lead | Engenharia de
+# Software"): the very first real employer screening step encountered
+# asked for the candidate's RG (Brazilian government ID number) and
+# current salary ("Qual a sua remuneração atual?"), with an explicit
+# on-page warning that answers "não poderão ser editadas depois". This is
+# exactly the same class of data this project has refused to capture/store
+# since its very first design decision (CPF/birth date) -- so the same
+# rule now extends to job-application screening questions: JARVIS must
+# NEVER fabricate or guess an answer to a company's own custom question,
+# full stop, no exceptions, regardless of how "obvious" an answer might
+# seem. question_requires_stop() below is a real, confirmed-live signal
+# list, not a hypothetical.
+#
+# A second, broader rule sits on top of that one: this project does not
+# yet auto-answer ANY company-specific question, even ones that look
+# perfectly safe (a plain yes/no about tool experience, say) -- because
+# "safe-looking" is a guess, and getting one wrong submits an dishonest
+# answer to a real employer that (per the same live finding) can't be
+# edited afterward. Only Gupy's own two STANDARD platform questions
+# (referral / "do you work here") are auto-answered, because their
+# meaning is fixed platform-wide and both are unambiguously "Não" for any
+# external candidate applying cold -- never a per-company guess.
+_PII_OR_FINANCIAL_TERMS = [
+    "rg",
+    "cpf",
+    "registro geral",
+    "carteira de identidade",
+    "data de nascimento",
+    "estado civil",
+    "remuneração",
+    "remuneracao",
+    "salário",
+    "salario",
+    "pretensão salarial",
+    "pretensao salarial",
+    "renda",
+]
+
+
+def question_requires_stop(question_text: str) -> bool:
+    """True if a screening question's text mentions PII (RG/CPF/birth
+    date/marital status) or a financial specific (current salary/salary
+    expectation) -- confirmed live 2026-08-12 against a real Itaú Gupy
+    listing's actual custom questions. A hard stop, not a warning: any
+    match here means apply_to_job() must refuse rather than guess.
+    Deliberately biased toward over-triggering -- a false-positive stop
+    just means "ask Nicholas," which is always the safe failure mode
+    here, unlike, say, company_tier()'s substring-match bug, where a
+    false positive was actively misleading."""
+    haystack = question_text.lower()
+    return any(re.search(rf"\b{re.escape(term)}\b", haystack) for term in _PII_OR_FINANCIAL_TERMS)
+
+
+@dataclass
+class ApplicationQuestion:
+    """One question encountered while walking a real job-application
+    flow -- logged whether it was safely auto-answered (Gupy's own
+    standard referral questions) or caused a stop (any company-specific
+    question, unconditionally -- see module note above)."""
+
+    text: str
+    answered: bool
+    answer: Any = None
+
+
+@dataclass
+class ApplicationPreview:
+    """Dry-run result of walking as far into a real job-application flow
+    as it's safe to go automatically -- the apply-flow equivalent of
+    ChangePreview/preview_changes() above. NEVER submits anything.
+    can_submit is always False in this project's current implementation
+    -- the real "click the final submit button" step has never been
+    reached in a live, human-supervised session (every real listing
+    tested so far stopped at a company-specific question first), so
+    there is no verified final-step selector to click yet. Claiming
+    can_submit=True without ever having seen a real successful
+    submission would violate this project's own "never claim full
+    support until tested end-to-end" rule."""
+
+    site_name: str
+    job_url: str
+    can_submit: bool
+    blocked_reason: str | None
+    questions: list[ApplicationQuestion] = field(default_factory=list)
+    summary_text: str = ""
 
 
 class SiteAdapter(ABC):

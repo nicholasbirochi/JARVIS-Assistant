@@ -7,6 +7,7 @@ from jarvis.sites.base import (
     SiteProfileSnapshot,
     UpdatePlan,
     UpdateResult,
+    question_requires_stop,
 )
 
 
@@ -48,3 +49,27 @@ def test_full_implementation_can_be_instantiated():
 
     applied = adapter.apply_changes(plan, confirmed=True)
     assert applied.applied is True
+
+
+def test_question_requires_stop_true_for_the_real_itau_questions():
+    # Real, confirmed live 2026-08-12: Itaú's own Gupy screening
+    # questions asked for exactly these two things.
+    assert question_requires_stop("Qual é o seu RG? (Informe somente números e letras)")
+    assert question_requires_stop("Qual a sua remuneração atual?")
+
+
+def test_question_requires_stop_true_for_other_pii_and_financial_terms():
+    assert question_requires_stop("Informe seu CPF completo")
+    assert question_requires_stop("Qual sua pretensão salarial?")
+    assert question_requires_stop("Qual sua data de nascimento?")
+    assert question_requires_stop("Qual seu estado civil?")
+
+
+def test_question_requires_stop_false_for_an_unrelated_question():
+    assert not question_requires_stop("Você tem disponibilidade para trabalho híbrido?")
+    assert not question_requires_stop("Você já trabalhou com Python antes?")
+
+
+def test_question_requires_stop_case_insensitive():
+    assert question_requires_stop("QUAL O SEU RG?")
+    assert question_requires_stop("qual sua remuneração?")

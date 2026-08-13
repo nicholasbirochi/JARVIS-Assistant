@@ -57,16 +57,73 @@ parsed from the URL path like every other adapter here. Real selectors:
 `h3` (title), the card's first `p` (company), and
 `span[data-testid="job-location"]` (location) -- all clean, structured
 markup, no truncated snippets or broken company names like InfoJobs.
+
+Job APPLICATION flow (preview_application(), added 2026-08-12): a real,
+live, human-supervised pilot against a genuine listing (Itaú Unibanco,
+"Tech Lead | Engenharia de Software", job id 11666964), reachable via a
+company-specific subdomain (vemproitau.gupy.io) rather than portal.gupy.io
+-- confirmed live that the portal.gupy.io session cookies DO carry over
+there (the nav shows "Editar perfil"/"Sair", i.e. still logged in as the
+candidate). Real, confirmed findings:
+- Apply link: `[data-testid="apply-link"]` on the job page, href
+  `/candidates/jobs/<id>/apply?jobBoardSource=gupy_portal` (site-relative
+  -- resolve with urljoin against the current page URL).
+- The apply flow is NOT one-click. Real sequence observed: (1) an initial
+  "vamos continuar sua candidatura?" gate, single "Continuar" button --
+  merely opening this URL creates a real numbered application id
+  (`/candidates/applications/<id>/steps/<id>/curriculum`) but revisiting
+  the job listing page afterward still shows a plain "Candidatar-se"
+  button (not "continuar"/"já se candidatou"), so this gate alone does
+  NOT appear to register as a real application from the listing's own
+  point of view; (2) Gupy's own STANDARD platform questions ("Alguém
+  te indicou?" / "Você trabalha na empresa?", both yes/no) plus an
+  optional free-text "onde encontrou a vaga" field, then "Salvar e
+  continuar"; (3) any company-specific "Perguntas criadas pela empresa"
+  step, revealed only after clicking "Responder agora" -- for the real
+  Itaú listing tested, this asked for the candidate's **RG** and
+  **current salary**, with an on-page warning that answers "não poderão
+  ser editadas depois". See base.py's question_requires_stop() and the
+  hard rule above SiteAdapter: JARVIS never fabricates an answer here,
+  and never auto-answers ANY company-specific question even if it looks
+  simple -- only Gupy's own two standard referral questions are
+  auto-answered (both always "Não" -- factually true for any external
+  candidate applying cold).
+- DOM quirk: the "Sim"/"Não" choices for both the standard referral
+  questions and (presumably) company yes/no questions are `<span>` text
+  nodes inside `<label>` elements -- there is NO native, visible
+  `<input type="radio">` findable via `document.querySelectorAll('input')`
+  (confirmed live: that query returned zero results on this exact step).
+  Click the `<label>` itself, found by an exact direct-text-content match
+  on its child `<span>` (not a CSS class -- Gupy's classes here are
+  build-hashed, e.g. `sc-bKNmIE eNMMGn`, and not stable across deploys).
+- Real anti-automation signal observed: Gupy's own bundled Hotjar script
+  logged "Hotjar not launching due to suspicious userAgent" when run
+  headless (a real HeadlessChrome user agent) -- doesn't block the flow,
+  but is a genuine, confirmed detection signal worth knowing about before
+  running this at any real volume.
+- **NOT YET VERIFIED**: what the real final review/submit screen looks
+  like, or its button's exact text/selector -- every real listing tested
+  so far hit a company-specific question first and stopped there before
+  reaching it. preview_application() therefore NEVER returns
+  can_submit=True yet, and there is no apply_to_job() in this file --
+  writing one now would mean guessing the final click, which this
+  project's whole methodology (live-verify, never guess) exists to
+  avoid. Needs one more live, human-supervised session against a real
+  listing with zero company-specific questions before that can be built
+  honestly.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urljoin
 
 from jarvis.resume.schema import Resume
 from jarvis.sites import session
 from jarvis.sites.base import (
+    ApplicationPreview,
+    ApplicationQuestion,
     ChangePreview,
     JobListing,
     PlannedFieldChange,
@@ -75,6 +132,7 @@ from jarvis.sites.base import (
     SiteProfileSnapshot,
     UpdatePlan,
     UpdateResult,
+    question_requires_stop,
 )
 
 SITE_NAME = "gupy"
@@ -404,6 +462,145 @@ class GupyAdapter(SiteAdapter):
             })
             """
         )
+
+    def preview_application(self, job_url: str) -> ApplicationPreview:
+        """Dry-run: walks as far into a real job's application flow as
+        it's SAFE to go automatically (the initial gate + Gupy's own two
+        standard referral questions, always answered "Não"/"Não" -- see
+        module docstring), then stops the instant it reaches ANY
+        company-specific question. Never submits anything, and
+        can_submit is always False today -- the real final submit screen
+        has never been observed live (see module docstring). This is the
+        apply-flow equivalent of preview_changes() above."""
+        from jarvis.config import SITES_HEADLESS
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            page = context.new_page()
+            page.goto(job_url, timeout=45_000, wait_until="domcontentloaded")
+            page.wait_for_load_state("networkidle", timeout=30_000)
+            page.wait_for_timeout(2000)
+
+            apply_href = self._get_apply_href(page)
+            if apply_href is None:
+                reason = (
+                    'Não encontrei o link "Candidatar-se" nessa página -- a vaga pode ter '
+                    "sido removida ou a estrutura da página mudou desde a última verificação."
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason
+                )
+
+            page.goto(urljoin(page.url, apply_href), timeout=45_000, wait_until="domcontentloaded")
+            page.wait_for_load_state("networkidle", timeout=30_000)
+            page.wait_for_timeout(2000)
+
+            questions: list[ApplicationQuestion] = []
+
+            self._click_text_button(page, "Continuar")
+            page.wait_for_timeout(1500)
+            page.wait_for_load_state("networkidle", timeout=30_000)
+
+            referral_text = self._extract_step_text(page)
+            answered_count = self._answer_referral_labels(page)
+            if answered_count:
+                questions.append(
+                    ApplicationQuestion(text=referral_text, answered=True, answer="Não (para todas)")
+                )
+                page.wait_for_timeout(1000)
+                self._click_text_button(page, "Salvar e continuar")
+                page.wait_for_timeout(2000)
+                page.wait_for_load_state("networkidle", timeout=30_000)
+
+            step_text = self._extract_step_text(page)
+            if "Perguntas criadas pela empresa" in step_text or "Responder agora" in step_text:
+                self._click_text_button(page, "Responder agora")
+                page.wait_for_timeout(1500)
+                company_text = self._extract_step_text(page)
+                questions.append(ApplicationQuestion(text=company_text, answered=False))
+                reason = (
+                    "Essa vaga tem pergunta(s) própria(s) da empresa que pedem dado sensível "
+                    "(RG, CPF ou remuneração) -- o JARVIS nunca responde isso sozinho."
+                    if question_requires_stop(company_text)
+                    else "Essa vaga tem pergunta(s) própria(s) da empresa -- o JARVIS não "
+                    "responde nenhuma pergunta específica de empresa sozinho, mesmo que "
+                    "pareça simples."
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name,
+                    job_url=job_url,
+                    can_submit=False,
+                    blocked_reason=reason,
+                    questions=questions,
+                    summary_text=self._render_application_summary(reason, questions),
+                )
+
+            reason = (
+                "Nenhuma pergunta própria da empresa apareceu nessa vaga, mas o clique final "
+                "de envio nunca foi verificado ao vivo em nenhuma candidatura real ainda -- "
+                "por segurança o JARVIS para aqui em vez de inventar qual botão clicar."
+            )
+            return ApplicationPreview(
+                site_name=self.site_name,
+                job_url=job_url,
+                can_submit=False,
+                blocked_reason=reason,
+                questions=questions,
+                summary_text=self._render_application_summary(reason, questions),
+            )
+        finally:
+            context.close()
+            p.stop()
+
+    def _get_apply_href(self, page) -> str | None:
+        return page.evaluate(
+            """
+            () => {
+                const el = document.querySelector('[data-testid="apply-link"]');
+                return el ? el.getAttribute('href') : null;
+            }
+            """
+        )
+
+    def _click_text_button(self, page, text: str) -> bool:
+        return page.evaluate(
+            f"""
+            () => {{
+                const el = Array.from(document.querySelectorAll('button, a'))
+                    .find(b => b.textContent.trim() === {text!r});
+                if (el) {{ el.click(); return true; }}
+                return false;
+            }}
+            """
+        )
+
+    def _answer_referral_labels(self, page) -> int:
+        """Clicks every <label> wrapping a "Não" <span> -- see module
+        docstring's DOM-quirk note (no plain <input type="radio"> exists
+        to target instead)."""
+        return page.evaluate(
+            """
+            () => {
+                let count = 0;
+                document.querySelectorAll('label').forEach(label => {
+                    const span = Array.from(label.querySelectorAll('span'))
+                        .find(s => s.textContent.trim() === 'Não');
+                    if (span) { label.click(); count++; }
+                });
+                return count;
+            }
+            """
+        )
+
+    def _extract_step_text(self, page) -> str:
+        return page.evaluate("() => (document.querySelector('main') || document.body).innerText.trim()")
+
+    def _render_application_summary(self, reason: str, questions: list[ApplicationQuestion]) -> str:
+        lines = [f"Candidatura em {self.site_name}: BLOQUEADA -- {reason}"]
+        for q in questions:
+            status = f"respondida automaticamente ({q.answer})" if q.answered else "NÃO respondida -- precisa de você"
+            lines.append(f"- {status}: {q.text[:200]}")
+        return "\n".join(lines)
 
 
 def _decode_job_id(href: str) -> str | None:

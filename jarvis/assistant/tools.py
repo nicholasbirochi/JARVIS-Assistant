@@ -29,7 +29,18 @@ for why Indeed/LinkedIn are excluded from this automatic path).
 evaluate_investments() drives jarvis/finance.py -- reads the user's own
 manually-maintained net-worth spreadsheet (Patrimônio.xlsx) as a local
 stand-in for real bank integration, which is still pending the user
-creating a Meu Pluggy account themselves."""
+creating a Meu Pluggy account themselves.
+
+check_job_application() drives GupyAdapter.preview_application()
+(jarvis/sites/gupy.py) -- a real, live, human-supervised pilot
+(2026-08-12) found that the very first genuine listing tested (a bank's
+Gupy application) asked for the candidate's RG and current salary in a
+company-specific screening question, with an on-page warning that
+answers can't be edited afterward. There is NO real auto-submit tool
+here on purpose: this only walks the safe, verified steps (Gupy's own
+standard referral questions, always answered "Não") and stops -- never
+guesses -- the instant any company-specific question appears. Gupy-only
+for now; other sites need their own live investigation first."""
 
 from __future__ import annotations
 
@@ -215,6 +226,40 @@ def evaluate_investments() -> str:
     return summarize_finances(snapshot)
 
 
+def check_job_application(url: str) -> str:
+    """Verifica até onde dá pra avançar com segurança numa candidatura de
+    uma vaga específica (hoje só funciona para links do Gupy) -- NUNCA
+    envia a candidatura de verdade. Só passa pelos passos já verificados
+    ao vivo como seguros (a etapa inicial e as duas perguntas padrão da
+    Gupy sobre indicação/vínculo, sempre respondidas "Não", o que é
+    verdade para qualquer candidatura externa) e para assim que aparece
+    qualquer pergunta própria da empresa -- nunca inventa uma resposta,
+    mesmo que a pergunta pareça simples.
+
+    Use quando o Nicholas pedir para verificar ou tentar se candidatar
+    numa vaga específica pelo link. Deixe claro na resposta que isso NÃO
+    é um envio automático de candidatura -- é uma checagem de até onde dá
+    pra ir sozinho, e o que falta ele preencher manualmente.
+
+    Args:
+        url: Link da vaga (ex.: um dos retornados por find_matching_jobs).
+    """
+    if "gupy.io" not in url:
+        return (
+            "Só sei verificar candidaturas em vagas do Gupy por enquanto -- essa vaga não "
+            "parece ser do Gupy. Abra o link e se candidate manualmente."
+        )
+
+    from jarvis.sites.gupy import GupyAdapter
+
+    try:
+        preview = GupyAdapter().preview_application(url)
+    except Exception as exc:
+        return f"Não consegui verificar essa vaga: {exc}"
+
+    return preview.summary_text or (preview.blocked_reason or "Não deu pra avançar nessa vaga.")
+
+
 def _publish_jobs_chart(report) -> None:
     """Pushes a live bar chart (vagas por site, local vs. home office) to
     the HUD (jarvis/visualizer/) -- best-effort, same reasoning as
@@ -312,5 +357,6 @@ TOOLS = [
     list_reminders,
     find_matching_jobs,
     list_recent_job_matches,
+    check_job_application,
     evaluate_investments,
 ]

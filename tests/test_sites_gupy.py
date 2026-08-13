@@ -492,6 +492,171 @@ def test_card_to_job_listing_converts_a_real_shaped_card():
     assert listing.url == card["href"]
 
 
+# --- preview_application() ---------------------------------------------
+#
+# Shapes real, live-confirmed script content (see gupy.py's module
+# docstring): _get_apply_href's script mentions "apply-link";
+# _extract_step_text's mentions "innerText"; _answer_referral_labels'
+# mentions "querySelectorAll('label')"; _click_text_button's embeds the
+# target text as a Python repr() (e.g. 'Continuar') -- FakeApplicationPage
+# dispatches on those same markers instead of guessing at exact JS.
+
+
+class FakeApplicationPage:
+    def __init__(self, *, apply_href="/candidates/jobs/123/apply", step_texts, referral_answer_count=0,
+                 click_results=None):
+        self.apply_href = apply_href
+        self.url = "https://empresa.gupy.io/job/xyz"
+        self.step_texts = step_texts
+        self._step_text_idx = 0
+        self.referral_answer_count = referral_answer_count
+        self.click_results = click_results or {}
+        self.clicked: list[str] = []
+
+    def goto(self, url, timeout=None, wait_until=None):
+        self.url = url
+
+    def wait_for_load_state(self, state, timeout=None):
+        pass
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def evaluate(self, script):
+        if "apply-link" in script:
+            return self.apply_href
+        if "innerText" in script:
+            text = self.step_texts[self._step_text_idx]
+            self._step_text_idx = min(self._step_text_idx + 1, len(self.step_texts) - 1)
+            return text
+        if "querySelectorAll('label')" in script:
+            return self.referral_answer_count
+        for text, result in self.click_results.items():
+            if repr(text) in script:
+                if result:
+                    self.clicked.append(text)
+                return result
+        return False
+
+
+class FakeApplicationContext:
+    def __init__(self, page):
+        self._page = page
+        self.closed = False
+
+    def new_page(self):
+        return self._page
+
+    def close(self):
+        self.closed = True
+
+
+class FakeApplicationPlaywright:
+    def __init__(self):
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+
+
+def _patch_open_context(monkeypatch, page):
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplicationPlaywright(), FakeApplicationContext(page))
+    )
+
+
+def test_preview_application_blocked_when_apply_link_is_missing(monkeypatch):
+    page = FakeApplicationPage(apply_href=None, step_texts=[""])
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().preview_application("https://empresa.gupy.io/job/xyz")
+
+    assert preview.can_submit is False
+    assert "Candidatar-se" in preview.blocked_reason
+    assert preview.questions == []
+
+
+def test_preview_application_answers_referral_then_stops_at_company_questions_with_pii(monkeypatch):
+    # Shapes the real Itaú pilot, 2026-08-12: referral questions answered
+    # automatically, then a company-specific question step asking for RG
+    # -- must stop, never fabricate an answer.
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão\nVocê trabalha na empresa?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1. Qual é o seu RG?\nResponder agora",
+            "Perguntas criadas pela empresa\n1. Qual é o seu RG? *",
+        ],
+        referral_answer_count=2,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().preview_application("https://empresa.gupy.io/job/xyz")
+
+    assert preview.can_submit is False
+    assert "RG" in preview.blocked_reason or "sensível" in preview.blocked_reason
+    assert len(preview.questions) == 2
+    assert preview.questions[0].answered is True
+    assert preview.questions[0].answer == "Não (para todas)"
+    assert preview.questions[1].answered is False
+    assert "Continuar" in page.clicked
+    assert "Responder agora" in page.clicked
+
+
+def test_preview_application_stops_at_company_questions_even_without_pii_terms(monkeypatch):
+    # The broader rule: ANY company-specific question is a stop, not just
+    # ones that hit the PII/financial blocklist -- see base.py's
+    # question_requires_stop() docstring.
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1. Você tem CNH?\nResponder agora",
+            "Perguntas criadas pela empresa\n1. Você tem CNH?",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().preview_application("https://empresa.gupy.io/job/xyz")
+
+    assert preview.can_submit is False
+    assert "não responde nenhuma pergunta específica" in preview.blocked_reason
+
+
+def test_preview_application_never_claims_can_submit_even_with_no_company_questions(monkeypatch):
+    # Real, deliberate limitation: the final submit screen has never been
+    # observed live (every real listing tested stopped earlier), so
+    # can_submit must stay False even in the "clean" case rather than
+    # inventing a button to click.
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Tudo certo, revise sua candidatura.",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().preview_application("https://empresa.gupy.io/job/xyz")
+
+    assert preview.can_submit is False
+    assert "nunca foi verificado" in preview.blocked_reason
+
+
+def test_preview_application_closes_context_and_stops_playwright(monkeypatch):
+    page = FakeApplicationPage(step_texts=["algo"], referral_answer_count=0)
+    fake_context = FakeApplicationContext(page)
+    fake_p = FakeApplicationPlaywright()
+    monkeypatch.setattr(session, "open_context", lambda site_name, *, headless: (fake_p, fake_context))
+
+    GupyAdapter().preview_application("https://empresa.gupy.io/job/xyz")
+
+    assert fake_context.closed is True
+    assert fake_p.stopped is True
+
+
 def test_card_to_job_listing_none_when_title_missing_or_id_undecodable():
     assert _card_to_job_listing({"href": "https://x.gupy.io/job/abc", "title": None}) is None
     assert _card_to_job_listing({"href": "https://x.gupy.io/job/not-valid!!!", "title": "X"}) is None
