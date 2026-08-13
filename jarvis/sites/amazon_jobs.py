@@ -8,9 +8,17 @@ this project's InfoJobs/Catho/Gupy/LinkedIn results.
 Real, live-confirmed findings:
 - Search URL: https://www.amazon.jobs/en/search?base_query=<query>&loc_query=<location>
   -- loc_query as a free-text "City, Country" string (e.g. "São Paulo,
-  Brazil") reliably filters to that location; a `state=<name>` param
-  tried first did NOT filter results (still returned jobs from Canada/
-  US/Japan/etc.), so loc_query is the only real, working filter found.
+  Brazil") DOES filter results for narrow/specific queries (confirmed
+  live: "analista de dados" returned only the one real São Paulo-area
+  listing); a `state=<name>` param tried first did NOT filter at all. But
+  loc_query is NOT reliably enforced for broad English terms -- a real,
+  confirmed-live run (2026-08-13) searching "Python"/"SQL"/"Business
+  Intelligence" with loc_query="Brazil" still returned plenty of India/
+  China/US/Japan/UK results mixed in. Not fixed here -- callers must run
+  results through jarvis.sites.job_matching's location filters (which
+  check the listing's own scraped location text, not amazon.jobs' search
+  filter) before treating anything as Brazil-relevant, same as every
+  other adapter in this project already does.
 - No login required -- public search, same as Catho/Gupy/InfoJobs
   search_jobs(). Still routed through jarvis.sites.session.open_context()
   for lifecycle consistency/testability, matching Catho's own reasoning
@@ -19,7 +27,16 @@ Real, live-confirmed findings:
   different page of results from N=0 (10 results per page).
 - Card selector: `.job-tile`, title in the card's first `h3`, link on
   the card's own `<a>`, job id embedded in the URL's own `/jobs/<id>/`
-  path segment.
+  path segment. Location: `.text-nowrap` (first match) -- real bug found
+  live 2026-08-13: an earlier `.location-and-id, [class*="location" i]`
+  selector matched the wrong element and returned combined junk like
+  "LocationsSan Francisco, CA, USA+4 other locations|Job ID: 10455383"
+  instead of a clean location string. The real DOM (confirmed live) is a
+  `<legend class="d-none">Locations</legend>` followed by one `<li
+  class="text-nowrap">` per location, then a literal `<li>|</li>`
+  separator and a `<li>Job ID: N</li>` -- multi-location postings show
+  only the first listed location, a defensible simplification (the
+  "+N other locations" text is dropped, not fabricated).
 - Every listing found here is naturally already "Amazon" -- company is
   hardcoded, not scraped, since this adapter only ever searches Amazon's
   own site.
@@ -159,7 +176,7 @@ class AmazonJobsAdapter(SiteAdapter):
             () => Array.from(document.querySelectorAll('.job-tile')).map(el => {
                 const titleEl = el.querySelector('h3');
                 const linkEl = el.querySelector('a');
-                const locEl = el.querySelector('.location-and-id, [class*="location" i]');
+                const locEl = el.querySelector('.text-nowrap');
                 return {
                     title: titleEl ? titleEl.textContent.trim() : null,
                     link: linkEl ? linkEl.href : null,
