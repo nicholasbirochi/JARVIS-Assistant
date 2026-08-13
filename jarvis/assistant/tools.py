@@ -36,14 +36,27 @@ check_job_application() drives GupyAdapter.preview_application()
 (2026-08-12/13, two unrelated companies) both hit a company-specific
 screening question before any submit screen was reachable (RG + salary
 at one; salary expectation + culture-fit at the other) -- a real signal
-that this is the Gupy norm, not an edge case. There is NO real
-auto-submit tool here on purpose: this only walks the safe, verified
-steps (Gupy's own standard referral questions, always answered "Não")
-and stops -- never guesses -- at the first company-specific question,
-reporting each one individually with whether it's genuine government-ID/
-birth-date data (never even received from Nicholas) or another
-sensitive-but-different kind of block (salary, etc.). Gupy-only for now;
-other sites need their own live investigation first."""
+that this is the Gupy norm, not an edge case. This tool never guesses at
+an answer -- it walks the safe, verified steps (Gupy's own standard
+referral questions, always answered "Não") and stops at the first
+company-specific question, reporting each one individually with whether
+it's genuine government-ID/birth-date data or another kind of block.
+
+continue_job_application()/setup_application_profile() drive
+GupyAdapter.continue_application_with_profile() and
+jarvis/sites/application_profile.py -- 2026-08-13, Nicholas explicitly
+confirmed (after being told this reverses this project's original
+"never capture RG/CPF, even incidentally" rule) that he wants a local,
+never-synced file (LOCAL_STATE_DIR/application_profile.env) where he
+provides his own RG/CPF/salary expectation/estado civil, so JARVIS can
+fill company-specific screening questions that ask for exactly those
+fields. All-or-nothing per step (refuses to partially fill a form), and
+the real values never appear in a returned ApplicationQuestion, evidence
+file, or log -- only whether a field was filled. Still never clicks a
+genuine final submit -- that step has never been observed live -- so
+even full success only means "advanced one more step," not "sent."
+Gupy-only for now; other sites need their own live investigation
+first."""
 
 from __future__ import annotations
 
@@ -263,6 +276,58 @@ def check_job_application(url: str) -> str:
     return preview.summary_text or (preview.blocked_reason or "Não deu pra avançar nessa vaga.")
 
 
+def continue_job_application(url: str) -> str:
+    """Avança de verdade numa candidatura (vagas do Gupy) usando os dados
+    do arquivo local de perfil de candidatura (RG, CPF, pretensão
+    salarial, estado civil) -- só preenche uma pergunta da empresa se
+    TODAS as perguntas daquela etapa tiverem valor real no arquivo local;
+    se faltar uma só, não preenche nada (tudo ou nada, pra não deixar o
+    formulário pela metade). NUNCA clica no envio final -- essa etapa
+    nunca foi confirmada ao vivo, então sempre para antes dela, mesmo
+    quando consegue preencher tudo.
+
+    Use quando o Nicholas pedir explicitamente para continuar/avançar
+    numa candidatura específica usando os dados que ele já configurou.
+    Deixe claro que isso preenche de verdade mas NÃO envia -- ele ainda
+    precisa confirmar manualmente o envio final no navegador.
+
+    Args:
+        url: Link da vaga (ex.: um dos retornados por find_matching_jobs).
+    """
+    if "gupy.io" not in url:
+        return (
+            "Só sei avançar candidaturas em vagas do Gupy por enquanto -- essa vaga não "
+            "parece ser do Gupy."
+        )
+
+    from jarvis.sites.gupy import GupyAdapter
+
+    try:
+        preview = GupyAdapter().continue_application_with_profile(url, confirmed=True)
+    except Exception as exc:
+        return f"Não consegui avançar essa candidatura: {exc}"
+
+    return preview.summary_text or (preview.blocked_reason or "Não deu pra avançar nessa vaga.")
+
+
+def setup_application_profile() -> str:
+    """Cria (se ainda não existir) o arquivo local onde o Nicholas
+    preenche RG, CPF, pretensão salarial e estado civil -- nunca
+    sincronizado, nunca versionado, lido só localmente pelo JARVIS.
+
+    Use quando ele pedir para configurar/criar o arquivo de dados para
+    candidaturas automáticas.
+    """
+    from jarvis.sites.application_profile import ensure_profile_template
+
+    path = ensure_profile_template()
+    return (
+        f"Arquivo pronto em {path}. Abra com um editor de texto e preencha os valores "
+        "depois do '=' em cada linha (RG, CPF, pretensão salarial, estado civil). "
+        "Nunca digo em voz alta o que está nesse arquivo."
+    )
+
+
 def _publish_jobs_chart(report) -> None:
     """Pushes a live bar chart (vagas por site, local vs. home office) to
     the HUD (jarvis/visualizer/) -- best-effort, same reasoning as
@@ -361,5 +426,7 @@ TOOLS = [
     find_matching_jobs,
     list_recent_job_matches,
     check_job_application,
+    continue_job_application,
+    setup_application_profile,
     evaluate_investments,
 ]

@@ -155,6 +155,7 @@ from jarvis.sites.base import (
     SiteProfileSnapshot,
     UpdatePlan,
     UpdateResult,
+    classify_question_field,
     is_hard_pii_question,
     question_requires_stop,
 )
@@ -495,57 +496,22 @@ class GupyAdapter(SiteAdapter):
         company-specific question. Never submits anything, and
         can_submit is always False today -- the real final submit screen
         has never been observed live (see module docstring). This is the
-        apply-flow equivalent of preview_changes() above."""
+        apply-flow equivalent of preview_changes() above. Never fills in
+        answers from the local profile even if one exists -- use
+        continue_application_with_profile() for that (a real, mutating
+        action, gated by confirmed=True like every other write in this
+        project)."""
         from jarvis.config import SITES_HEADLESS
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
             page = context.new_page()
-            page.goto(job_url, timeout=45_000, wait_until="domcontentloaded")
-            page.wait_for_load_state("networkidle", timeout=30_000)
-            page.wait_for_timeout(2000)
+            questions, early_exit = self._start_application(page, job_url)
+            if early_exit is not None:
+                return early_exit
 
-            apply_href = self._get_apply_href(page)
-            if apply_href is None:
-                reason = (
-                    'Não encontrei o link "Candidatar-se" nessa página -- a vaga pode ter '
-                    "sido removida ou a estrutura da página mudou desde a última verificação."
-                )
-                return ApplicationPreview(
-                    site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason
-                )
-
-            page.goto(urljoin(page.url, apply_href), timeout=45_000, wait_until="domcontentloaded")
-            page.wait_for_load_state("networkidle", timeout=30_000)
-            page.wait_for_timeout(2000)
-
-            questions: list[ApplicationQuestion] = []
-
-            self._click_text_button(page, "Continuar")
-            page.wait_for_timeout(1500)
-            page.wait_for_load_state("networkidle", timeout=30_000)
-
-            referral_text = self._extract_step_text(page)
-            answered_count = self._answer_referral_labels(page)
-            if answered_count:
-                questions.append(
-                    ApplicationQuestion(text=referral_text, answered=True, answer="Não (para todas)")
-                )
-                page.wait_for_timeout(1000)
-                self._click_text_button(page, "Salvar e continuar")
-                page.wait_for_timeout(2000)
-                page.wait_for_load_state("networkidle", timeout=30_000)
-
-            step_text = self._extract_step_text(page)
-            if "Perguntas criadas pela empresa" in step_text or "Responder agora" in step_text:
-                self._click_text_button(page, "Responder agora")
-                page.wait_for_timeout(1500)
-                company_questions = self._extract_company_questions(page)
-                if not company_questions:
-                    # Real selector (h3 whose text starts with "N.") found
-                    # nothing -- fall back to the whole block so nothing
-                    # is silently lost, same as before this change.
-                    company_questions = [self._extract_step_text(page)]
+            company_questions = self._reach_company_questions_step(page)
+            if company_questions is not None:
                 for q_text in company_questions:
                     questions.append(
                         ApplicationQuestion(text=q_text, answered=False, is_hard_pii=is_hard_pii_question(q_text))
@@ -595,6 +561,228 @@ class GupyAdapter(SiteAdapter):
         finally:
             context.close()
             p.stop()
+
+    def continue_application_with_profile(self, job_url: str, confirmed: bool) -> ApplicationPreview:
+        """A REAL, mutating action (unlike preview_application() above)
+        -- refuses without confirmed=True, matching every other write
+        action in this project (apply_changes()). Walks the same safe
+        steps, then at the company-questions step, fills in ONLY
+        questions matched by base.py's classify_question_field() against
+        jarvis.sites.application_profile's locally-provided values
+        (2026-08-13, explicitly confirmed with Nicholas -- see that
+        module's docstring for the full reasoning and safeguards). If
+        even ONE company question is unclassified, classified but has no
+        local value, or is a birth-date question (no fill path exists
+        for that one, ever), the WHOLE step is refused -- same
+        all-or-nothing discipline as apply_changes() refusing a plan if
+        any field is unsupported, rather than partially filling a form
+        that can't actually be completed. The real values themselves are
+        NEVER stored on the returned ApplicationQuestion or anywhere
+        else -- only whether each field was filled. Still never clicks
+        a genuine final submit -- that step has never been observed live
+        (see module docstring) -- so even full success here only means
+        "got one step further than ever verified before," not "sent"."""
+        if not confirmed:
+            return ApplicationPreview(
+                site_name=self.site_name,
+                job_url=job_url,
+                can_submit=False,
+                blocked_reason="Recusado: continue_application_with_profile exige confirmed=True.",
+            )
+
+        from jarvis.config import SITES_HEADLESS
+        from jarvis.sites.application_profile import load_application_profile
+
+        profile = load_application_profile()
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            page = context.new_page()
+            questions, early_exit = self._start_application(page, job_url)
+            if early_exit is not None:
+                return early_exit
+
+            company_questions = self._reach_company_questions_step(page)
+            if company_questions is None:
+                reason = (
+                    "Nenhuma pergunta própria da empresa apareceu nessa vaga, mas o clique "
+                    "final de envio nunca foi verificado ao vivo -- por segurança o JARVIS "
+                    "para aqui em vez de inventar qual botão clicar."
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name,
+                    job_url=job_url,
+                    can_submit=False,
+                    blocked_reason=reason,
+                    questions=questions,
+                    summary_text=self._render_application_summary(reason, questions),
+                )
+
+            plan = [
+                (q_text, classify_question_field(q_text))
+                for q_text in company_questions
+            ]
+            unanswerable = [
+                q_text for q_text, field in plan if field is None or not profile.get(field)
+            ]
+            if unanswerable:
+                for q_text, field in plan:
+                    has_value = field is not None and bool(profile.get(field))
+                    questions.append(
+                        ApplicationQuestion(
+                            text=q_text,
+                            answered=has_value,
+                            answer="(preenchido do arquivo local)" if has_value else None,
+                            is_hard_pii=is_hard_pii_question(q_text),
+                        )
+                    )
+                reason = (
+                    "Não dá pra completar essa etapa -- pelo menos uma pergunta da empresa não "
+                    "tem valor no seu arquivo local (application_profile.env) ou é um tipo o "
+                    "JARVIS não sabe preencher (ex.: data de nascimento). Nada foi preenchido -- "
+                    "tudo ou nada, pra não deixar o formulário pela metade."
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name,
+                    job_url=job_url,
+                    can_submit=False,
+                    blocked_reason=reason,
+                    questions=questions,
+                    summary_text=self._render_application_summary(reason, questions),
+                )
+
+            fill_failures: list[str] = []
+            for q_text, field in plan:
+                value = profile[field]
+                ok = self._fill_company_answer(page, q_text, value)
+                questions.append(
+                    ApplicationQuestion(
+                        text=q_text,
+                        answered=ok,
+                        answer="(preenchido do arquivo local)" if ok else None,
+                        is_hard_pii=is_hard_pii_question(q_text),
+                    )
+                )
+                if not ok:
+                    fill_failures.append(q_text)
+
+            if fill_failures:
+                reason = (
+                    "Encontrei o campo pra algumas perguntas mas não pra outras -- a página "
+                    "pode ter mudado desde a última verificação ao vivo. Confira manualmente."
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name,
+                    job_url=job_url,
+                    can_submit=False,
+                    blocked_reason=reason,
+                    questions=questions,
+                    summary_text=self._render_application_summary(reason, questions),
+                )
+
+            self._click_text_button(page, "Salvar e continuar")
+            page.wait_for_timeout(2000)
+            page.wait_for_load_state("networkidle", timeout=30_000)
+
+            reason = (
+                "Preenchi as perguntas da empresa com os dados do seu arquivo local e avancei "
+                "-- mas o clique final de envio nunca foi verificado ao vivo antes, então parei "
+                "aqui por segurança. Confira manualmente no navegador antes de qualquer envio "
+                "real -- as respostas não poderão ser editadas depois."
+            )
+            return ApplicationPreview(
+                site_name=self.site_name,
+                job_url=job_url,
+                can_submit=False,
+                blocked_reason=reason,
+                questions=questions,
+                summary_text=self._render_application_summary(reason, questions),
+            )
+        finally:
+            context.close()
+            p.stop()
+
+    def _start_application(
+        self, page, job_url: str
+    ) -> tuple[list[ApplicationQuestion], "ApplicationPreview | None"]:
+        """Shared by preview_application() and
+        continue_application_with_profile(): navigates from the job page
+        through the apply link, the initial "Continuar" gate, and Gupy's
+        own standard referral questions (always answered "Não"/"Não").
+        Returns (questions_so_far, early_exit) -- early_exit is a real
+        ApplicationPreview to return immediately if something failed
+        before reaching the company-questions step (no apply link
+        found), or None to keep going."""
+        page.goto(job_url, timeout=45_000, wait_until="domcontentloaded")
+        page.wait_for_load_state("networkidle", timeout=30_000)
+        page.wait_for_timeout(2000)
+
+        apply_href = self._get_apply_href(page)
+        if apply_href is None:
+            reason = (
+                'Não encontrei o link "Candidatar-se" nessa página -- a vaga pode ter sido '
+                "removida ou a estrutura da página mudou desde a última verificação."
+            )
+            return [], ApplicationPreview(
+                site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason
+            )
+
+        page.goto(urljoin(page.url, apply_href), timeout=45_000, wait_until="domcontentloaded")
+        page.wait_for_load_state("networkidle", timeout=30_000)
+        page.wait_for_timeout(2000)
+
+        questions: list[ApplicationQuestion] = []
+
+        self._click_text_button(page, "Continuar")
+        page.wait_for_timeout(1500)
+        page.wait_for_load_state("networkidle", timeout=30_000)
+
+        referral_text = self._extract_step_text(page)
+        answered_count = self._answer_referral_labels(page)
+        if answered_count:
+            questions.append(ApplicationQuestion(text=referral_text, answered=True, answer="Não (para todas)"))
+            page.wait_for_timeout(1000)
+            self._click_text_button(page, "Salvar e continuar")
+            page.wait_for_timeout(2000)
+            page.wait_for_load_state("networkidle", timeout=30_000)
+
+        return questions, None
+
+    def _reach_company_questions_step(self, page) -> list[str] | None:
+        """If the current step is a "Perguntas criadas pela empresa"
+        gate, clicks "Responder agora" and returns the individual
+        question texts (falling back to the whole block's text if the
+        real per-question selector found nothing, so nothing is silently
+        lost). Returns None if there's no company-questions step at all
+        right now."""
+        step_text = self._extract_step_text(page)
+        if "Perguntas criadas pela empresa" not in step_text and "Responder agora" not in step_text:
+            return None
+        self._click_text_button(page, "Responder agora")
+        page.wait_for_timeout(1500)
+        company_questions = self._extract_company_questions(page)
+        if not company_questions:
+            company_questions = [self._extract_step_text(page)]
+        return company_questions
+
+    def _fill_company_answer(self, page, question_text: str, value: str) -> bool:
+        """Fills the real <textarea id="input-<question text>"> found
+        live 2026-08-13 (the id is derived directly from the question's
+        own text) -- uses page.fill() rather than a raw JS `.value =`
+        assignment so React's controlled-input state actually updates (a
+        well-known gotcha with direct DOM manipulation on React apps).
+        Only confirmed live for free-text questions (RG/CPF/salary all
+        rendered this way); a multiple-choice ("estado civil"?) question
+        would need a different selector never observed live yet, so this
+        deliberately fails closed (returns False) rather than guessing
+        at one."""
+        escaped = question_text.replace('"', '\\"')
+        selector = f'[id="input-{escaped}"]'
+        try:
+            page.fill(selector, value, timeout=5000)
+            return True
+        except Exception:
+            return False
 
     def _get_apply_href(self, page) -> str | None:
         return page.evaluate(

@@ -139,40 +139,39 @@ class JobListing:
 # (referral / "do you work here") are auto-answered, because their
 # meaning is fixed platform-wide and both are unambiguously "Não" for any
 # external candidate applying cold -- never a per-company guess.
-# Genuine government ID / birth date terms -- the exact class of data
-# this project has refused to capture or store since its very first
-# design decision (CPF/birth date). These stay an absolute hard stop
-# even if Nicholas offers to just tell JARVIS the answer himself: relaying
-# a real RG/CPF number through JARVIS's own pipeline (voice transcript,
-# tool-call args, evidence logs) is still capturing it, which the
-# project's original rule forbids regardless of source.
-_HARD_PII_TERMS = [
-    "rg",
-    "cpf",
-    "registro geral",
-    "carteira de identidade",
-    "data de nascimento",
-]
-
-# Sensitive-but-not-government-ID terms (financial specifics, marital
-# status) -- still a stop today (no relay-the-user's-real-answer flow
-# exists yet, see gupy.py's module docstring for why: two real,
-# different companies tested both hit one of these, and there's still no
-# verified final-submit click to build toward). Kept separate from
-# _HARD_PII_TERMS so reporting can be precise about WHY something is
-# blocked -- "isso é um documento oficial, nem me diga" reads very
-# differently from "isso é sobre salário".
-_SENSITIVE_NON_PII_TERMS = [
-    "estado civil",
-    "remuneração",
-    "remuneracao",
-    "salário",
-    "salario",
-    "pretensão salarial",
-    "pretensao salarial",
-    "renda",
-]
-_PII_OR_FINANCIAL_TERMS = _HARD_PII_TERMS + _SENSITIVE_NON_PII_TERMS
+# Maps each field JARVIS can fill from a Nicholas-provided local profile
+# (see jarvis/sites/application_profile.py) to the terms that identify a
+# screening question as asking for it. "data de nascimento" (birth date)
+# is deliberately NOT one of these -- even after Nicholas confirmed
+# RG/CPF should be fillable (2026-08-13), birth date has no fill path at
+# all and stays an unconditional stop (see _UNFILLABLE_HARD_STOP_TERMS
+# below) -- narrower in scope than what was first offered to him, kept
+# out because there's no real, recurring need for it seen live yet.
+_FIELD_TERMS: dict[str, list[str]] = {
+    "rg": ["rg", "registro geral", "carteira de identidade"],
+    "cpf": ["cpf"],
+    "salary_expectation": [
+        "remuneração",
+        "remuneracao",
+        "salário",
+        "salario",
+        "pretensão salarial",
+        "pretensao salarial",
+        "renda",
+    ],
+    "marital_status": ["estado civil"],
+}
+# RG/CPF specifically -- the exact class of data this project refused to
+# capture or store since its very first design decision. Filling these
+# from a local, Nicholas-controlled file (application_profile.py) is a
+# deliberate, explicitly-confirmed exception to that original rule, not
+# an oversight -- see that module's docstring for the full reasoning and
+# the safeguards that keep the actual values out of every log/evidence
+# path regardless.
+_HARD_PII_FIELDS = {"rg", "cpf"}
+# Blocks, but has no fillable field at all -- birth date specifically
+# (see the _FIELD_TERMS comment above for why it's excluded).
+_UNFILLABLE_HARD_STOP_TERMS = ["data de nascimento"]
 
 
 def _matches_any_term(question_text: str, terms: list[str]) -> bool:
@@ -180,26 +179,44 @@ def _matches_any_term(question_text: str, terms: list[str]) -> bool:
     return any(re.search(rf"\b{re.escape(term)}\b", haystack) for term in terms)
 
 
+def classify_question_field(question_text: str) -> str | None:
+    """Returns which known, fillable field (rg/cpf/salary_expectation/
+    marital_status -- see application_profile.py) a screening question
+    is asking about, or None if it's not one of the four JARVIS knows
+    how to look up locally. A birth-date question also returns None
+    here (it's recognized by question_requires_stop()/
+    is_hard_pii_question() below, but never gets a fillable field)."""
+    haystack = question_text.lower()
+    for field, terms in _FIELD_TERMS.items():
+        if any(re.search(rf"\b{re.escape(term)}\b", haystack) for term in terms):
+            return field
+    return None
+
+
 def is_hard_pii_question(question_text: str) -> bool:
-    """True only for genuine government ID/birth date questions (RG,
-    CPF, data de nascimento) -- the narrow subset JARVIS must never even
-    receive from Nicholas, let alone guess, no matter how this feature
-    evolves later."""
-    return _matches_any_term(question_text, _HARD_PII_TERMS)
+    """True for genuine government ID/birth date questions (RG, CPF,
+    data de nascimento) -- reported to Nicholas with a distinct, stronger
+    message than other sensitive questions. RG/CPF are fillable from the
+    local profile if he's set them there (application_profile.py); birth
+    date has no fill path at all, ever."""
+    field = classify_question_field(question_text)
+    if field in _HARD_PII_FIELDS:
+        return True
+    return _matches_any_term(question_text, _UNFILLABLE_HARD_STOP_TERMS)
 
 
 def question_requires_stop(question_text: str) -> bool:
     """True if a screening question's text mentions PII (RG/CPF/birth
     date/marital status) or a financial specific (current salary/salary
-    expectation) -- confirmed live 2026-08-12 against two real, different
-    Gupy listings' actual custom questions (Itaú: RG + remuneração; BIP
-    Brasil: pretensão salarial + culture-fit). A hard stop, not a
-    warning: any match here means apply_to_job() must refuse rather than
-    guess. Deliberately biased toward over-triggering -- a false-positive
-    stop just means "ask Nicholas," which is always the safe failure mode
-    here, unlike, say, company_tier()'s substring-match bug, where a
-    false positive was actively misleading."""
-    return _matches_any_term(question_text, _PII_OR_FINANCIAL_TERMS)
+    expectation) -- confirmed live 2026-08-12/13 against two real,
+    different Gupy listings' actual custom questions (Itaú: RG +
+    remuneração; BIP Brasil: pretensão salarial + culture-fit). A hard
+    stop when no locally-provided value exists for the field, not a
+    warning. Deliberately biased toward over-triggering -- a false-
+    positive stop just means "ask Nicholas," which is always the safe
+    failure mode here, unlike, say, company_tier()'s substring-match
+    bug, where a false positive was actively misleading."""
+    return classify_question_field(question_text) is not None or is_hard_pii_question(question_text)
 
 
 @dataclass

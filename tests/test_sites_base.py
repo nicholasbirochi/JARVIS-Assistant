@@ -7,6 +7,7 @@ from jarvis.sites.base import (
     SiteProfileSnapshot,
     UpdatePlan,
     UpdateResult,
+    classify_question_field,
     is_hard_pii_question,
     question_requires_stop,
 )
@@ -89,3 +90,23 @@ def test_is_hard_pii_question_true_only_for_government_id_and_birth_date():
 
 def test_is_hard_pii_question_false_for_an_unrelated_question():
     assert not is_hard_pii_question("Você tem disponibilidade para trabalho híbrido?")
+
+
+def test_classify_question_field_recognizes_each_known_field():
+    assert classify_question_field("Qual é o seu RG?") == "rg"
+    assert classify_question_field("Informe seu CPF completo") == "cpf"
+    assert classify_question_field("Qual sua pretensão salarial atual?") == "salary_expectation"
+    assert classify_question_field("Qual seu estado civil?") == "marital_status"
+
+
+def test_classify_question_field_none_for_birth_date_and_unrelated_questions():
+    # Birth date is recognized as a hard stop (is_hard_pii_question),
+    # but deliberately has no fillable field at all -- see base.py's
+    # module comment for why.
+    assert classify_question_field("Qual sua data de nascimento?") is None
+    assert classify_question_field("Você tem disponibilidade para viajar?") is None
+
+
+def test_is_hard_pii_question_true_for_birth_date_with_no_fillable_field():
+    assert is_hard_pii_question("Qual sua data de nascimento?")
+    assert classify_question_field("Qual sua data de nascimento?") is None

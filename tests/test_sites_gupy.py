@@ -505,7 +505,7 @@ def test_card_to_job_listing_converts_a_real_shaped_card():
 
 class FakeApplicationPage:
     def __init__(self, *, apply_href="/candidates/jobs/123/apply", step_texts, referral_answer_count=0,
-                 click_results=None, company_questions=None):
+                 click_results=None, company_questions=None, fill_selectors=None):
         self.apply_href = apply_href
         self.url = "https://empresa.gupy.io/job/xyz"
         self.step_texts = step_texts
@@ -514,6 +514,8 @@ class FakeApplicationPage:
         self.click_results = click_results or {}
         self.company_questions = company_questions or []
         self.clicked: list[str] = []
+        self.fill_selectors = fill_selectors  # None = every selector succeeds
+        self.filled: dict[str, str] = {}
 
     def goto(self, url, timeout=None, wait_until=None):
         self.url = url
@@ -541,6 +543,16 @@ class FakeApplicationPage:
                     self.clicked.append(text)
                 return result
         return False
+
+    def fill(self, selector, value, timeout=None):
+        # fill_selectors: set by tests to the selectors that should
+        # succeed ({} means every selector "works", matching real
+        # Playwright raising only when the element genuinely isn't
+        # found -- tests that want a failure set fill_selectors
+        # explicitly to a smaller allow-list).
+        if self.fill_selectors is not None and selector not in self.fill_selectors:
+            raise Exception(f"no element matching {selector!r}")
+        self.filled[selector] = value
 
 
 class FakeApplicationContext:
@@ -686,6 +698,164 @@ def test_preview_application_closes_context_and_stops_playwright(monkeypatch):
 
     assert fake_context.closed is True
     assert fake_p.stopped is True
+
+
+# --- continue_application_with_profile() --------------------------------
+
+
+def _patch_profile(monkeypatch, **fields):
+    from jarvis.sites import application_profile
+
+    full = {"rg": None, "cpf": None, "salary_expectation": None, "marital_status": None}
+    full.update(fields)
+    monkeypatch.setattr(application_profile, "load_application_profile", lambda: full)
+
+
+def test_continue_application_with_profile_refuses_without_confirmed(monkeypatch):
+    _patch_profile(monkeypatch)
+    page = FakeApplicationPage(step_texts=["algo"])
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=False)
+
+    assert preview.can_submit is False
+    assert "confirmed=True" in preview.blocked_reason
+    assert page.clicked == []  # never even started navigating
+
+
+def test_continue_application_with_profile_refuses_when_a_question_has_no_local_value(monkeypatch):
+    # Salary question exists, but the local profile has nothing for it --
+    # must refuse the WHOLE step, not fill nothing and half-advance.
+    _patch_profile(monkeypatch)  # everything None
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual sua pretensão salarial atual?"],
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert preview.can_submit is False
+    assert "tudo ou nada" in preview.blocked_reason
+    assert page.filled == {}  # nothing was actually typed into the page
+    assert preview.questions[-1].answered is False
+
+
+def test_continue_application_with_profile_refuses_for_an_unclassified_question(monkeypatch):
+    _patch_profile(monkeypatch, salary_expectation="R$ 4.500,00")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Você tem CNH?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Você tem CNH?"],
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert preview.can_submit is False
+    assert page.filled == {}
+
+
+def test_continue_application_with_profile_fills_all_known_questions_and_advances(monkeypatch):
+    _patch_profile(monkeypatch, salary_expectation="R$ 4.500,00")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual sua pretensão salarial atual?"],
+        fill_selectors={'[id="input-1.Qual sua pretensão salarial atual?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.filled == {'[id="input-1.Qual sua pretensão salarial atual?"]': "R$ 4.500,00"}
+    assert preview.can_submit is False  # final submit still never verified
+    assert "nunca foi verificado ao vivo" in preview.blocked_reason
+    assert preview.questions[-1].answered is True
+    # The real value must never end up on the returned question object.
+    assert preview.questions[-1].answer == "(preenchido do arquivo local)"
+    assert "4.500" not in str(preview.questions[-1])
+    assert "4.500" not in (preview.summary_text or "")
+    assert "Salvar e continuar" in page.clicked
+
+
+def test_continue_application_with_profile_reports_a_fill_failure(monkeypatch):
+    _patch_profile(monkeypatch, salary_expectation="R$ 4.500,00")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual sua pretensão salarial atual?"],
+        fill_selectors=set(),  # every fill() call fails -- selector not found
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert preview.can_submit is False
+    assert preview.questions[-1].answered is False
+    assert "Confira manualmente" in preview.blocked_reason
+
+
+def test_continue_application_with_profile_still_blocks_rg_even_when_provided(monkeypatch):
+    # RG IS fillable now (explicitly confirmed 2026-08-13) -- this test
+    # just confirms it fills like any other known field when a value
+    # exists, rather than being silently excluded from the mechanism.
+    _patch_profile(monkeypatch, rg="12.345.678-9")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual é o seu RG?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual é o seu RG?"],
+        fill_selectors={'[id="input-1.Qual é o seu RG?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.filled == {'[id="input-1.Qual é o seu RG?"]': "12.345.678-9"}
+    assert "12.345.678-9" not in str(preview.questions[-1])
+    assert "12.345.678-9" not in (preview.summary_text or "")
+
+
+def test_continue_application_with_profile_still_refuses_birth_date_even_with_full_profile(monkeypatch):
+    # No fillable field exists for birth date at all (see base.py) --
+    # a fully-populated profile still can't answer this one.
+    _patch_profile(monkeypatch, rg="12.345.678-9", cpf="123.456.789-00", salary_expectation="5000", marital_status="Solteiro")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua data de nascimento?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual sua data de nascimento?"],
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert preview.can_submit is False
+    assert page.filled == {}
 
 
 def test_card_to_job_listing_none_when_title_missing_or_id_undecodable():
