@@ -390,6 +390,22 @@ def rank_bank_bigtech_first(listings: list[JobListing]) -> list[JobListing]:
     return sorted(listings, key=sort_key)
 
 
+def group_by_tier(listings: list[JobListing]) -> dict[str, list[JobListing]]:
+    """Buckets listings into "banco"/"bigtech"/"startup" via company_tier()
+    -- listings whose company doesn't match any known name are dropped
+    entirely (this is for the three separate company-tier lists Nicholas
+    asked for, not a general-purpose view; unrecognized companies belong
+    in the plain local/remote report, not here). Each bucket is ranked
+    junior-first the same way run_job_search() ranks its own lists, so a
+    caller doesn't have to remember to do it separately."""
+    buckets: dict[str, list[JobListing]] = {"banco": [], "bigtech": [], "startup": []}
+    for listing in listings:
+        tier = company_tier(listing.company)
+        if tier in buckets:
+            buckets[tier].append(listing)
+    return {tier: rank_junior_first(items) for tier, items in buckets.items()}
+
+
 def is_in_target_region(location: str | None, region_terms: list[str] = _TARGET_REGION_TERMS) -> bool:
     """True if the listing's location text names the user's home city, its
     ABC-region neighbors, or São Paulo city itself. False for anything

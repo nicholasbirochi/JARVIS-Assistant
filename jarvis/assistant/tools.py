@@ -56,7 +56,15 @@ file, or log -- only whether a field was filled. Still never clicks a
 genuine final submit -- that step has never been observed live -- so
 even full success only means "advanced one more step," not "sent."
 Gupy-only for now; other sites need their own live investigation
-first."""
+first.
+
+open_job_portal() drives jarvis/job_portal/ -- 2026-08-14, Nicholas
+asked to move off the Claude Artifact ("mude para local...") after
+being told the hosted page structurally can't reach local Playwright.
+This is a real local HTTP server (127.0.0.1 only, port 8766) whose
+buttons call the exact same check_job_application()/
+continue_job_application() functions above -- opened in Nicholas's real
+default browser, not a WKWebView."""
 
 from __future__ import annotations
 
@@ -328,6 +336,32 @@ def setup_application_profile() -> str:
     )
 
 
+def open_job_portal() -> str:
+    """Abre a página local de vagas por empresa (bancos/bigtechs/
+    startups) no navegador de verdade do Nicholas -- diferente do
+    artefato hospedado na Anthropic, essa página roda um servidor local
+    (jarvis/job_portal/) e os botões "Verificar"/"Continuar candidatura"
+    de fato chamam check_job_application()/continue_job_application()
+    aqui no Mac dele. Busca vagas na primeira vez que for aberta nesta
+    sessão (pode levar alguns minutos) -- depois disso mostra o que já
+    tem, com um botão para atualizar quando quiser.
+
+    Use quando o Nicholas pedir para abrir/ver as vagas localmente, ou
+    pedir para poder se candidatar clicando em botões em vez de te
+    pedir link por link.
+    """
+    from jarvis.job_portal import server
+
+    if server._tiers is None:  # first open this process -- fetch real data now
+        try:
+            server.refresh_data()
+        except Exception as exc:
+            return f"Não consegui buscar as vagas ainda: {exc}. Tento de novo se você pedir."
+
+    page_url = server.open_portal()
+    return f"Abri {page_url} no seu navegador -- os botões ali rodam de verdade, local."
+
+
 def _publish_jobs_chart(report) -> None:
     """Pushes a live bar chart (vagas por site, local vs. home office) to
     the HUD (jarvis/visualizer/) -- best-effort, same reasoning as
@@ -428,5 +462,6 @@ TOOLS = [
     check_job_application,
     continue_job_application,
     setup_application_profile,
+    open_job_portal,
     evaluate_investments,
 ]

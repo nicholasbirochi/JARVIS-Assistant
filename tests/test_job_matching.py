@@ -7,6 +7,7 @@ from jarvis.sites.job_matching import (
     filter_by_location,
     filter_relevant,
     filter_remote,
+    group_by_tier,
     has_international_signal,
     has_junior_signal,
     is_in_target_region,
@@ -247,3 +248,32 @@ def test_rank_bank_bigtech_first_orders_banco_then_bigtech_then_startup_then_res
     result = rank_bank_bigtech_first(listings)
 
     assert [listing.external_id for listing in result] == ["3", "2", "4", "1"]
+
+
+def test_group_by_tier_buckets_and_drops_unrecognized_companies():
+    unranked = make_listing("1", "X")
+    unranked.company = "Empresa Qualquer"
+    bigtech = make_listing("2", "X")
+    bigtech.company = "Google"
+    bank = make_listing("3", "X")
+    bank.company = "Itaú"
+    startup = make_listing("4", "X")
+    startup.company = "Gupy"
+
+    buckets = group_by_tier([unranked, bigtech, bank, startup])
+
+    assert {l.external_id for l in buckets["banco"]} == {"3"}
+    assert {l.external_id for l in buckets["bigtech"]} == {"2"}
+    assert {l.external_id for l in buckets["startup"]} == {"4"}
+    assert set(buckets.keys()) == {"banco", "bigtech", "startup"}
+
+
+def test_group_by_tier_ranks_junior_first_within_each_bucket():
+    unlabeled = make_listing("1", "Analista De Dados")
+    unlabeled.company = "Itaú"
+    junior = make_listing("2", "Analista De Dados Júnior")
+    junior.company = "Bradesco"
+
+    buckets = group_by_tier([unlabeled, junior])
+
+    assert [l.external_id for l in buckets["banco"]] == ["2", "1"]
