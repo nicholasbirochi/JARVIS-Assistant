@@ -198,10 +198,30 @@ _INTERNATIONAL_TERMS = [
     "worldwide",
 ]
 
+# "internacional, somente full home-office" (2026-08-14): a listing that
+# says "remoto" but ALSO signals a hybrid/partial-onsite arrangement
+# isn't the fully-remote role Nicholas actually wants -- explicit
+# request to stop counting those as real home office. Checked against
+# every remote listing (not just international ones), since a hybrid
+# role mislabeled as "home office" is equally wrong for a purely
+# national remote search.
+_HYBRID_TERMS = ["híbrido", "hibrido", "hybrid"]
+
 
 def is_remote(title: str, snippet: str | None, location: str | None = None) -> bool:
     haystack = f"{title} {snippet or ''} {location or ''}".lower()
     return any(term in haystack for term in _REMOTE_TERMS)
+
+
+def is_full_remote(title: str, snippet: str | None, location: str | None = None) -> bool:
+    """is_remote() plus a real refinement: a listing that also mentions
+    "híbrido"/"hybrid" isn't full home office, even if it separately says
+    "remoto" somewhere (mixed/inconsistent listing text, seen live) --
+    Nicholas's explicit request, see the _HYBRID_TERMS comment above."""
+    if not is_remote(title, snippet, location):
+        return False
+    haystack = f"{title} {snippet or ''} {location or ''}".lower()
+    return not any(term in haystack for term in _HYBRID_TERMS)
 
 
 def has_international_signal(title: str, snippet: str | None) -> bool:
@@ -210,7 +230,10 @@ def has_international_signal(title: str, snippet: str | None) -> bool:
 
 
 def filter_remote(listings: list[JobListing]) -> list[JobListing]:
-    return [listing for listing in listings if is_remote(listing.title, listing.snippet, listing.location)]
+    """Full home-office only (is_full_remote(), not the looser
+    is_remote()) -- a hybrid role never belongs in the "home office"
+    list Nicholas asked for."""
+    return [listing for listing in listings if is_full_remote(listing.title, listing.snippet, listing.location)]
 
 
 # "foque em trabalhos de bancos e bigtechs e startup" (2026-08-12) --

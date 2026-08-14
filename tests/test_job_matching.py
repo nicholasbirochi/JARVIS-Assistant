@@ -10,6 +10,7 @@ from jarvis.sites.job_matching import (
     group_by_tier,
     has_international_signal,
     has_junior_signal,
+    is_full_remote,
     is_in_target_region,
     is_relevant_match,
     is_remote,
@@ -178,6 +179,33 @@ def test_filter_remote_keeps_only_remote_listings():
     listings = [
         make_listing("1", "Analista De Dados", snippet="100% remoto"),
         make_listing("2", "Analista De BI", snippet="Presencial"),
+    ]
+
+    result = filter_remote(listings)
+
+    assert [listing.external_id for listing in result] == ["1"]
+
+
+def test_is_full_remote_false_when_also_hybrid():
+    # Real request, 2026-08-14: a listing mentioning "remoto" AND
+    # "híbrido" isn't the full home-office role Nicholas wants -- mixed/
+    # inconsistent listing text seen live shouldn't count.
+    assert not is_full_remote("Analista de Dados", "Remoto, modelo híbrido 2x/semana", None)
+    assert not is_full_remote("Data Analyst", "Hybrid remote role", None)
+
+
+def test_is_full_remote_true_for_a_genuinely_remote_listing():
+    assert is_full_remote("Analista de Dados", "100% remoto, trabalhe de qualquer lugar do Brasil", None)
+
+
+def test_is_full_remote_false_without_any_remote_signal():
+    assert not is_full_remote("Analista de Dados", "Presencial", "São Paulo - SP")
+
+
+def test_filter_remote_excludes_hybrid_listings():
+    listings = [
+        make_listing("1", "Analista De Dados", snippet="100% remoto"),
+        make_listing("2", "Analista De BI", snippet="Remoto, mas híbrido 1x por semana"),
     ]
 
     result = filter_remote(listings)
