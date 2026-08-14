@@ -92,7 +92,17 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
     jarvis.sites.job_matching.group_by_tier(). Stores the result for
     subsequent page renders/route handlers. resume/adapters are
     injectable for tests; production calls load the real résumé and use
-    _portal_adapters()."""
+    _portal_adapters().
+
+    Deliberately does NOT use run_job_search()'s bounded defaults
+    (_MAX_TERMS=3) -- real gap found live 2026-08-14: once Nicholas set
+    7 explicit target_roles, the portal's own "Atualizar vagas agora"
+    button (calling this with no args) only ever searched the first 3,
+    undoing the deeper coverage a manually-run script had found minutes
+    earlier. This is an explicit, manually-triggered, patient action
+    (unlike find_matching_jobs()'s voice/text path, which stays bounded
+    on purpose) -- max_terms=0 means "every term", max_results_per_term
+    is raised accordingly."""
     from jarvis.job_search import run_job_search
     from jarvis.sites.job_matching import group_by_tier
 
@@ -103,7 +113,7 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
     if adapters is None:
         adapters = _portal_adapters()
 
-    report = run_job_search(resume, adapters=adapters)
+    report = run_job_search(resume, adapters=adapters, max_terms=0, max_results_per_term=30)
     combined = report.local + report.remote
     tiers = group_by_tier(combined)
 

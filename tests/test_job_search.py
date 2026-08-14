@@ -83,6 +83,46 @@ def test_run_job_search_caps_the_number_of_terms_queried():
     assert len(adapter.calls) == _MAX_TERMS
 
 
+def test_run_job_search_max_terms_zero_uses_every_term():
+    # Real gap found live 2026-08-14: the job portal's own manually-
+    # triggered refresh silently undersold coverage once Nicholas set 7
+    # explicit target_roles, because run_job_search() always sliced to
+    # _MAX_TERMS=3 with no way to opt out.
+    resume = make_resume()
+    resume.job_preferences.target_roles = ["A", "B", "C", "D", "E"]
+    adapter = FakeAdapter([])
+    adapters = {"infojobs": adapter}
+
+    run_job_search(resume, adapters=adapters, max_terms=0)
+
+    assert adapter.calls == ["A", "B", "C", "D", "E"]
+
+
+def test_run_job_search_max_terms_explicit_value_overrides_the_default():
+    resume = make_resume()
+    resume.job_preferences.target_roles = ["A", "B", "C", "D", "E"]
+    adapter = FakeAdapter([])
+    adapters = {"infojobs": adapter}
+
+    run_job_search(resume, adapters=adapters, max_terms=2)
+
+    assert adapter.calls == ["A", "B"]
+
+
+def test_run_job_search_max_results_per_term_overrides_the_default():
+    class RecordingAdapter(FakeAdapter):
+        def search_jobs(self, query, *, max_results=20):
+            self.calls.append((query, max_results))
+            return []
+
+    adapter = RecordingAdapter([])
+    adapters = {"infojobs": adapter}
+
+    run_job_search(make_resume(), adapters=adapters, max_results_per_term=50)
+
+    assert all(max_results == 50 for _query, max_results in adapter.calls)
+
+
 def test_save_report_and_latest_report_path_round_trip(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     local_listing = make_listing("1", "Analista De Dados", location="São Bernardo do Campo - SP")

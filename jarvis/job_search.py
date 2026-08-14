@@ -72,9 +72,24 @@ def _default_adapters() -> dict[str, object]:
     return {"infojobs": InfoJobsAdapter(), "catho": CathoAdapter(), "gupy": GupyAdapter()}
 
 
-def run_job_search(resume: Resume, *, adapters: dict[str, object] | None = None) -> JobSearchReport:
+def run_job_search(
+    resume: Resume,
+    *,
+    adapters: dict[str, object] | None = None,
+    max_terms: int | None = None,
+    max_results_per_term: int | None = None,
+) -> JobSearchReport:
     """Real, live search -- opens real browser sessions. adapters is
-    injectable for tests (fakes, no real Playwright/network calls)."""
+    injectable for tests (fakes, no real Playwright/network calls).
+
+    max_terms/max_results_per_term default to _MAX_TERMS/
+    _MAX_RESULTS_PER_TERM (bounded, for the synchronous voice/text tool-
+    call path -- see module docstring) but callers with more time to
+    spend (jarvis/job_portal/'s manually-triggered "Atualizar vagas
+    agora", not something that fires unattended) can pass higher values,
+    or max_terms=0 for "every term in derive_search_terms(resume), no
+    slicing" -- added 2026-08-14 after the portal's own quick default
+    undersold real coverage once Nicholas set 7 explicit target_roles."""
     from jarvis.sites.job_matching import (
         dedupe,
         derive_search_terms,
@@ -86,7 +101,11 @@ def run_job_search(resume: Resume, *, adapters: dict[str, object] | None = None)
     )
 
     adapters = adapters if adapters is not None else _default_adapters()
-    terms = derive_search_terms(resume)[:_MAX_TERMS]
+    all_terms = derive_search_terms(resume)
+    if max_terms is None:
+        max_terms = _MAX_TERMS
+    terms = all_terms if max_terms == 0 else all_terms[:max_terms]
+    results_cap = max_results_per_term if max_results_per_term is not None else _MAX_RESULTS_PER_TERM
 
     all_listings: list[JobListing] = []
     sites_searched = []
@@ -95,7 +114,7 @@ def run_job_search(resume: Resume, *, adapters: dict[str, object] | None = None)
         site_ok = False
         for term in terms:
             try:
-                results = adapter.search_jobs(term, max_results=_MAX_RESULTS_PER_TERM)
+                results = adapter.search_jobs(term, max_results=results_cap)
                 all_listings.extend(results)
                 site_ok = True
             except Exception as exc:  # noqa: BLE001 -- one bad site must not sink the whole search
