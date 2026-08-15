@@ -2,7 +2,7 @@
   "meta": {
     "schema_version": "2.0",
     "canonical_language": "pt-BR",
-    "last_updated": "2026-08-08T06:10:51.450091+00:00",
+    "last_updated": "2026-08-14T03:14:58.992243+00:00",
     "source_documents": [
       "Currículo - DataBase - Brasil ATS.docx",
       "Currículo - DataBase - International ATS.docx"
@@ -282,13 +282,21 @@
     }
   ],
   "job_preferences": {
-    "target_roles": [],
+    "target_roles": [
+      "Analista de Dados",
+      "Cientista de Dados",
+      "Engenheiro de Dados",
+      "Business Intelligence",
+      "Power BI",
+      "Python",
+      "SQL"
+    ],
     "notes": null,
     "availability": {
-      "status": "unspecified",
+      "status": "immediate",
       "notice_period_days": null,
       "available_from": null,
-      "notes": null
+      "notes": "Prefere horário comercial 8h-17h (faculdade à noite, 18:30-23:00)."
     }
   },
   "conflicts": [
@@ -439,6 +447,38 @@
       "new_value": "+55 (11) 95827-5250",
       "source": "manual_review",
       "note": "Revertendo valor de teste inserido por engano durante teste de tool-calling do assistente (não era um pedido real do usuário)."
+    },
+    {
+      "timestamp": "2026-08-14T03:14:58.990123+00:00",
+      "field_path": "job_preferences.target_roles",
+      "old_value": [],
+      "new_value": [
+        "Analista de Dados",
+        "Cientista de Dados",
+        "Engenheiro de Dados",
+        "Business Intelligence",
+        "Power BI",
+        "Python",
+        "SQL"
+      ],
+      "source": "voice",
+      "note": "Nicholas: 'tudo sobre dados!' -- ampliando os termos de busca além do fallback padrão."
+    },
+    {
+      "timestamp": "2026-08-14T03:14:58.990941+00:00",
+      "field_path": "job_preferences.availability.status",
+      "old_value": "unspecified",
+      "new_value": "immediate",
+      "source": "voice",
+      "note": "Nicholas: 'começar o quanto antes'."
+    },
+    {
+      "timestamp": "2026-08-14T03:14:58.991411+00:00",
+      "field_path": "job_preferences.availability.notes",
+      "old_value": null,
+      "new_value": "Prefere horário comercial 8h-17h (faculdade à noite, 18:30-23:00).",
+      "source": "voice",
+      "note": "Nicholas: 'das 8:00 - 17:00'."
     }
   ]
 }
