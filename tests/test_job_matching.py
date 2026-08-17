@@ -315,6 +315,34 @@ def test_group_by_tier_buckets_and_drops_unrecognized_companies():
     assert set(buckets.keys()) == {"banco", "fintech", "bigtech", "startup"}
 
 
+def test_group_by_tier_include_other_keeps_unrecognized_companies():
+    # Added 2026-08-17: the named-tier lists alone are gated by real
+    # market openings at ~100 curated companies -- include_other=True
+    # surfaces every OTHER relevant listing instead of silently
+    # dropping it, for when real volume matters more than curation.
+    known = make_listing("1", "X")
+    known.company = "Itaú"
+    unknown = make_listing("2", "X")
+    unknown.company = "Empresa Qualquer Ltda"
+    no_company = make_listing("3", "X")
+    no_company.company = None
+
+    buckets = group_by_tier([known, unknown, no_company], include_other=True)
+
+    assert {l.external_id for l in buckets["banco"]} == {"1"}
+    assert {l.external_id for l in buckets["outras"]} == {"2", "3"}
+
+
+def test_group_by_tier_default_still_drops_unrecognized_companies():
+    unknown = make_listing("1", "X")
+    unknown.company = "Empresa Qualquer Ltda"
+
+    buckets = group_by_tier([unknown])
+
+    assert "outras" not in buckets
+    assert all(len(v) == 0 for v in buckets.values())
+
+
 def test_group_by_tier_ranks_junior_first_within_each_bucket():
     unlabeled = make_listing("1", "Analista De Dados")
     unlabeled.company = "Itaú"

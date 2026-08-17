@@ -97,6 +97,42 @@ def test_serves_the_fintech_tier(monkeypatch):
     assert 'data-tier="fintech"' in body
 
 
+def test_serves_the_outras_tier(monkeypatch):
+    # Added 2026-08-17: real volume for "quero pelo menos mais de 200
+    # vagas" -- relevant listings at a company not in the curated lists
+    # go here instead of being dropped.
+    monkeypatch.setattr(
+        server,
+        "_tiers",
+        {
+            "banco": [],
+            "fintech": [],
+            "bigtech": [],
+            "startup": [],
+            "outras": [make_listing("1", "Analista de Dados", company="Empresa Qualquer Ltda")],
+        },
+    )
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "Empresa Qualquer Ltda" in body
+    assert "Outras empresas" in body
+    assert 'data-tier="outras"' in body
+
+
+def test_render_page_works_when_outras_key_is_missing(monkeypatch):
+    # Older/injected _tiers dicts (or a page load before the first real
+    # refresh_data() call ever populates "outras") must render fine, not
+    # crash with a KeyError.
+    monkeypatch.setattr(server, "_tiers", {"banco": [], "fintech": [], "bigtech": [], "startup": []})
+
+    page = server.render_page()
+
+    assert "<html" in page.lower()
+
+
 def test_non_gupy_listing_does_not_offer_continue_button(monkeypatch):
     monkeypatch.setattr(
         server,
@@ -179,7 +215,7 @@ def test_refresh_endpoint_calls_refresh_data_and_returns_counts(monkeypatch):
     status, body = _post(port, "/api/refresh", {})
 
     assert status == 200
-    assert body == {"banco": 1, "fintech": 0, "bigtech": 0, "startup": 0}
+    assert body == {"banco": 1, "fintech": 0, "bigtech": 0, "startup": 0, "outras": 0}
 
 
 def test_render_page_never_raises_with_no_data():

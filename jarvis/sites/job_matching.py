@@ -448,19 +448,29 @@ def rank_bank_bigtech_first(listings: list[JobListing]) -> list[JobListing]:
     return sorted(listings, key=sort_key)
 
 
-def group_by_tier(listings: list[JobListing]) -> dict[str, list[JobListing]]:
+def group_by_tier(listings: list[JobListing], *, include_other: bool = False) -> dict[str, list[JobListing]]:
     """Buckets listings into "banco"/"fintech"/"bigtech"/"startup" via
-    company_tier() -- listings whose company doesn't match any known name
-    are dropped entirely (this is for the separate company-tier lists
-    Nicholas asked for, not a general-purpose view; unrecognized
-    companies belong in the plain local/remote report, not here). Each
-    bucket is ranked junior-first the same way run_job_search() ranks its
-    own lists, so a caller doesn't have to remember to do it separately."""
+    company_tier(). With include_other=False (the original behavior),
+    listings whose company doesn't match any known name are dropped
+    entirely. With include_other=True (added 2026-08-17 at the user's
+    explicit request for real volume -- "quero pelo menos mais de 200
+    vagas" -- the named-company tiers alone are gated by real, current
+    market openings at ~100 curated companies, which will never reach
+    that on their own no matter how much more searching happens), a
+    fifth "outras" bucket holds every OTHER relevant listing instead of
+    silently dropping it -- still real, still matches every other
+    restriction (skill relevance, level, location/remote), just at a
+    company not in the curated lists. Each bucket is ranked junior-first
+    the same way run_job_search() ranks its own lists."""
     buckets: dict[str, list[JobListing]] = {tier: [] for tier in _TIER_ORDER}
+    if include_other:
+        buckets["outras"] = []
     for listing in listings:
         tier = company_tier(listing.company)
         if tier in buckets:
             buckets[tier].append(listing)
+        elif include_other:
+            buckets["outras"].append(listing)
     return {tier: rank_junior_first(items) for tier, items in buckets.items()}
 
 

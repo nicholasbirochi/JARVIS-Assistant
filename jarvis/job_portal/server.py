@@ -56,6 +56,7 @@ _TIER_META = {
     "fintech": {"label": "Fintechs", "emoji": "💳", "sub": "Fintechs nomeadas (Nubank, C6 Bank, Stone, PicPay, Cora e outras)"},
     "bigtech": {"label": "Bigtechs", "emoji": "💻", "sub": "Bigtechs nomeadas (Google, Amazon, Mercado Livre, iFood e outras)"},
     "startup": {"label": "Startups", "emoji": "🚀", "sub": "Startups/scale-ups nomeadas (Gupy, Hotmart, QuintoAndar, BairesDev e outras)"},
+    "outras": {"label": "Outras empresas", "emoji": "🏢", "sub": "Todas as outras vagas relevantes -- mesmas restrições, empresa não está nas listas nomeadas acima"},
 }
 
 _SITE_LABELS = {
@@ -106,7 +107,14 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
     earlier. This is an explicit, manually-triggered, patient action
     (unlike find_matching_jobs()'s voice/text path, which stays bounded
     on purpose) -- max_terms=0 means "every term", max_results_per_term
-    is raised accordingly."""
+    is raised accordingly.
+
+    group_by_tier(..., include_other=True) -- 2026-08-17, real request
+    ("quero pelo menos mais de 200 vagas"): the four named-company tiers
+    alone are gated by real, current openings at ~100 curated companies
+    and were never going to reach that on volume alone. A fifth "outras"
+    bucket now holds every other relevant listing (still real, still
+    matches every other restriction) instead of silently dropping it."""
     from jarvis.job_search import run_job_search
     from jarvis.sites.job_matching import group_by_tier
 
@@ -117,9 +125,9 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
     if adapters is None:
         adapters = _portal_adapters()
 
-    report = run_job_search(resume, adapters=adapters, max_terms=0, max_results_per_term=30)
+    report = run_job_search(resume, adapters=adapters, max_terms=0, max_results_per_term=50)
     combined = report.local + report.remote
-    tiers = group_by_tier(combined)
+    tiers = group_by_tier(combined, include_other=True)
 
     with _tiers_lock:
         global _tiers
@@ -127,7 +135,7 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
     return tiers
 
 
-_TIER_KEYS = ("banco", "fintech", "bigtech", "startup")
+_TIER_KEYS = ("banco", "fintech", "bigtech", "startup", "outras")
 
 
 def _current_tiers() -> dict[str, list[JobListing]]:
@@ -196,14 +204,19 @@ def _render_section(tier: str, listings: list[JobListing]) -> str:
 
 def render_page() -> str:
     tiers = _current_tiers()
-    sections = "".join(_render_section(tier, tiers[tier]) for tier in _TIER_KEYS)
+    # .get(tier, []) throughout -- "outras" is only populated by a real
+    # refresh_data() call (include_other=True); older/injected _tiers
+    # dicts (tests, or a page load before the first refresh finishes)
+    # may not have it yet, and that must render as empty, not crash.
+    sections = "".join(_render_section(tier, tiers.get(tier, [])) for tier in _TIER_KEYS)
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     return template.format(
-        total=sum(len(tiers[tier]) for tier in _TIER_KEYS),
-        banco_count=len(tiers["banco"]),
-        fintech_count=len(tiers["fintech"]),
-        bigtech_count=len(tiers["bigtech"]),
-        startup_count=len(tiers["startup"]),
+        total=sum(len(tiers.get(tier, [])) for tier in _TIER_KEYS),
+        banco_count=len(tiers.get("banco", [])),
+        fintech_count=len(tiers.get("fintech", [])),
+        bigtech_count=len(tiers.get("bigtech", [])),
+        startup_count=len(tiers.get("startup", [])),
+        outras_count=len(tiers.get("outras", [])),
         sections=sections,
     )
 
@@ -273,7 +286,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _handle_refresh(self) -> None:
         try:
             tiers = refresh_data()
-            self._write_json({tier: len(tiers[tier]) for tier in _TIER_KEYS})
+            self._write_json({tier: len(tiers.get(tier, [])) for tier in _TIER_KEYS})
         except Exception as exc:  # noqa: BLE001
             self._write_json({"error": str(exc)}, status=500)
 
