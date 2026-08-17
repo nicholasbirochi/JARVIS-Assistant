@@ -198,7 +198,7 @@ def _render_listing_lines(listings: list[JobListing]) -> list[str]:
     lines = []
     for listing in listings:
         tier = company_tier(listing.company)
-        tag = " 🏦" if tier == "banco" else " 💻" if tier == "bigtech" else ""
+        tag = {"banco": " 🏦", "fintech": " 💳", "bigtech": " 💻"}.get(tier, "")
         lines.append(
             f"- **{listing.title}**{tag} -- {listing.company or 'empresa não identificada'} -- "
             f"{listing.location or 'localização não informada'} -- [{listing.site_name}]({listing.url})"

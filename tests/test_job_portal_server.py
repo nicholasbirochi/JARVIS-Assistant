@@ -60,6 +60,7 @@ def test_serves_the_page_with_real_tier_data(monkeypatch):
         "_tiers",
         {
             "banco": [make_listing("1", "Analista de Dados Júnior", company="Itaú")],
+            "fintech": [],
             "bigtech": [],
             "startup": [],
         },
@@ -75,9 +76,32 @@ def test_serves_the_page_with_real_tier_data(monkeypatch):
     assert "Continuar candidatura" in body  # gupy listing -> real apply button shown
 
 
+def test_serves_the_fintech_tier(monkeypatch):
+    monkeypatch.setattr(
+        server,
+        "_tiers",
+        {
+            "banco": [],
+            "fintech": [make_listing("1", "Analista de Dados", company="Nubank")],
+            "bigtech": [],
+            "startup": [],
+        },
+    )
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "Nubank" in body
+    assert "Fintechs" in body
+    assert 'data-tier="fintech"' in body
+
+
 def test_non_gupy_listing_does_not_offer_continue_button(monkeypatch):
     monkeypatch.setattr(
-        server, "_tiers", {"banco": [], "bigtech": [], "startup": [make_listing("1", "X", site_name="catho")]}
+        server,
+        "_tiers",
+        {"banco": [], "fintech": [], "bigtech": [], "startup": [make_listing("1", "X", site_name="catho")]},
     )
     port = server.start(port=0)
 
@@ -147,7 +171,7 @@ def test_check_endpoint_reports_errors_as_json_500(monkeypatch):
 
 def test_refresh_endpoint_calls_refresh_data_and_returns_counts(monkeypatch):
     def _fake_refresh():
-        return {"banco": [make_listing("1", "X")], "bigtech": [], "startup": []}
+        return {"banco": [make_listing("1", "X")], "fintech": [], "bigtech": [], "startup": []}
 
     monkeypatch.setattr(server, "refresh_data", _fake_refresh)
     port = server.start(port=0)
@@ -155,7 +179,7 @@ def test_refresh_endpoint_calls_refresh_data_and_returns_counts(monkeypatch):
     status, body = _post(port, "/api/refresh", {})
 
     assert status == 200
-    assert body == {"banco": 1, "bigtech": 0, "startup": 0}
+    assert body == {"banco": 1, "fintech": 0, "bigtech": 0, "startup": 0}
 
 
 def test_render_page_never_raises_with_no_data():

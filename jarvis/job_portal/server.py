@@ -52,8 +52,9 @@ from jarvis.sites.base import JobListing
 _TEMPLATE_PATH = Path(__file__).resolve().parent / "page_template.html"
 
 _TIER_META = {
-    "banco": {"label": "Bancos", "emoji": "🏦", "sub": "Bancos nomeados (Itaú, Bradesco, Santander, Nubank, BTG e outros)"},
-    "bigtech": {"label": "Bigtechs", "emoji": "💻", "sub": "Bigtechs nomeadas (Google, Amazon, Mercado Livre, iFood, Stone e outras)"},
+    "banco": {"label": "Bancos", "emoji": "🏦", "sub": "Bancos tradicionais nomeados (Itaú, Bradesco, Santander, BTG e outros)"},
+    "fintech": {"label": "Fintechs", "emoji": "💳", "sub": "Fintechs nomeadas (Nubank, C6 Bank, Stone, PicPay, Cora e outras)"},
+    "bigtech": {"label": "Bigtechs", "emoji": "💻", "sub": "Bigtechs nomeadas (Google, Amazon, Mercado Livre, iFood e outras)"},
     "startup": {"label": "Startups", "emoji": "🚀", "sub": "Startups/scale-ups nomeadas (Gupy, Hotmart, QuintoAndar, BairesDev e outras)"},
 }
 
@@ -123,9 +124,12 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
     return tiers
 
 
+_TIER_KEYS = ("banco", "fintech", "bigtech", "startup")
+
+
 def _current_tiers() -> dict[str, list[JobListing]]:
     with _tiers_lock:
-        return _tiers or {"banco": [], "bigtech": [], "startup": []}
+        return _tiers or {tier: [] for tier in _TIER_KEYS}
 
 
 def _esc(s: str | None) -> str:
@@ -189,16 +193,14 @@ def _render_section(tier: str, listings: list[JobListing]) -> str:
 
 def render_page() -> str:
     tiers = _current_tiers()
-    banco, bigtech, startup = tiers["banco"], tiers["bigtech"], tiers["startup"]
-    sections = "".join(
-        _render_section(tier, tiers[tier]) for tier in ("banco", "bigtech", "startup")
-    )
+    sections = "".join(_render_section(tier, tiers[tier]) for tier in _TIER_KEYS)
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     return template.format(
-        total=len(banco) + len(bigtech) + len(startup),
-        banco_count=len(banco),
-        bigtech_count=len(bigtech),
-        startup_count=len(startup),
+        total=sum(len(tiers[tier]) for tier in _TIER_KEYS),
+        banco_count=len(tiers["banco"]),
+        fintech_count=len(tiers["fintech"]),
+        bigtech_count=len(tiers["bigtech"]),
+        startup_count=len(tiers["startup"]),
         sections=sections,
     )
 
@@ -268,7 +270,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _handle_refresh(self) -> None:
         try:
             tiers = refresh_data()
-            self._write_json({"banco": len(tiers["banco"]), "bigtech": len(tiers["bigtech"]), "startup": len(tiers["startup"])})
+            self._write_json({tier: len(tiers[tier]) for tier in _TIER_KEYS})
         except Exception as exc:  # noqa: BLE001
             self._write_json({"error": str(exc)}, status=500)
 

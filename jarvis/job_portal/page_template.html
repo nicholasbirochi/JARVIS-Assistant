@@ -66,7 +66,7 @@
   .result-box {{ margin-top: 10px; padding: 10px 12px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); font-size: 13px; white-space: pre-wrap; display: none; }}
   .result-box.visible {{ display: block; }}
   .tier-badge {{ flex: none; font: 700 14px ui-monospace, monospace; padding: 6px 11px; border-radius: 4px; color: var(--paper); }}
-  .tier-banco {{ background: #3d7a4f; }} .tier-bigtech {{ background: #3d5a9c; }} .tier-startup {{ background: #9c5a3d; }}
+  .tier-banco {{ background: #3d7a4f; }} .tier-fintech {{ background: #2f8f8f; }} .tier-bigtech {{ background: #3d5a9c; }} .tier-startup {{ background: #9c5a3d; }}
   .selection-bar {{ position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding: 14px 20px; background: var(--ink); color: var(--paper); box-shadow: 0 -2px 12px rgba(0,0,0,0.18); transform: translateY(100%); opacity: 0; transition: transform 0.22s ease, opacity 0.22s ease; z-index: 20; }}
   .selection-bar.visible {{ transform: translateY(0); opacity: 1; }}
   .bar-btn {{ font: 600 13px -apple-system, sans-serif; padding: 7px 13px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.25); background: var(--accent); color: var(--accent-ink); cursor: pointer; }}
@@ -88,6 +88,7 @@
     <div class="stat-strip">
       <div class="stat"><div class="n">{total}</div><div class="l">vagas no total</div></div>
       <div class="stat"><div class="n">{banco_count}</div><div class="l">🏦 bancos</div></div>
+      <div class="stat"><div class="n">{fintech_count}</div><div class="l">💳 fintechs</div></div>
       <div class="stat"><div class="n">{bigtech_count}</div><div class="l">💻 bigtechs</div></div>
       <div class="stat"><div class="n">{startup_count}</div><div class="l">🚀 startups</div></div>
     </div>
@@ -96,6 +97,7 @@
   <div class="filter-bar" role="group" aria-label="Filtrar por categoria">
     <span class="filter-label">Mostrar:</span>
     <button type="button" class="filter-chip" data-tier="banco" aria-pressed="true" onclick="toggleTier(this)">🏦 Bancos <span class="n">{banco_count}</span></button>
+    <button type="button" class="filter-chip" data-tier="fintech" aria-pressed="true" onclick="toggleTier(this)">💳 Fintechs <span class="n">{fintech_count}</span></button>
     <button type="button" class="filter-chip" data-tier="bigtech" aria-pressed="true" onclick="toggleTier(this)">💻 Bigtechs <span class="n">{bigtech_count}</span></button>
     <button type="button" class="filter-chip" data-tier="startup" aria-pressed="true" onclick="toggleTier(this)">🚀 Startups <span class="n">{startup_count}</span></button>
   </div>
@@ -128,7 +130,7 @@
     try {{ localStorage.setItem(key, JSON.stringify(Array.from(set))); }} catch (e) {{}}
   }}
 
-  var activeTiers = loadSet(FILTER_KEY, ["banco", "bigtech", "startup"]);
+  var activeTiers = loadSet(FILTER_KEY, ["banco", "fintech", "bigtech", "startup"]);
   var selected = loadSet(SELECT_KEY, []);
 
   function applyTierFilter() {{

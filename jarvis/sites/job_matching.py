@@ -251,21 +251,13 @@ _BANK_COMPANIES = [
     "banco do brasil",
     "caixa econômica",
     "caixa economica",
-    "nubank",
-    "banco inter",
-    "c6 bank",
     "btg pactual",
-    "original",
-    "neon",
-    "picpay",
     "banco pan",
     "safra",
     "banco votorantim",
     "daycoval",
     "banco modal",
     "banco bmg",
-    "will bank",
-    "banco next",
     "banco sofisa",
     "credit suisse",
     "jpmorgan",
@@ -275,7 +267,48 @@ _BANK_COMPANIES = [
     "citibank",
     "banco abc",
     "banrisul",
+]
+
+# Digital-native financial-tech companies -- added as its own tier
+# 2026-08-17 at the user's explicit request ("quero Fin techs também
+# agora!"), split out of _BANK_COMPANIES/_BIGTECH_COMPANIES/
+# _STARTUP_COMPANIES rather than left folded in: Nubank/Banco Inter/C6
+# Bank/etc. are meaningfully different from a traditional full-license
+# bank like Itaú/Bradesco even though some (Nubank, C6) are themselves
+# licensed banks -- the real distinguishing line here is "financial
+# product as a tech company," which is exactly the category he's asking
+# to see separately. Stone moved here from _BIGTECH_COMPANIES (it's a
+# payments fintech, not a general tech platform -- being publicly traded
+# was the reason it was grouped with TOTVS/VTEX before, but that reason
+# alone doesn't make it "bigtech"; Nubank is also publicly traded and was
+# never bigtech). Cora/Ebanx/Creditas/Justos/Conta Simples/Contabilizei
+# moved here from _STARTUP_COMPANIES for the same reason -- they're
+# financial-services companies first, not general-purpose startups.
+_FINTECH_COMPANIES = [
+    "nubank",
+    "banco inter",
+    "c6 bank",
+    "original",
+    "neon",
+    "picpay",
+    "will bank",
+    "banco next",
     "xp investimentos",
+    "stone",
+    "cora",
+    "ebanx",
+    "creditas",
+    "justos",
+    "conta simples",
+    "contabilizei",
+    "mercado pago",
+    "pagseguro",
+    "pagbank",
+    "toro investimentos",
+    "warren investimentos",
+    "genial investimentos",
+    "ame digital",
+    "iugu",
 ]
 
 # Established, large, mostly publicly-traded tech companies -- global
@@ -305,7 +338,6 @@ _BIGTECH_COMPANIES = [
     "mercado livre",
     "mercadolivre",
     "ifood",
-    "stone",
     "totvs",
     "vtex",
 ]
@@ -332,15 +364,12 @@ _STARTUP_COMPANIES = [
     "movile",
     "hotmart",
     "loft",
-    "ebanx",
     "wildlife studios",
     "olist",
     "contaazul",
     "conta azul",
     "rd station",
     "resultados digitais",
-    "cora",
-    "conta simples",
     "facily",
     "merama",
     "madeiramadeira",
@@ -360,11 +389,9 @@ _STARTUP_COMPANIES = [
     "inloco",
     "in loco",
     "unico",
-    "justos",
     "kovi",
     "cargox",
     "frete.com",
-    "contabilizei",
     "neoway",
     "datarisk",
     "semantix",
@@ -376,24 +403,29 @@ def _matches_known_name(haystack: str, names: list[str]) -> bool:
     """Whole-word match, not a bare substring -- the real bug found live
     (2026-08-12) building the bank/bigtech/startup lists: "CADERNO
     INTELIGENTE" matched _BIGTECH_COMPANIES's "intel" (Intel Corp) as a
-    substring of "INTELIGENTE", and "REDE ANCORA" matched
-    _STARTUP_COMPANIES's "cora" (the fintech Cora) as a substring of
-    "ANCORA" -- neither company has anything to do with the real Intel or
-    Cora. Same class of bug as is_relevant_match's "BI"/"recebimento"
-    false positive, fixed the same way: \\b word boundaries."""
+    substring of "INTELIGENTE", and "REDE ANCORA" matched a startup
+    list's "cora" (the fintech Cora, now in _FINTECH_COMPANIES) as a
+    substring of "ANCORA" -- neither company has anything to do with the
+    real Intel or Cora. Same class of bug as is_relevant_match's
+    "BI"/"recebimento" false positive, fixed the same way: \\b word
+    boundaries."""
     return any(re.search(rf"\b{re.escape(name)}\b", haystack) for name in names)
 
 
 def company_tier(company: str | None) -> str | None:
-    """"banco"/"bigtech"/"startup" if the company name matches a known one
-    from the lists above, else None -- never guesses on an unrecognized
-    name. Checked in that order (a fintech that's both a household-name
-    bank and young/VC-funded, e.g. Nubank, is classified as a bank first)."""
+    """"banco"/"fintech"/"bigtech"/"startup" if the company name matches a
+    known one from the lists above, else None -- never guesses on an
+    unrecognized name. Checked in that order -- fintech before bigtech/
+    startup so a company that could arguably fit either (Stone is both
+    publicly traded AND a payments fintech) lands in the more specific,
+    more useful category for Nicholas's own request (2026-08-17)."""
     if not company:
         return None
     haystack = company.lower()
     if _matches_known_name(haystack, _BANK_COMPANIES):
         return "banco"
+    if _matches_known_name(haystack, _FINTECH_COMPANIES):
+        return "fintech"
     if _matches_known_name(haystack, _BIGTECH_COMPANIES):
         return "bigtech"
     if _matches_known_name(haystack, _STARTUP_COMPANIES):
@@ -401,27 +433,30 @@ def company_tier(company: str | None) -> str | None:
     return None
 
 
+_TIER_ORDER = {"banco": 0, "fintech": 1, "bigtech": 2, "startup": 3}
+
+
 def rank_bank_bigtech_first(listings: list[JobListing]) -> list[JobListing]:
-    """Stable sort: known banks first, known bigtechs next, known startups
-    after that, everything else last -- relative order within each group
-    is preserved."""
+    """Stable sort: known banks first, then fintechs, then bigtechs, then
+    startups, everything else last -- relative order within each group is
+    preserved."""
 
     def sort_key(listing: JobListing) -> int:
         tier = company_tier(listing.company)
-        return {"banco": 0, "bigtech": 1, "startup": 2}.get(tier, 3)
+        return _TIER_ORDER.get(tier, 4)
 
     return sorted(listings, key=sort_key)
 
 
 def group_by_tier(listings: list[JobListing]) -> dict[str, list[JobListing]]:
-    """Buckets listings into "banco"/"bigtech"/"startup" via company_tier()
-    -- listings whose company doesn't match any known name are dropped
-    entirely (this is for the three separate company-tier lists Nicholas
-    asked for, not a general-purpose view; unrecognized companies belong
-    in the plain local/remote report, not here). Each bucket is ranked
-    junior-first the same way run_job_search() ranks its own lists, so a
-    caller doesn't have to remember to do it separately."""
-    buckets: dict[str, list[JobListing]] = {"banco": [], "bigtech": [], "startup": []}
+    """Buckets listings into "banco"/"fintech"/"bigtech"/"startup" via
+    company_tier() -- listings whose company doesn't match any known name
+    are dropped entirely (this is for the separate company-tier lists
+    Nicholas asked for, not a general-purpose view; unrecognized
+    companies belong in the plain local/remote report, not here). Each
+    bucket is ranked junior-first the same way run_job_search() ranks its
+    own lists, so a caller doesn't have to remember to do it separately."""
+    buckets: dict[str, list[JobListing]] = {tier: [] for tier in _TIER_ORDER}
     for listing in listings:
         tier = company_tier(listing.company)
         if tier in buckets:

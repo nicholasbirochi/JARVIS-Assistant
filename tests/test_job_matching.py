@@ -229,7 +229,22 @@ def test_rank_junior_first_moves_explicit_junior_signals_to_the_front():
 def test_company_tier_recognizes_known_banks_case_insensitively():
     assert company_tier("Itaú Unibanco") == "banco"
     assert company_tier("BRADESCO") == "banco"
-    assert company_tier("Nubank") == "banco"
+    assert company_tier("Banrisul") == "banco"
+
+
+def test_company_tier_recognizes_known_fintechs():
+    # Split out from _BANK_COMPANIES 2026-08-17 at the user's explicit
+    # request ("quero Fin techs também agora!") -- digital-native
+    # financial-tech companies, a real, distinct category from a
+    # traditional full-license bank like Itaú/Bradesco.
+    assert company_tier("Nubank") == "fintech"
+    assert company_tier("C6 Bank") == "fintech"
+    assert company_tier("Cora") == "fintech"
+    # Stone moved here from _BIGTECH_COMPANIES -- it's a payments
+    # fintech, not a general tech platform; being publicly traded (the
+    # original reason it sat with TOTVS/VTEX) doesn't make it "bigtech"
+    # any more than Nubank's own public listing would.
+    assert company_tier("Stone Pagamentos") == "fintech"
 
 
 def test_company_tier_recognizes_known_bigtechs():
@@ -266,16 +281,17 @@ def test_company_tier_does_not_false_positive_on_a_bare_substring():
     assert company_tier("REDE ANCORA") is None
 
 
-def test_rank_bank_bigtech_first_orders_banco_then_bigtech_then_startup_then_rest():
-    listings = [make_listing(str(i), "X") for i in range(1, 5)]
+def test_rank_bank_bigtech_first_orders_banco_then_fintech_then_bigtech_then_startup_then_rest():
+    listings = [make_listing(str(i), "X") for i in range(1, 6)]
     listings[0].company = "Empresa Qualquer"
     listings[1].company = "Google"
     listings[2].company = "Itaú"
     listings[3].company = "Gupy"
+    listings[4].company = "Nubank"
 
     result = rank_bank_bigtech_first(listings)
 
-    assert [listing.external_id for listing in result] == ["3", "2", "4", "1"]
+    assert [listing.external_id for listing in result] == ["3", "5", "2", "4", "1"]
 
 
 def test_group_by_tier_buckets_and_drops_unrecognized_companies():
@@ -287,13 +303,16 @@ def test_group_by_tier_buckets_and_drops_unrecognized_companies():
     bank.company = "Itaú"
     startup = make_listing("4", "X")
     startup.company = "Gupy"
+    fintech = make_listing("5", "X")
+    fintech.company = "Nubank"
 
-    buckets = group_by_tier([unranked, bigtech, bank, startup])
+    buckets = group_by_tier([unranked, bigtech, bank, startup, fintech])
 
     assert {l.external_id for l in buckets["banco"]} == {"3"}
     assert {l.external_id for l in buckets["bigtech"]} == {"2"}
     assert {l.external_id for l in buckets["startup"]} == {"4"}
-    assert set(buckets.keys()) == {"banco", "bigtech", "startup"}
+    assert {l.external_id for l in buckets["fintech"]} == {"5"}
+    assert set(buckets.keys()) == {"banco", "fintech", "bigtech", "startup"}
 
 
 def test_group_by_tier_ranks_junior_first_within_each_bucket():
