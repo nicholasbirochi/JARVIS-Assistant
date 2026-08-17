@@ -63,6 +63,7 @@ _SITE_LABELS = {
     "catho": "Catho",
     "gupy": "Gupy",
     "amazon_jobs": "Amazon Jobs",
+    "ifood_careers": "iFood",
     "linkedin": "LinkedIn",
     "indeed": "Indeed",
 }
@@ -77,6 +78,7 @@ def _portal_adapters() -> dict[str, object]:
     from jarvis.sites.amazon_jobs import AmazonJobsAdapter
     from jarvis.sites.catho import CathoAdapter
     from jarvis.sites.gupy import GupyAdapter
+    from jarvis.sites.ifood_careers import IFoodCareersAdapter
     from jarvis.sites.infojobs import InfoJobsAdapter
 
     return {
@@ -84,6 +86,7 @@ def _portal_adapters() -> dict[str, object]:
         "catho": CathoAdapter(),
         "gupy": GupyAdapter(),
         "amazon_jobs": AmazonJobsAdapter(),
+        "ifood_careers": IFoodCareersAdapter(),
     }
 
 
