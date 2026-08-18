@@ -320,8 +320,10 @@ def continue_job_application(url: str) -> str:
 
 def setup_application_profile() -> str:
     """Cria (se ainda não existir) o arquivo local onde o Nicholas
-    preenche RG, CPF, pretensão salarial e estado civil -- nunca
-    sincronizado, nunca versionado, lido só localmente pelo JARVIS.
+    preenche RG, órgão/estado de emissão do RG, CPF, nome da mãe, nome
+    do pai, naturalidade, pretensão salarial (estágio/júnior/pleno,
+    separadas) e estado civil -- nunca sincronizado, nunca versionado,
+    lido só localmente pelo JARVIS.
 
     Use quando ele pedir para configurar/criar o arquivo de dados para
     candidaturas automáticas.
@@ -331,7 +333,8 @@ def setup_application_profile() -> str:
     path = ensure_profile_template()
     return (
         f"Arquivo pronto em {path}. Abra com um editor de texto e preencha os valores "
-        "depois do '=' em cada linha (RG, CPF, pretensão salarial, estado civil). "
+        "depois do '=' em cada linha (RG e detalhes, CPF, nome da mãe/pai, naturalidade, "
+        "pretensão salarial por nível, estado civil). "
         "Nunca digo em voz alta o que está nesse arquivo."
     )
 
