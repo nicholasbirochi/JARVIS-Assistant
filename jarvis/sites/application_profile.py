@@ -1,7 +1,8 @@
-"""Sensitive application-answer fields (RG, CPF, salary expectation,
-estado civil) that Nicholas can choose to provide locally so JARVIS can
-fill them into a real job-application form when a company's own
-screening question asks for one of them.
+"""Sensitive application-answer fields (RG and its issuing details, CPF,
+parents' names, birthplace, level-based salary expectation, estado
+civil) that Nicholas can choose to provide locally so JARVIS can fill
+them into a real job-application form when a company's own screening
+question asks for one of them.
 
 Deliberately different from base.py's "never fabricate/guess" rule:
 fabrication means JARVIS inventing an answer with no real source. This
@@ -14,6 +15,22 @@ or scraping this from anywhere.
 reverses this project's original "never capture RG/CPF, even
 incidentally" rule, that he wants RG and CPF included here too, not
 just salary/estado civil.
+
+2026-08-17: extended further, same explicit basis -- Nicholas sent a
+real Gupy screening-question screenshot asking for the RG's issuing
+authority/state, his mother's and father's names, and his birthplace
+("naturalidade"), and asked for these to be fillable too. These are
+classic Brazilian identity-verification fields (the same category
+banks use as security questions), treated with the same care as RG/CPF
+(see _HARD_PII_FIELDS in base.py) -- sensitive by nature, not casually
+less so just because they weren't named in the project's original PII
+rule.
+
+Salary expectation is no longer a single flat value -- Nicholas asked
+for three, one per level (estágio/júnior/pleno), because "pretensão
+salarial" should honestly differ by which role is actually being
+applied to. base.py's detect_level() classifies the listing; the
+adapter picks the matching salary_<level> field at fill time.
 
 Real design constraints, all load-bearing for keeping this safe:
 - Lives at LOCAL_STATE_DIR/application_profile.env -- same location as
@@ -31,11 +48,12 @@ Real design constraints, all load-bearing for keeping this safe:
   _record_evidence, which already avoids screenshotting CPF/birth date
   for the same reason on the profile-edit side; this extends that same
   discipline to a new source.
-- Only the four fields real Gupy questions have actually asked for (RG,
-  salary) or plausibly could ask for (CPF, estado civil -- not yet seen
-  live, included preemptively since they're extremely common on
-  Brazilian employment forms) are supported -- not an open-ended
-  arbitrary-key store.
+- Only the fields real Gupy questions have actually asked for (RG, RG
+  issuing details, salary, mother's/father's names, naturalidade) or
+  plausibly could ask for (CPF, estado civil -- not yet seen live,
+  included preemptively since they're extremely common on Brazilian
+  employment forms) are supported -- not an open-ended arbitrary-key
+  store.
 
 File format: plain KEY=value lines, "#" comments, blank lines ignored --
 same shape as a normal .env file. No new dependency needed for
@@ -47,12 +65,20 @@ from __future__ import annotations
 from pathlib import Path
 
 # field name -> the .env key it's read from. Field names here are the
-# same ones base.py's classify_question_field() returns, so the two
-# modules line up without a second translation table.
+# same ones base.py's classify_question_field() returns (except the
+# three salary_* keys, which classify_question_field() never returns
+# directly -- see gupy.py's level-aware resolution), so the two modules
+# line up without a second translation table.
 _FIELD_ENV_KEYS: dict[str, str] = {
     "rg": "JARVIS_APPLICATION_RG",
+    "rg_orgao_estado": "JARVIS_APPLICATION_RG_ORGAO_ESTADO",
     "cpf": "JARVIS_APPLICATION_CPF",
-    "salary_expectation": "JARVIS_APPLICATION_SALARY_EXPECTATION",
+    "nome_mae": "JARVIS_APPLICATION_NOME_MAE",
+    "nome_pai": "JARVIS_APPLICATION_NOME_PAI",
+    "naturalidade": "JARVIS_APPLICATION_NATURALIDADE",
+    "salary_estagio": "JARVIS_APPLICATION_SALARY_ESTAGIO",
+    "salary_junior": "JARVIS_APPLICATION_SALARY_JUNIOR",
+    "salary_pleno": "JARVIS_APPLICATION_SALARY_PLENO",
     "marital_status": "JARVIS_APPLICATION_MARITAL_STATUS",
 }
 
@@ -64,11 +90,10 @@ def profile_path() -> Path:
 
 
 def load_application_profile() -> dict[str, str | None]:
-    """Reads profile_path() and returns the four known fields (rg, cpf,
-    salary_expectation, marital_status). A missing file, or missing
-    individual keys, just come back None -- not having this set up yet
-    is a normal state, never an error. Never logs or prints the raw
-    file contents."""
+    """Reads profile_path() and returns every known field (see
+    _FIELD_ENV_KEYS). A missing file, or missing individual keys, just
+    come back None -- not having this set up yet is a normal state,
+    never an error. Never logs or prints the raw file contents."""
     path = profile_path()
     raw: dict[str, str] = {}
     if path.exists():
@@ -96,10 +121,7 @@ def ensure_profile_template() -> Path:
             "# Preenchido por você, lido só localmente pelo JARVIS -- nunca sincronizado,",
             "# nunca commitado, nunca logado. Usado só para preencher perguntas de",
             "# candidatura que pedem esses dados especificamente.",
-            "JARVIS_APPLICATION_RG=",
-            "JARVIS_APPLICATION_CPF=",
-            "JARVIS_APPLICATION_SALARY_EXPECTATION=",
-            "JARVIS_APPLICATION_MARITAL_STATUS=",
+            *(f"{env_key}=" for env_key in _FIELD_ENV_KEYS.values()),
             "",
         ]
     )

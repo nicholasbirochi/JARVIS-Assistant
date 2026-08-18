@@ -147,9 +147,25 @@ class JobListing:
 # all and stays an unconditional stop (see _UNFILLABLE_HARD_STOP_TERMS
 # below) -- narrower in scope than what was first offered to him, kept
 # out because there's no real, recurring need for it seen live yet.
+#
+# Dict ORDER matters: classify_question_field() returns on the first
+# match while iterating this dict, so "rg_orgao_estado" must be checked
+# before the bare "rg" -- a real question text like "Órgão e Estado de
+# emissão do RG" contains "RG" as its own whole word too, so checking
+# "rg" first would misclassify it (and try to fill the RG NUMBER
+# selector with an issuing-authority value).
+#
+# nome_mae/nome_pai/naturalidade added 2026-08-17, same explicit consent
+# as RG/CPF -- classic Brazilian identity-verification fields (a bank's
+# own "security question" data), not casually less sensitive just
+# because they weren't named in the project's original PII rule.
 _FIELD_TERMS: dict[str, list[str]] = {
+    "rg_orgao_estado": ["órgão e estado de emissão", "orgao e estado de emissao", "órgão emissor", "orgao emissor"],
     "rg": ["rg", "registro geral", "carteira de identidade"],
     "cpf": ["cpf"],
+    "nome_mae": ["nome da mãe", "nome da mae"],
+    "nome_pai": ["nome do pai"],
+    "naturalidade": ["naturalidade"],
     "salary_expectation": [
         "remuneração",
         "remuneracao",
@@ -161,14 +177,15 @@ _FIELD_TERMS: dict[str, list[str]] = {
     ],
     "marital_status": ["estado civil"],
 }
-# RG/CPF specifically -- the exact class of data this project refused to
-# capture or store since its very first design decision. Filling these
-# from a local, Nicholas-controlled file (application_profile.py) is a
-# deliberate, explicitly-confirmed exception to that original rule, not
-# an oversight -- see that module's docstring for the full reasoning and
-# the safeguards that keep the actual values out of every log/evidence
-# path regardless.
-_HARD_PII_FIELDS = {"rg", "cpf"}
+# RG/CPF and the other identity-verification fields (issuing authority,
+# parents' names, birthplace) -- the exact class of data this project
+# refused to capture or store since its very first design decision.
+# Filling these from a local, Nicholas-controlled file
+# (application_profile.py) is a deliberate, explicitly-confirmed
+# exception to that original rule, not an oversight -- see that
+# module's docstring for the full reasoning and the safeguards that
+# keep the actual values out of every log/evidence path regardless.
+_HARD_PII_FIELDS = {"rg", "rg_orgao_estado", "cpf", "nome_mae", "nome_pai", "naturalidade"}
 # Blocks, but has no fillable field at all -- birth date specifically
 # (see the _FIELD_TERMS comment above for why it's excluded).
 _UNFILLABLE_HARD_STOP_TERMS = ["data de nascimento"]
@@ -180,17 +197,40 @@ def _matches_any_term(question_text: str, terms: list[str]) -> bool:
 
 
 def classify_question_field(question_text: str) -> str | None:
-    """Returns which known, fillable field (rg/cpf/salary_expectation/
-    marital_status -- see application_profile.py) a screening question
-    is asking about, or None if it's not one of the four JARVIS knows
-    how to look up locally. A birth-date question also returns None
-    here (it's recognized by question_requires_stop()/
+    """Returns which known, fillable field (see _FIELD_TERMS above) a
+    screening question is asking about, or None if it's not one of the
+    ones JARVIS knows how to look up locally. A birth-date question also
+    returns None here (it's recognized by question_requires_stop()/
     is_hard_pii_question() below, but never gets a fillable field)."""
     haystack = question_text.lower()
     for field, terms in _FIELD_TERMS.items():
         if any(re.search(rf"\b{re.escape(term)}\b", haystack) for term in terms):
             return field
     return None
+
+
+def detect_level(text: str) -> str:
+    """Classifies a job listing's own level from its title/text --
+    "estagio"/"pleno"/"junior" (default when neither is signaled).
+    Drives which of the three salary figures (see application_profile.py)
+    gets filled into a "pretensão salarial" question -- Nicholas's
+    explicit request (2026-08-17): different numbers for estágio, junior,
+    and pleno. Checked in this order (estágio and pleno are the specific
+    signals; anything else defaults to junior, matching his own actual
+    level) -- also matches the "Pl." abbreviation, a real gap found live
+    (a "Engenheiro de Dados Pl." listing reached the apply flow despite
+    job_matching.py's _SENIOR_EXCLUSION_TERMS only checking the spelled-
+    out "pleno")."""
+    haystack = text.lower()
+    if re.search(r"\bestágio\b|\bestagio\b|\bestagiári?[ao]\b|\bestagiári?a\b", haystack):
+        return "estagio"
+    if re.search(r"\bpleno\b|\bpl\b", haystack):
+        # \bpl\b (not \bpl\.?\b): a trailing "." is itself a non-word
+        # character, so requiring a \b *after* an optional "." would
+        # never match at end-of-string -- confirmed live testing this
+        # against the real title "Engenheiro de Dados Pl.".
+        return "pleno"
+    return "junior"
 
 
 def is_hard_pii_question(question_text: str) -> bool:

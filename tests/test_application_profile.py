@@ -17,7 +17,18 @@ def test_load_application_profile_returns_all_none_when_file_missing(monkeypatch
 
     profile = load_application_profile()
 
-    assert profile == {"rg": None, "cpf": None, "salary_expectation": None, "marital_status": None}
+    assert profile == {
+        "rg": None,
+        "rg_orgao_estado": None,
+        "cpf": None,
+        "nome_mae": None,
+        "nome_pai": None,
+        "naturalidade": None,
+        "salary_estagio": None,
+        "salary_junior": None,
+        "salary_pleno": None,
+        "marital_status": None,
+    }
 
 
 def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
@@ -28,8 +39,14 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
                 "# comentário deve ser ignorado",
                 "",
                 "JARVIS_APPLICATION_RG=12.345.678-9",
+                "JARVIS_APPLICATION_RG_ORGAO_ESTADO=SSP-SP",
                 "JARVIS_APPLICATION_CPF=123.456.789-00",
-                "JARVIS_APPLICATION_SALARY_EXPECTATION=R$ 4.500,00",
+                "JARVIS_APPLICATION_NOME_MAE=Maria da Silva",
+                "JARVIS_APPLICATION_NOME_PAI=João da Silva",
+                "JARVIS_APPLICATION_NATURALIDADE=São Paulo - SP",
+                "JARVIS_APPLICATION_SALARY_ESTAGIO=R$ 3.000,00",
+                "JARVIS_APPLICATION_SALARY_JUNIOR=R$ 4.500,00",
+                "JARVIS_APPLICATION_SALARY_PLENO=R$ 6.500,00",
                 "JARVIS_APPLICATION_MARITAL_STATUS=Solteiro",
             ]
         ),
@@ -40,8 +57,14 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
 
     assert profile == {
         "rg": "12.345.678-9",
+        "rg_orgao_estado": "SSP-SP",
         "cpf": "123.456.789-00",
-        "salary_expectation": "R$ 4.500,00",
+        "nome_mae": "Maria da Silva",
+        "nome_pai": "João da Silva",
+        "naturalidade": "São Paulo - SP",
+        "salary_estagio": "R$ 3.000,00",
+        "salary_junior": "R$ 4.500,00",
+        "salary_pleno": "R$ 6.500,00",
         "marital_status": "Solteiro",
     }
 
@@ -72,8 +95,14 @@ def test_ensure_profile_template_creates_a_real_editable_file(monkeypatch, tmp_p
     assert path.exists()
     content = path.read_text(encoding="utf-8")
     assert "JARVIS_APPLICATION_RG=" in content
+    assert "JARVIS_APPLICATION_RG_ORGAO_ESTADO=" in content
     assert "JARVIS_APPLICATION_CPF=" in content
-    assert "JARVIS_APPLICATION_SALARY_EXPECTATION=" in content
+    assert "JARVIS_APPLICATION_NOME_MAE=" in content
+    assert "JARVIS_APPLICATION_NOME_PAI=" in content
+    assert "JARVIS_APPLICATION_NATURALIDADE=" in content
+    assert "JARVIS_APPLICATION_SALARY_ESTAGIO=" in content
+    assert "JARVIS_APPLICATION_SALARY_JUNIOR=" in content
+    assert "JARVIS_APPLICATION_SALARY_PLENO=" in content
     assert "JARVIS_APPLICATION_MARITAL_STATUS=" in content
 
 

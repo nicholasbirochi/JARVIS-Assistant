@@ -8,6 +8,7 @@ from jarvis.sites.base import (
     UpdatePlan,
     UpdateResult,
     classify_question_field,
+    detect_level,
     is_hard_pii_question,
     question_requires_stop,
 )
@@ -110,3 +111,51 @@ def test_classify_question_field_none_for_birth_date_and_unrelated_questions():
 def test_is_hard_pii_question_true_for_birth_date_with_no_fillable_field():
     assert is_hard_pii_question("Qual sua data de nascimento?")
     assert classify_question_field("Qual sua data de nascimento?") is None
+
+
+def test_classify_question_field_recognizes_the_new_identity_fields():
+    # 2026-08-17, real Gupy screenshot from Nicholas.
+    assert classify_question_field("Órgão e Estado de emissão do RG") == "rg_orgao_estado"
+    assert classify_question_field("Nome da mãe") == "nome_mae"
+    assert classify_question_field("Nome do pai") == "nome_pai"
+    assert classify_question_field("Naturalidade (cidade e estado de nascimento)") == "naturalidade"
+
+
+def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():
+    # Real risk: "Órgão e Estado de emissão do RG" contains "RG" as its
+    # own whole word too -- checking bare "rg" first would misclassify
+    # this and try to fill the RG NUMBER selector with an issuing-
+    # authority value.
+    assert classify_question_field("Órgão e Estado de emissão do RG") == "rg_orgao_estado"
+    assert classify_question_field("Qual é o seu RG?") == "rg"
+
+
+def test_new_identity_fields_are_hard_pii():
+    assert is_hard_pii_question("Órgão e Estado de emissão do RG")
+    assert is_hard_pii_question("Nome da mãe")
+    assert is_hard_pii_question("Nome do pai")
+    assert is_hard_pii_question("Naturalidade")
+
+
+def test_detect_level_recognizes_estagio():
+    assert detect_level("Estágio em Análise de Dados") == "estagio"
+    assert detect_level("Estagiário de BI") == "estagio"
+
+
+def test_detect_level_recognizes_pleno_including_the_abbreviation():
+    # Real listing found live 2026-08-17: "Engenheiro de Dados Pl."
+    # reached the apply flow despite job_matching.py's senior-exclusion
+    # only checking the spelled-out "pleno".
+    assert detect_level("Analista de Dados Pleno") == "pleno"
+    assert detect_level("Engenheiro de Dados Pl.") == "pleno"
+
+
+def test_detect_level_defaults_to_junior():
+    assert detect_level("Analista de Dados Júnior") == "junior"
+    assert detect_level("Analista de Dados") == "junior"
+
+
+def test_detect_level_does_not_false_positive_on_unrelated_words():
+    # "pl" as a bare substring inside other words must not trigger.
+    assert detect_level("Desenvolvedor de Aplicativo") == "junior"
+    assert detect_level("Analista de Exemplo") == "junior"

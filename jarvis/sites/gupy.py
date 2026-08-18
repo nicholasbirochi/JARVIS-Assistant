@@ -156,6 +156,7 @@ from jarvis.sites.base import (
     UpdatePlan,
     UpdateResult,
     classify_question_field,
+    detect_level,
     is_hard_pii_question,
     question_requires_stop,
 )
@@ -506,7 +507,7 @@ class GupyAdapter(SiteAdapter):
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
             page = context.new_page()
-            questions, early_exit = self._start_application(page, job_url)
+            questions, early_exit, _level = self._start_application(page, job_url)
             if early_exit is not None:
                 return early_exit
 
@@ -598,7 +599,7 @@ class GupyAdapter(SiteAdapter):
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
             page = context.new_page()
-            questions, early_exit = self._start_application(page, job_url)
+            questions, early_exit, level = self._start_application(page, job_url)
             if early_exit is not None:
                 return early_exit
 
@@ -619,7 +620,7 @@ class GupyAdapter(SiteAdapter):
                 )
 
             plan = [
-                (q_text, classify_question_field(q_text))
+                (q_text, self._resolve_profile_field(classify_question_field(q_text), level))
                 for q_text in company_questions
             ]
             unanswerable = [
@@ -704,18 +705,24 @@ class GupyAdapter(SiteAdapter):
 
     def _start_application(
         self, page, job_url: str
-    ) -> tuple[list[ApplicationQuestion], "ApplicationPreview | None"]:
+    ) -> tuple[list[ApplicationQuestion], "ApplicationPreview | None", str]:
         """Shared by preview_application() and
         continue_application_with_profile(): navigates from the job page
         through the apply link, the initial "Continuar" gate, and Gupy's
         own standard referral questions (always answered "Não"/"Não").
-        Returns (questions_so_far, early_exit) -- early_exit is a real
-        ApplicationPreview to return immediately if something failed
+        Returns (questions_so_far, early_exit, level) -- early_exit is a
+        real ApplicationPreview to return immediately if something failed
         before reaching the company-questions step (no apply link
-        found), or None to keep going."""
+        found), or None to keep going. level is base.py's detect_level()
+        applied to the job page's own title, captured here (before
+        navigating away to the apply flow) so a later "pretensão
+        salarial" question can be answered with the right salary_<level>
+        figure (see application_profile.py) -- added 2026-08-17."""
         page.goto(job_url, timeout=45_000, wait_until="domcontentloaded")
         page.wait_for_load_state("networkidle", timeout=30_000)
         page.wait_for_timeout(2000)
+
+        level = detect_level(page.title())
 
         apply_href = self._get_apply_href(page)
         if apply_href is None:
@@ -723,8 +730,12 @@ class GupyAdapter(SiteAdapter):
                 'Não encontrei o link "Candidatar-se" nessa página -- a vaga pode ter sido '
                 "removida ou a estrutura da página mudou desde a última verificação."
             )
-            return [], ApplicationPreview(
-                site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason
+            return (
+                [],
+                ApplicationPreview(
+                    site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason
+                ),
+                level,
             )
 
         page.goto(urljoin(page.url, apply_href), timeout=45_000, wait_until="domcontentloaded")
@@ -746,7 +757,7 @@ class GupyAdapter(SiteAdapter):
             page.wait_for_timeout(2000)
             page.wait_for_load_state("networkidle", timeout=30_000)
 
-        return questions, None
+        return questions, None, level
 
     def _reach_company_questions_step(self, page) -> list[str] | None:
         """If the current step is a "Perguntas criadas pela empresa"
@@ -764,6 +775,18 @@ class GupyAdapter(SiteAdapter):
         if not company_questions:
             company_questions = [self._extract_step_text(page)]
         return company_questions
+
+    def _resolve_profile_field(self, field: str | None, level: str) -> str | None:
+        """Salary questions classify as the generic "salary_expectation"
+        (base.py doesn't know which listing it's looking at), but
+        application_profile.py stores three separate figures
+        (salary_estagio/salary_junior/salary_pleno) -- Nicholas's
+        explicit request (2026-08-17): "pretensão salarial" should
+        differ by the actual level of the role being applied to. Every
+        other field passes through unchanged."""
+        if field == "salary_expectation":
+            return f"salary_{level}"
+        return field
 
     def _fill_company_answer(self, page, question_text: str, value: str) -> bool:
         """Fills the real <textarea id="input-<question text>"> found

@@ -505,7 +505,8 @@ def test_card_to_job_listing_converts_a_real_shaped_card():
 
 class FakeApplicationPage:
     def __init__(self, *, apply_href="/candidates/jobs/123/apply", step_texts, referral_answer_count=0,
-                 click_results=None, company_questions=None, fill_selectors=None):
+                 click_results=None, company_questions=None, fill_selectors=None,
+                 page_title="Página da Vaga | Analista de Dados"):
         self.apply_href = apply_href
         self.url = "https://empresa.gupy.io/job/xyz"
         self.step_texts = step_texts
@@ -516,9 +517,13 @@ class FakeApplicationPage:
         self.clicked: list[str] = []
         self.fill_selectors = fill_selectors  # None = every selector succeeds
         self.filled: dict[str, str] = {}
+        self._page_title = page_title
 
     def goto(self, url, timeout=None, wait_until=None):
         self.url = url
+
+    def title(self):
+        return self._page_title
 
     def wait_for_load_state(self, state, timeout=None):
         pass
@@ -706,7 +711,18 @@ def test_preview_application_closes_context_and_stops_playwright(monkeypatch):
 def _patch_profile(monkeypatch, **fields):
     from jarvis.sites import application_profile
 
-    full = {"rg": None, "cpf": None, "salary_expectation": None, "marital_status": None}
+    full = {
+        "rg": None,
+        "rg_orgao_estado": None,
+        "cpf": None,
+        "nome_mae": None,
+        "nome_pai": None,
+        "naturalidade": None,
+        "salary_estagio": None,
+        "salary_junior": None,
+        "salary_pleno": None,
+        "marital_status": None,
+    }
     full.update(fields)
     monkeypatch.setattr(application_profile, "load_application_profile", lambda: full)
 
@@ -747,7 +763,7 @@ def test_continue_application_with_profile_refuses_when_a_question_has_no_local_
 
 
 def test_continue_application_with_profile_refuses_for_an_unclassified_question(monkeypatch):
-    _patch_profile(monkeypatch, salary_expectation="R$ 4.500,00")
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")
     page = FakeApplicationPage(
         step_texts=[
             "Alguém te indicou?\nSim\nNão",
@@ -766,7 +782,7 @@ def test_continue_application_with_profile_refuses_for_an_unclassified_question(
 
 
 def test_continue_application_with_profile_fills_all_known_questions_and_advances(monkeypatch):
-    _patch_profile(monkeypatch, salary_expectation="R$ 4.500,00")
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")
     page = FakeApplicationPage(
         step_texts=[
             "Alguém te indicou?\nSim\nNão",
@@ -792,8 +808,52 @@ def test_continue_application_with_profile_fills_all_known_questions_and_advance
     assert "Salvar e continuar" in page.clicked
 
 
+def test_continue_application_with_profile_uses_the_pleno_salary_for_a_pleno_listing(monkeypatch):
+    # Real case found live 2026-08-17 ("Engenheiro de Dados Pl."):
+    # "pretensão salarial" must resolve to salary_pleno, not
+    # salary_junior, when the JOB LISTING itself (not the question) is
+    # pleno-level.
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00", salary_pleno="R$ 6.500,00")
+    page = FakeApplicationPage(
+        page_title="Página da Vaga | Engenheiro de Dados Pl.",
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual sua pretensão salarial atual?"],
+        fill_selectors={'[id="input-1.Qual sua pretensão salarial atual?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.filled == {'[id="input-1.Qual sua pretensão salarial atual?"]': "R$ 6.500,00"}
+
+
+def test_continue_application_with_profile_uses_the_estagio_salary_for_an_internship(monkeypatch):
+    _patch_profile(monkeypatch, salary_estagio="R$ 3.000,00", salary_junior="R$ 4.500,00")
+    page = FakeApplicationPage(
+        page_title="Página da Vaga | Estágio em Análise de Dados",
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual sua pretensão salarial atual?"],
+        fill_selectors={'[id="input-1.Qual sua pretensão salarial atual?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.filled == {'[id="input-1.Qual sua pretensão salarial atual?"]': "R$ 3.000,00"}
+
+
 def test_continue_application_with_profile_reports_a_fill_failure(monkeypatch):
-    _patch_profile(monkeypatch, salary_expectation="R$ 4.500,00")
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")
     page = FakeApplicationPage(
         step_texts=[
             "Alguém te indicou?\nSim\nNão",
@@ -840,7 +900,7 @@ def test_continue_application_with_profile_still_blocks_rg_even_when_provided(mo
 def test_continue_application_with_profile_still_refuses_birth_date_even_with_full_profile(monkeypatch):
     # No fillable field exists for birth date at all (see base.py) --
     # a fully-populated profile still can't answer this one.
-    _patch_profile(monkeypatch, rg="12.345.678-9", cpf="123.456.789-00", salary_expectation="5000", marital_status="Solteiro")
+    _patch_profile(monkeypatch, rg="12.345.678-9", cpf="123.456.789-00", salary_junior="5000", marital_status="Solteiro")
     page = FakeApplicationPage(
         step_texts=[
             "Alguém te indicou?\nSim\nNão",
