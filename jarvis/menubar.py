@@ -191,6 +191,15 @@ class JarvisMenuBarApp(rumps.App):
         # 1-2+ minutes of live browser automation, which would otherwise
         # freeze the whole menu bar (rumps' main loop) for that long.
         rumps.Timer(self._maybe_run_daily_job_search, 3600).start()
+        # Daily job-PORTAL refresh -- separate from the one above.
+        # 2026-08-17, explicit request ("faça essa varredura diária"):
+        # this is the deep sweep (jarvis/job_portal/server.py's
+        # refresh_data(), all target_roles, 50 results/term, 5 adapters
+        # including amazon_jobs/ifood_careers, the "outras" bucket) that
+        # backs the local portal page specifically, not the shallow
+        # voice/text report above -- they're intentionally independent,
+        # see job_portal/server.py's is_refresh_due() docstring.
+        rumps.Timer(self._maybe_refresh_job_portal, 3600).start()
 
     def _maybe_run_daily_job_search(self, _timer: rumps.Timer) -> None:
         threading.Thread(target=self._run_daily_job_search_worker, daemon=True).start()
@@ -202,6 +211,19 @@ class JarvisMenuBarApp(rumps.App):
             from jarvis.resume import store
 
             run_daily_search_if_due(store.load())
+        except Exception:
+            pass  # best-effort background refresh -- must never crash the menu bar app
+
+    def _maybe_refresh_job_portal(self, _timer: rumps.Timer) -> None:
+        threading.Thread(target=self._refresh_job_portal_worker, daemon=True).start()
+
+    @staticmethod
+    def _refresh_job_portal_worker() -> None:
+        try:
+            from jarvis.job_portal.server import refresh_if_due
+            from jarvis.resume import store
+
+            refresh_if_due(store.load())
         except Exception:
             pass  # best-effort background refresh -- must never crash the menu bar app
 

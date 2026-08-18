@@ -175,3 +175,27 @@ def test_run_daily_job_search_worker_swallows_exceptions(monkeypatch):
     monkeypatch.setattr("jarvis.job_search.run_daily_search_if_due", _boom)
 
     JarvisMenuBarApp._run_daily_job_search_worker()  # must not raise
+
+
+def test_refresh_job_portal_worker_calls_refresh_if_due_with_the_loaded_resume(monkeypatch):
+    # Independent daily mechanism from the one above -- the deep portal
+    # sweep, added 2026-08-17 ("faça essa varredura diária").
+    calls = []
+    fake_resume = object()
+    monkeypatch.setattr("jarvis.resume.store.load", lambda: fake_resume)
+    monkeypatch.setattr("jarvis.job_portal.server.refresh_if_due", lambda resume: calls.append(resume))
+
+    JarvisMenuBarApp._refresh_job_portal_worker()
+
+    assert calls == [fake_resume]
+
+
+def test_refresh_job_portal_worker_swallows_exceptions(monkeypatch):
+    monkeypatch.setattr("jarvis.resume.store.load", lambda: object())
+
+    def _boom(resume):
+        raise RuntimeError("site indisponível")
+
+    monkeypatch.setattr("jarvis.job_portal.server.refresh_if_due", _boom)
+
+    JarvisMenuBarApp._refresh_job_portal_worker()  # must not raise

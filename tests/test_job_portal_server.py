@@ -1,9 +1,11 @@
 import json
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from jarvis import config
 from jarvis.job_portal import server
 from jarvis.sites.base import JobListing
 
@@ -225,3 +227,86 @@ def test_render_page_never_raises_with_no_data():
     page = server.render_page()
 
     assert "<html" in page.lower()
+
+
+# --- daily refresh (is_refresh_due / refresh_if_due) ---------------------
+#
+# Own tracking file (portal_last_refresh.json), independent from
+# job_search.py's is_daily_search_due() -- the deep portal sweep and the
+# shallow voice/text report run on separate schedules.
+
+
+def make_resume():
+    from jarvis.resume.schema import Bilingual, PersonalInfo, Resume
+
+    return Resume(
+        personal_info=PersonalInfo(full_name="Nicholas Birochi", phone=None, email="n@example.com"),
+        summary=Bilingual(pt="Resumo."),
+    )
+
+
+class FakeAdapter:
+    def __init__(self, listings=None):
+        self._listings = listings or []
+        self.calls: list[str] = []
+
+    def search_jobs(self, query, *, max_results=20):
+        self.calls.append(query)
+        return self._listings
+
+
+def test_is_refresh_due_true_when_never_run(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+
+    assert server.is_refresh_due() is True
+
+
+def test_is_refresh_due_false_within_24h(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    server.refresh_if_due(make_resume(), adapters={"infojobs": FakeAdapter()}, now=now)
+
+    assert server.is_refresh_due(now=now + timedelta(hours=2)) is False
+
+
+def test_is_refresh_due_true_after_24h(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+    server.refresh_if_due(make_resume(), adapters={"infojobs": FakeAdapter()}, now=now)
+
+    assert server.is_refresh_due(now=now + timedelta(hours=25)) is True
+
+
+def test_refresh_if_due_skips_a_second_call_the_same_day(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    adapter = FakeAdapter()
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+
+    first = server.refresh_if_due(make_resume(), adapters={"infojobs": adapter}, now=now)
+    calls_after_first = len(adapter.calls)
+    second = server.refresh_if_due(make_resume(), adapters={"infojobs": adapter}, now=now + timedelta(hours=1))
+
+    assert first is True
+    assert second is False
+    assert len(adapter.calls) == calls_after_first  # no new searches ran
+
+
+def test_refresh_if_due_runs_again_after_24h(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    adapter = FakeAdapter()
+    now = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
+
+    server.refresh_if_due(make_resume(), adapters={"infojobs": adapter}, now=now)
+    second = server.refresh_if_due(make_resume(), adapters={"infojobs": adapter}, now=now + timedelta(hours=25))
+
+    assert second is True
+
+
+def test_refresh_if_due_actually_populates_tiers(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(server, "_tiers", None)
+    bank_listing = make_listing("1", "Analista de Dados", company="Itaú", location="São Bernardo do Campo - SP")
+
+    server.refresh_if_due(make_resume(), adapters={"infojobs": FakeAdapter([bank_listing])})
+
+    assert len(server._tiers["banco"]) == 1

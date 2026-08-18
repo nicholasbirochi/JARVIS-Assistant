@@ -44,6 +44,7 @@ import html
 import json
 import subprocess
 import threading
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -133,6 +134,63 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
         global _tiers
         _tiers = tiers
     return tiers
+
+
+def _last_refresh_path() -> Path:
+    from jarvis.config import DATA_DIR
+
+    return DATA_DIR / "job_matches" / "portal_last_refresh.json"
+
+
+def _read_last_refresh() -> datetime | None:
+    path = _last_refresh_path()
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return datetime.fromisoformat(data["last_refresh"])
+    except Exception:
+        return None
+
+
+def _write_last_refresh(when: datetime) -> None:
+    path = _last_refresh_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"last_refresh": when.isoformat()}), encoding="utf-8")
+
+
+def is_refresh_due(*, now: datetime | None = None) -> bool:
+    """True if the deep portal sweep has never run, or the last real run
+    was 24h+ ago -- own tracking file (portal_last_refresh.json), same
+    pattern as jarvis/job_search.py's is_daily_search_due() but kept
+    separate: that one tracks the shallow, bounded voice/text report;
+    this tracks the deep, unbounded portal sweep (max_terms=0,
+    max_results_per_term=50, 5 adapters, include_other=True) -- they run
+    on independent schedules, at Nicholas's explicit request
+    (2026-08-17) to make "essa varredura" (the deep one specifically)
+    daily, not the shallow one."""
+    now = now or datetime.now(timezone.utc)
+    last_refresh = _read_last_refresh()
+    if last_refresh is None:
+        return True
+    return (now - last_refresh) >= timedelta(hours=24)
+
+
+def refresh_if_due(resume=None, *, adapters: dict[str, object] | None = None, now: datetime | None = None) -> bool:
+    """Runs refresh_data() (the real, deep sweep) only if is_refresh_due()
+    -- returns whether a refresh actually happened, so a caller polling
+    this often (e.g. hourly while JARVIS is running, see
+    jarvis/menubar.py) doesn't re-search needlessly. Updates the "last
+    refresh" timestamp regardless of whether every site succeeded -- one
+    site being temporarily down shouldn't make this retry every poll for
+    the rest of the day, same reasoning as job_search.py's
+    run_daily_search_if_due()."""
+    now = now or datetime.now(timezone.utc)
+    if not is_refresh_due(now=now):
+        return False
+    refresh_data(resume, adapters=adapters)
+    _write_last_refresh(now)
+    return True
 
 
 _TIER_KEYS = ("banco", "fintech", "bigtech", "startup", "outras")
