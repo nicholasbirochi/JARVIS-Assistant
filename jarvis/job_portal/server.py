@@ -143,7 +143,15 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
     alone are gated by real, current openings at ~100 curated companies
     and were never going to reach that on volume alone. A fifth "outras"
     bucket now holds every other relevant listing (still real, still
-    matches every other restriction) instead of silently dropping it."""
+    matches every other restriction) instead of silently dropping it.
+
+    max_results_per_term=100 -- 2026-08-19 ("cace cada vez mais!!!!!"):
+    raised from 50 after noticing it was the ACTUAL bottleneck for
+    several sites, not their own capacity -- Catho/Gupy/InfoJobs each
+    default to max_results=60 and BTG/iFood to 100 when called directly,
+    but every one of them was being handed 50 here regardless, below
+    what they can genuinely page through. 100 lets each site reach its
+    own real ceiling instead of an arbitrary lower one imposed here."""
     from jarvis.job_search import run_job_search
     from jarvis.sites.job_matching import group_by_tier
 
@@ -154,7 +162,7 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
     if adapters is None:
         adapters = _portal_adapters()
 
-    report = run_job_search(resume, adapters=adapters, max_terms=0, max_results_per_term=50)
+    report = run_job_search(resume, adapters=adapters, max_terms=0, max_results_per_term=100)
     combined = report.local + report.remote
     tiers = group_by_tier(combined, include_other=True)
 
