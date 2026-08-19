@@ -152,23 +152,27 @@ def test_search_jobs_builds_the_real_query_url_and_converts_valid_cards(monkeypa
         {"jobId": "not-a-number", "text": "Lixo\n\nEmpresa"},
     ]
     page = FakeSearchPage(cards)
-    seen_kwargs = {}
+    seen_headless = []
+    minimize_calls = []
 
-    def fake_open_context(site_name, *, headless, off_screen=False):
-        seen_kwargs["headless"] = headless
-        seen_kwargs["off_screen"] = off_screen
+    def fake_open_context(site_name, *, headless):
+        seen_headless.append(headless)
         return FakeSearchPlaywright(), FakeSearchContext(page)
 
     monkeypatch.setattr(session, "open_context", fake_open_context)
+    monkeypatch.setattr(session, "minimize_window", lambda context, p: minimize_calls.append((context, p)))
 
     listings = LinkedInAdapter().search_jobs("Analista de Dados")
 
     assert len(listings) == 1
     assert listings[0].external_id == "4441485838"
     assert page.goto_calls == ["https://www.linkedin.com/jobs/search-results/?keywords=Analista+de+Dados"]
-    # 2026-08-19: off_screen=True so this required headed window doesn't
-    # pop up visibly (see session.py's open_context docstring).
-    assert seen_kwargs == {"headless": False, "off_screen": True}
+    assert seen_headless == [False]
+    # 2026-08-19: minimize_window() keeps this required headed window
+    # from popping up visibly (see session.py's own docstring for why
+    # this replaced an earlier, broken --window-position attempt).
+    assert len(minimize_calls) == 1
+    assert minimize_calls[0][1] is page
 
 
 def test_search_jobs_accepts_max_results_for_run_job_search_compatibility(monkeypatch):
@@ -182,10 +186,9 @@ def test_search_jobs_accepts_max_results_for_run_job_search_compatibility(monkey
     ]
     page = FakeSearchPage(cards)
     monkeypatch.setattr(
-        session,
-        "open_context",
-        lambda site_name, *, headless, off_screen=False: (FakeSearchPlaywright(), FakeSearchContext(page)),
+        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
     )
+    monkeypatch.setattr(session, "minimize_window", lambda context, p: None)
 
     listings = LinkedInAdapter().search_jobs("Analista de Dados", max_results=2)
 

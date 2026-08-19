@@ -73,12 +73,10 @@ class FakeChromium:
     def __init__(self, browser_factory=FakeBrowser):
         self._browser_factory = browser_factory
         self.launches: list[bool] = []
-        self.launch_args: list[list[str]] = []
         self.browsers: list[FakeBrowser] = []
 
-    def launch(self, headless, args=None):
+    def launch(self, headless):
         self.launches.append(headless)
-        self.launch_args.append(args or [])
         browser = self._browser_factory()
         self.browsers.append(browser)
         return browser
@@ -105,42 +103,6 @@ def test_open_context_hides_webdriver_flag(tmp_path, monkeypatch):
 
     assert session._HIDE_WEBDRIVER_FLAG in context.init_scripts
     assert fake_p.chromium.launches == [True]
-
-
-def test_open_context_no_window_position_arg_by_default(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "SITES_STATE_DIR", tmp_path)
-    fake_p = FakePlaywright()
-    monkeypatch.setattr(session, "sync_playwright", lambda: fake_p)
-
-    session.open_context("catho", headless=False)
-
-    assert fake_p.chromium.launch_args == [[]]
-
-
-def test_open_context_off_screen_moves_a_headed_window_off_the_visible_desktop(tmp_path, monkeypatch):
-    # Catho requires a real headed window (headless=True gets a 403 --
-    # see catho.py) -- off_screen=True keeps that window from popping up
-    # visibly, 2026-08-19, Nicholas asked for this explicitly.
-    monkeypatch.setattr(config, "SITES_STATE_DIR", tmp_path)
-    fake_p = FakePlaywright()
-    monkeypatch.setattr(session, "sync_playwright", lambda: fake_p)
-
-    session.open_context("catho", headless=False, off_screen=True)
-
-    assert fake_p.chromium.launch_args == [["--window-position=-32000,-32000"]]
-
-
-def test_open_context_off_screen_is_a_no_op_when_actually_headless(tmp_path, monkeypatch):
-    # off_screen only makes sense for a real, headed window -- a genuinely
-    # headless browser has no window to move, so the flag must not be
-    # passed (harmless either way, but keeps launch_args honest).
-    monkeypatch.setattr(config, "SITES_STATE_DIR", tmp_path)
-    fake_p = FakePlaywright()
-    monkeypatch.setattr(session, "sync_playwright", lambda: fake_p)
-
-    session.open_context("gupy", headless=True, off_screen=True)
-
-    assert fake_p.chromium.launch_args == [[]]
 
 
 def test_open_context_cleans_up_playwright_on_partial_failure(monkeypatch):
@@ -187,6 +149,60 @@ def test_login_interactively_returns_false_and_still_saves_when_verification_fai
     assert result is False
     assert fake_p.chromium.browsers[0].contexts[0].storage_state_paths  # still saved -- real progress kept
     assert "não parece autenticada" in capsys.readouterr().out
+
+
+# ---- minimize_window() -----------------------------------------------
+#
+# 2026-08-19: replaces an earlier --window-position launch-arg attempt,
+# confirmed live to be silently ignored by Chromium on this machine (a
+# window requested at (-32000,-32000) landed at (0,39) instead, fully
+# visible). This uses a raw CDP command instead -- verified live that
+# Browser.getWindowForTarget's own windowState genuinely flips from
+# "normal" to "minimized" after calling it.
+
+
+class FakeCdpSession:
+    def __init__(self, window_id="42"):
+        self.window_id = window_id
+        self.calls: list[tuple[str, dict]] = []
+
+    def send(self, method, params=None):
+        self.calls.append((method, params or {}))
+        if method == "Browser.getWindowForTarget":
+            return {"windowId": self.window_id}
+        return {}
+
+
+class FakeCdpContext:
+    def __init__(self, cdp_session=None):
+        self._cdp_session = cdp_session or FakeCdpSession()
+
+    def new_cdp_session(self, page):
+        return self._cdp_session
+
+
+class FailingCdpContext:
+    def new_cdp_session(self, page):
+        raise RuntimeError("no CDP session available")
+
+
+def test_minimize_window_sends_the_real_verified_cdp_commands():
+    cdp = FakeCdpSession(window_id="1247017154")
+    context = FakeCdpContext(cdp)
+
+    session.minimize_window(context, page=object())
+
+    assert cdp.calls[0] == ("Browser.getWindowForTarget", {})
+    assert cdp.calls[1] == (
+        "Browser.setWindowBounds",
+        {"windowId": "1247017154", "bounds": {"windowState": "minimized"}},
+    )
+
+
+def test_minimize_window_never_raises_on_failure():
+    # Best-effort -- a failed minimize must never break the real page
+    # load it's wrapping.
+    session.minimize_window(FailingCdpContext(), page=object())  # must not raise
 
 
 def test_login_interactively_reports_success_when_verify_fn_passes(monkeypatch, tmp_path, capsys):

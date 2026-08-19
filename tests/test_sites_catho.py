@@ -60,7 +60,6 @@ def test_check_session_always_opens_headed_regardless_of_sites_headless_config(m
     monkeypatch.setattr(config, "SITES_HEADLESS", True)  # the global default -- must be ignored here
 
     seen_headless = []
-    seen_off_screen = []
 
     class DummyPlaywright:
         def stop(self):
@@ -73,9 +72,8 @@ def test_check_session_always_opens_headed_regardless_of_sites_headless_config(m
         def close(self):
             pass
 
-    def fake_open_context(site_name, *, headless, off_screen=False):
+    def fake_open_context(site_name, *, headless):
         seen_headless.append(headless)
-        seen_off_screen.append(off_screen)
         return DummyPlaywright(), DummyContext()
 
     monkeypatch.setattr(session, "open_context", fake_open_context)
@@ -83,9 +81,6 @@ def test_check_session_always_opens_headed_regardless_of_sites_headless_config(m
     status = CathoAdapter().check_session()
 
     assert seen_headless == [False]
-    # 2026-08-19: off_screen=True so this required headed window doesn't
-    # pop up visibly (see session.py's open_context docstring).
-    assert seen_off_screen == [True]
     assert status == SessionStatus.UNKNOWN_ERROR  # DummyContext.new_page() raising is expected here
 
 

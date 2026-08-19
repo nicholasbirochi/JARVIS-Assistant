@@ -38,7 +38,7 @@ def has_saved_session(site_name: str) -> bool:
     return state_path(site_name).exists()
 
 
-def open_context(site_name: str, *, headless: bool, off_screen: bool = False) -> tuple[object, BrowserContext]:
+def open_context(site_name: str, *, headless: bool) -> tuple[object, BrowserContext]:
     """Launches a browser and returns (playwright, context) with the site's
     saved session loaded, if one exists. Caller is responsible for closing
     both (see `closing_context`). `playwright` is returned (not just the
@@ -46,24 +46,19 @@ def open_context(site_name: str, *, headless: bool, off_screen: bool = False) ->
     letting it get garbage-collected while the context is still in use
     crashes the driver.
 
-    `off_screen`: only meaningful when `headless=False` (e.g. Catho, which
-    403s when actually headless -- see catho.py's module docstring). Moves
-    the real, headed browser window far off the visible desktop area via
-    Chromium's own `--window-position` flag instead of running it headless
-    -- keeps the exact same headed browser fingerprint Catho's bot-check
-    accepts, but stops a real window from popping up on top of whatever
-    Nicholas is doing (2026-08-19: he asked for this explicitly). Not a
-    substitute for headless -- a window still genuinely exists and could
-    in principle be dragged back on-screen -- just not one that visibly
-    interrupts by default.
+    For a headed (headless=False) site (Catho, LinkedIn -- see their own
+    module docstrings for why they need a real, non-headless window),
+    callers should call minimize_window() right after creating their
+    page, so it doesn't visibly interrupt Nicholas -- see that function's
+    docstring for why this replaced an earlier, broken attempt at the
+    same thing.
 
     Cleans up eagerly on a partial failure (browser launched but context
     creation fails, etc.) instead of leaking a Playwright/browser process
     that the caller never gets a handle to close."""
     p = sync_playwright().start()
     try:
-        launch_args = ["--window-position=-32000,-32000"] if (off_screen and not headless) else []
-        browser = p.chromium.launch(headless=headless, args=launch_args)
+        browser = p.chromium.launch(headless=headless)
         try:
             saved_state = state_path(site_name)
             context = browser.new_context(
@@ -77,6 +72,36 @@ def open_context(site_name: str, *, headless: bool, off_screen: bool = False) ->
         p.stop()
         raise
     return p, context
+
+
+def minimize_window(context: BrowserContext, page) -> None:
+    """Minimizes the real OS-level window a headed (headless=False) page
+    just opened in, via a raw CDP command -- so it doesn't visibly pop up
+    over whatever Nicholas is doing, without giving up the real, headed
+    browser fingerprint some sites require (Catho/LinkedIn 403 or behave
+    differently when actually headless).
+
+    2026-08-19: replaces an earlier attempt that launched the browser
+    with `--window-position=-32000,-32000` -- confirmed live, on this
+    machine, that Chromium silently ignores that flag: a window
+    requested at (-32000,-32000) actually landed at (0,39), fully
+    visible, exactly the problem Nicholas kept reporting. This CDP
+    approach was verified differently and for real: queried
+    `Browser.getWindowForTarget` again right after calling this, and its
+    own `windowState` had genuinely flipped from "normal" to "minimized"
+    -- not just "the command didn't error", an actual confirmed state
+    change.
+
+    Best-effort and silent on failure -- a future Chromium build
+    changing this CDP behavior must never break the real page load this
+    wraps; the worst case if it silently stops working is the old
+    problem (a visible window), not a crash."""
+    try:
+        cdp = context.new_cdp_session(page)
+        window_id = cdp.send("Browser.getWindowForTarget")["windowId"]
+        cdp.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": {"windowState": "minimized"}})
+    except Exception:
+        pass
 
 
 def save_session(site_name: str, context: BrowserContext) -> None:

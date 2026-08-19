@@ -57,7 +57,12 @@ this doesn't expose Nicholas's actual LinkedIn account to automation --
 the residual risk is IP-level rate limiting on the public job-search
 page, not account restriction, and it's kept out of the one path
 (the unattended timer) where he wouldn't be around to notice or step in
-if something looked off."""
+if something looked off.
+
+Also calls session.minimize_window() right after creating its page --
+same fix as catho.py, see that module's docstring and
+minimize_window()'s own for why the earlier --window-position attempt
+never actually worked."""
 
 from __future__ import annotations
 
@@ -93,6 +98,7 @@ def _is_authenticated(context) -> bool:
     from jarvis.config import LINKEDIN_LOGIN_URL
 
     page = context.new_page()
+    session.minimize_window(context, page)
     try:
         page.goto(LINKEDIN_LOGIN_URL, timeout=45_000, wait_until="domcontentloaded")
         page.wait_for_timeout(2000)
@@ -108,7 +114,7 @@ class LinkedInAdapter(SiteAdapter):
         if not session.has_saved_session(self.site_name):
             return SessionStatus.NOT_LOGGED_IN
 
-        p, context = session.open_context(self.site_name, headless=False, off_screen=True)
+        p, context = session.open_context(self.site_name, headless=False)
         try:
             return SessionStatus.AUTHENTICATED if _is_authenticated(context) else SessionStatus.SESSION_EXPIRED
         except Exception:
@@ -150,9 +156,10 @@ class LinkedInAdapter(SiteAdapter):
 
         url = f"{_SEARCH_URL}?{urllib.parse.urlencode({'keywords': query})}"
 
-        p, context = session.open_context(self.site_name, headless=False, off_screen=True)
+        p, context = session.open_context(self.site_name, headless=False)
         try:
             page = context.new_page()
+            session.minimize_window(context, page)
             page.goto(url, timeout=45_000, wait_until="domcontentloaded")
             page.wait_for_timeout(3500)
             cards = self._extract_listing_cards(page)

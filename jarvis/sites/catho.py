@@ -13,11 +13,15 @@ normally. Every open_context() call in this file hardcodes headless=False
 because of that -- deliberately ignoring config.SITES_HEADLESS (which
 still governs Gupy fine).
 
-2026-08-19: also passes off_screen=True (session.py) so the required
-headed window doesn't visibly pop up over whatever Nicholas is doing --
-same real Chromium process/fingerprint Catho's bot-check accepts, just
-launched off the visible desktop area (--window-position) instead of
-truly headless.
+2026-08-19: also calls session.minimize_window() right after creating
+its page so the required headed window doesn't visibly pop up over
+whatever Nicholas is doing -- same real Chromium process/fingerprint
+Catho's bot-check accepts, just minimized via a CDP command instead of
+truly headless. (An earlier attempt at this launched Chromium with
+--window-position=-32000,-32000 instead -- confirmed live that Chromium
+silently ignores that flag, so it never actually worked; see
+minimize_window()'s own docstring for how this one was verified for
+real.)
 
 Everything past login -- the profile edit page's real URL, its field
 selectors, the actual save mechanism -- is intentionally NOT filled in
@@ -73,6 +77,7 @@ def _is_authenticated(context) -> bool:
     from jarvis.config import CATHO_LOGIN_URL
 
     page = context.new_page()
+    session.minimize_window(context, page)
     try:
         page.goto(CATHO_LOGIN_URL)
         page.wait_for_load_state("networkidle")
@@ -88,7 +93,7 @@ class CathoAdapter(SiteAdapter):
         if not session.has_saved_session(self.site_name):
             return SessionStatus.NOT_LOGGED_IN
 
-        p, context = session.open_context(self.site_name, headless=False, off_screen=True)
+        p, context = session.open_context(self.site_name, headless=False)
         try:
             return SessionStatus.AUTHENTICATED if _is_authenticated(context) else SessionStatus.SESSION_EXPIRED
         except Exception:
@@ -129,8 +134,9 @@ class CathoAdapter(SiteAdapter):
         search specifically; keeps this testable/consistent the same way
         as apply_changes() rather than a one-off raw Playwright call.
         headless=False, matching this file's confirmed 403-on-headless
-        constraint everywhere else -- off_screen=True keeps that required
-        window from popping up visibly (see module docstring).
+        constraint everywhere else -- session.minimize_window() keeps
+        that required window from popping up visibly (see its own
+        docstring).
 
         Pagination: real, confirmed live -- page 1 is the bare
         /vagas/<slug>/ URL, page N>=2 is /vagas/<slug>/?page=N (found via
@@ -139,9 +145,10 @@ class CathoAdapter(SiteAdapter):
         reached, whichever comes first."""
         slug = _slugify(query)
 
-        p, context = session.open_context(self.site_name, headless=False, off_screen=True)
+        p, context = session.open_context(self.site_name, headless=False)
         try:
             page = context.new_page()
+            session.minimize_window(context, page)
             cards: list[dict] = []
             page_num = 1
             while len(cards) < max_results:
