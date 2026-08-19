@@ -707,6 +707,43 @@ def test_preview_application_never_claims_can_submit_even_with_no_company_questi
     assert "nunca foi verificado" in preview.blocked_reason
 
 
+def test_preview_application_never_fills_or_saves_a_real_referral_contact(monkeypatch):
+    # Real incident, 2026-08-19: this exact gap let preview_application()
+    # (documented as "never fills in answers from the local profile")
+    # actually fill AND SAVE a real referral contact's name/email
+    # whenever the company matched one, because that logic lived in the
+    # shared _start_application() with no gate of its own. Nicholas's
+    # own Gupy dashboard showed a real, saved candidatura for "Fundação
+    # Itaú" with progress, created purely by preview/investigation
+    # calls. This is the regression test that should have existed
+    # before that ever happened.
+    contact = {"name": "Ana Beatriz Ferreira", "email": "ana.ferreira@itau-unibanco.com.br"}
+    monkeypatch.setattr(application_profile, "load_referral_contacts", lambda: {"itau": contact})
+
+    page = FakeApplicationPage(
+        step_texts=[
+            "Você está se candidatando para a vaga Trainee 2027 na empresa Itaú Unibanco.",
+            "Alguém te indicou?\nSim\nNão",
+            "Tudo certo, revise sua candidatura.",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().preview_application("https://empresa.gupy.io/job/xyz")
+
+    # The real, load-bearing assertions: no contact field was ever
+    # touched, and the referral question was answered "Não" even though
+    # a real, known contact exists for this company.
+    assert page.filled == {}
+    assert page.last_is_referred is False
+    referral_question = preview.questions[0]
+    assert referral_question.answer == "Não (para todas)"
+    assert contact["name"] not in (preview.summary_text or "")
+    assert contact["email"] not in (preview.summary_text or "")
+
+
 def test_preview_application_closes_context_and_stops_playwright(monkeypatch):
     page = FakeApplicationPage(step_texts=["algo"], referral_answer_count=0)
     fake_context = FakeApplicationContext(page)

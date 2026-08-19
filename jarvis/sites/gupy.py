@@ -500,10 +500,24 @@ class GupyAdapter(SiteAdapter):
         can_submit is always False today -- the real final submit screen
         has never been observed live (see module docstring). This is the
         apply-flow equivalent of preview_changes() above. Never fills in
-        answers from the local profile even if one exists -- use
-        continue_application_with_profile() for that (a real, mutating
-        action, gated by confirmed=True like every other write in this
-        project)."""
+        or saves a real referral contact's name/email even if one exists
+        locally -- use continue_application_with_profile() for that (a
+        real, mutating action, gated by confirmed=True like every other
+        write in this project); _start_application()'s own confirmed
+        gate is what actually enforces this now (see its docstring for
+        the real 2026-08-19 incident that made this an explicit gate
+        instead of an assumption).
+
+        NOT actually zero-footprint, and this docstring used to
+        (wrongly) imply it was: simply navigating into the apply flow to
+        see what questions a listing asks already creates a real,
+        visible "candidatura" entry in the candidate's own Gupy
+        dashboard (confirmed live 2026-08-19 -- Nicholas's own "Minhas
+        candidaturas" page showed real, if incomplete, entries for every
+        company a preview call had touched). That's a structural fact
+        about how Gupy's flow works, not a bug this code can route
+        around while still returning real company-question text -- said
+        here plainly so it's never assumed away again."""
         from jarvis.config import SITES_HEADLESS
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
@@ -601,7 +615,7 @@ class GupyAdapter(SiteAdapter):
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
             page = context.new_page()
-            questions, early_exit, level = self._start_application(page, job_url)
+            questions, early_exit, level = self._start_application(page, job_url, confirmed=True)
             if early_exit is not None:
                 return early_exit
 
@@ -706,20 +720,49 @@ class GupyAdapter(SiteAdapter):
             p.stop()
 
     def _start_application(
-        self, page, job_url: str
+        self, page, job_url: str, *, confirmed: bool = False
     ) -> tuple[list[ApplicationQuestion], "ApplicationPreview | None", str]:
         """Shared by preview_application() and
         continue_application_with_profile(): navigates from the job page
         through the apply link, the initial "Continuar" gate, and Gupy's
-        own standard referral questions (always answered "Não"/"Não").
-        Returns (questions_so_far, early_exit, level) -- early_exit is a
-        real ApplicationPreview to return immediately if something failed
-        before reaching the company-questions step (no apply link
-        found), or None to keep going. level is base.py's detect_level()
-        applied to the job page's own title, captured here (before
-        navigating away to the apply flow) so a later "pretensão
-        salarial" question can be answered with the right salary_<level>
-        figure (see application_profile.py) -- added 2026-08-17."""
+        own standard referral questions. Returns (questions_so_far,
+        early_exit, level) -- early_exit is a real ApplicationPreview to
+        return immediately if something failed before reaching the
+        company-questions step (no apply link found), or None to keep
+        going. level is base.py's detect_level() applied to the job
+        page's own title, captured here (before navigating away to the
+        apply flow) so a later "pretensão salarial" question can be
+        answered with the right salary_<level> figure (see
+        application_profile.py) -- added 2026-08-17.
+
+        confirmed: real-write gate for the referral contact specifically
+        (2026-08-19, fixing a real incident -- see below). When False
+        (preview_application()'s path), the referral question is ALWAYS
+        answered "Não", even for a company with a known contact -- never
+        looks up or fills a real name/email. Only when confirmed=True
+        (continue_application_with_profile(), which already requires
+        its OWN confirmed=True before ever calling this) does the real
+        contact lookup/fill/save happen.
+
+        Real incident this fixes: preview_application() was documented
+        as "never fills in answers from the local profile" but this
+        method filled and SAVED a real referral contact's name/email
+        whenever confirmed or not, because that logic lived here,
+        shared, with no gate of its own -- confirmed live 2026-08-19
+        when Nicholas's own Gupy dashboard showed a real, saved
+        candidatura for Fundação Itaú with 1/6 progress, created purely
+        by investigation/preview calls that were never supposed to write
+        anything. Also corrected here: navigating into the apply flow AT
+        ALL (the goto() below) already creates a real, visible-in-
+        dashboard candidatura entry -- confirmed by the same incident
+        (10+ other companies also showed up there from preview-only
+        calls, unrelated to the referral bug). That's a structural fact
+        about how Gupy's own flow works, not something fixable while
+        this method still needs to see what questions a listing asks --
+        genuinely zero-footprint preview isn't achievable here, and
+        preview_application()'s own docstring now says so honestly
+        instead of the earlier, wrong "does NOT appear to register as a
+        real application" claim."""
         page.goto(job_url, timeout=45_000, wait_until="domcontentloaded")
         page.wait_for_load_state("networkidle", timeout=30_000)
         page.wait_for_timeout(2000)
@@ -752,7 +795,7 @@ class GupyAdapter(SiteAdapter):
         gate_text = self._extract_step_text(page)
         company = self._extract_company_from_gate_text(gate_text)
         contact = None
-        if company:
+        if confirmed and company:
             from jarvis.sites.application_profile import load_referral_contacts
 
             contact = find_referral_contact(company, load_referral_contacts())
