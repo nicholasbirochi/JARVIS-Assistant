@@ -243,6 +243,14 @@ def test_portal_adapters_never_includes_indeed():
     assert "indeed" not in server._portal_adapters(include_linkedin=True)
 
 
+def test_portal_adapters_always_includes_remoteok():
+    # Unlike LinkedIn/Indeed, RemoteOK (2026-08-19) is a real public JSON
+    # API with no anti-bot layer or account-adjacent risk -- safe on the
+    # unattended daily path, no opt-in needed.
+    assert "remoteok" in server._portal_adapters()
+    assert "remoteok" in server._portal_adapters(include_linkedin=True)
+
+
 def test_render_page_never_raises_with_no_data():
     # Direct unit-level check, no HTTP -- render_page() must degrade
     # gracefully to the empty state rather than raising when _tiers is
