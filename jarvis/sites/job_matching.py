@@ -64,6 +64,17 @@ _SENIOR_EXCLUSION_TERMS = [
 # "Vaga Afirmativa para Pessoa com Deficiência (PCD)" and "(Afirmativa
 # para Pessoas Negras)" are real, exclusive quota postings he should
 # never see in his own results, let alone apply to.
+#
+# 2026-08-19, same day, widened further ("sem vagas PCD ou LGBTQI+ e
+# demais minorias... sou branco padrão"): LGBTQI+-exclusive and
+# women-exclusive tracks added, same exclusive-signaling-phrase
+# discipline -- he isn't part of those demographics either. Also covers
+# a SECOND real phrasing confirmed live the same day (Banco BV's own
+# listings, found during the Rochaverá lookup): "banco de candidatura
+# para <demografia>" ("BV com Elas" for women, "BV fora do armário" for
+# LGBTQIAP+, "BV Além da Cota" for PCD) -- a real-world exclusive signal
+# distinct from "vaga afirmativa"/"exclusiva", not assumed to be the
+# only phrasing every company uses.
 _AFFIRMATIVE_ACTION_EXCLUSIVE_TERMS = [
     "vaga afirmativa",
     "afirmativa para pessoa",
@@ -78,6 +89,23 @@ _AFFIRMATIVE_ACTION_EXCLUSIVE_TERMS = [
     "cota racial",
     "cota para negros",
     "cota para pessoas negras",
+    "exclusiva para lgbtqia+",
+    "exclusiva para lgbtqi+",
+    "exclusiva para pessoas lgbtqia+",
+    "afirmativa para pessoas lgbtqia+",
+    "afirmativa para lgbtqia+",
+    "afirmativa lgbtqia+",
+    "cota lgbtqia+",
+    "exclusiva para mulheres",
+    "afirmativa para mulheres",
+    "afirmativa feminina",
+    "cota para mulheres",
+    "cota feminina",
+    "banco de candidatura para mulheres",
+    "banco de candidatura para pessoas negras",
+    "banco de candidatura para pcd",
+    "banco de candidatura para lgbtqia+",
+    "banco de candidatura para lgbtqiap+",
 ]
 
 

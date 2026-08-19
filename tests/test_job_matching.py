@@ -80,6 +80,25 @@ def test_is_affirmative_action_only_false_for_a_merely_inclusive_listing():
     assert not is_affirmative_action_only("Analista de Dados Júnior", None)
 
 
+def test_is_affirmative_action_only_true_for_lgbtqia_and_women_exclusive_listings():
+    # 2026-08-19: "sem vagas PCD ou LGBTQI+ e demais minorias... sou
+    # branco padrão" -- widened past PCD/race to cover these too.
+    assert is_affirmative_action_only("Analista de Dados Pleno - Exclusiva para LGBTQIA+")
+    assert is_affirmative_action_only("Analista Jurídico - Vaga Afirmativa para Mulheres")
+    assert is_affirmative_action_only("Estágio em Dados - Cota Feminina")
+
+
+def test_is_affirmative_action_only_true_for_the_real_banco_bv_talent_bank_phrasing():
+    # Real listings found live 2026-08-19 (Banco BV, during the
+    # Rochaverá lookup) -- a distinct exclusive phrasing from "vaga
+    # afirmativa"/"exclusiva", not assumed to be the only one companies
+    # use.
+    assert is_affirmative_action_only("BV com Elas: banco de candidatura para mulheres")
+    assert is_affirmative_action_only("BV fora do armário: banco de candidatura para LGBTQIAP+")
+    assert is_affirmative_action_only("BV Além da Cota: banco de candidatura para PcD")
+    assert is_affirmative_action_only("BV Raízes: banco de candidatura para pessoas negras")
+
+
 def test_is_relevant_match_false_for_affirmative_action_exclusive_listings():
     assert not is_relevant_match(
         "Analista de Dados Júnior - Vaga Afirmativa para Pessoa com Deficiência (PCD)",
