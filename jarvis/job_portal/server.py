@@ -70,6 +70,7 @@ _SITE_LABELS = {
     "linkedin": "LinkedIn",
     "indeed": "Indeed",
     "remoteok": "RemoteOK",
+    "weworkremotely": "We Work Remotely",
 }
 
 _server: ThreadingHTTPServer | None = None
@@ -79,7 +80,7 @@ _tiers_lock = threading.Lock()
 
 
 def _portal_adapters(*, include_linkedin: bool = False) -> dict[str, object]:
-    """The seven base adapters always run, on every path (manual button
+    """The eight base adapters always run, on every path (manual button
     click or refresh_if_due()'s unattended daily timer). LinkedIn
     (include_linkedin=True) is deliberately opt-in and NOT included by
     default -- see linkedin.py's module docstring: it's this project's
@@ -89,10 +90,12 @@ def _portal_adapters(*, include_linkedin: bool = False) -> dict[str, object]:
     he's the one triggering it (the portal's "Atualizar vagas agora"
     button, or opening the portal for the first time).
 
-    RemoteOK (jarvis/sites/remoteok.py, 2026-08-19) is in the base set,
-    no opt-in needed -- unlike LinkedIn/Indeed it's a real, documented,
-    public JSON API with no anti-bot layer and no login-adjacent risk to
-    weigh, safe to run unattended the same as InfoJobs/Catho/Gupy.
+    RemoteOK and We Work Remotely (jarvis/sites/remoteok.py,
+    jarvis/sites/weworkremotely.py, both 2026-08-19) are in the base
+    set, no opt-in needed -- unlike LinkedIn/Indeed they're real,
+    public, documented feeds (JSON API / RSS) with no anti-bot layer and
+    no login-adjacent risk to weigh, safe to run unattended the same as
+    InfoJobs/Catho/Gupy.
 
     Indeed (jarvis/sites/indeed.py) is deliberately NOT included here at
     all, opt-in or not -- confirmed live 2026-08-11 that a handful of
@@ -108,6 +111,7 @@ def _portal_adapters(*, include_linkedin: bool = False) -> dict[str, object]:
     from jarvis.sites.ifood_careers import IFoodCareersAdapter
     from jarvis.sites.infojobs import InfoJobsAdapter
     from jarvis.sites.remoteok import RemoteOkAdapter
+    from jarvis.sites.weworkremotely import WeWorkRemotelyAdapter
 
     adapters: dict[str, object] = {
         "infojobs": InfoJobsAdapter(),
@@ -117,6 +121,7 @@ def _portal_adapters(*, include_linkedin: bool = False) -> dict[str, object]:
         "ifood_careers": IFoodCareersAdapter(),
         "btg_careers": BTGCareersAdapter(),
         "remoteok": RemoteOkAdapter(),
+        "weworkremotely": WeWorkRemotelyAdapter(),
     }
     if include_linkedin:
         from jarvis.sites.linkedin import LinkedInAdapter
