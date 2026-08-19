@@ -60,6 +60,7 @@ def test_check_session_always_opens_headed_regardless_of_sites_headless_config(m
     monkeypatch.setattr(config, "SITES_HEADLESS", True)  # the global default -- must be ignored here
 
     seen_headless = []
+    seen_off_screen = []
 
     class DummyPlaywright:
         def stop(self):
@@ -72,8 +73,9 @@ def test_check_session_always_opens_headed_regardless_of_sites_headless_config(m
         def close(self):
             pass
 
-    def fake_open_context(site_name, *, headless):
+    def fake_open_context(site_name, *, headless, off_screen=False):
         seen_headless.append(headless)
+        seen_off_screen.append(off_screen)
         return DummyPlaywright(), DummyContext()
 
     monkeypatch.setattr(session, "open_context", fake_open_context)
@@ -81,6 +83,9 @@ def test_check_session_always_opens_headed_regardless_of_sites_headless_config(m
     status = CathoAdapter().check_session()
 
     assert seen_headless == [False]
+    # 2026-08-19: off_screen=True so this required headed window doesn't
+    # pop up visibly (see session.py's open_context docstring).
+    assert seen_off_screen == [True]
     assert status == SessionStatus.UNKNOWN_ERROR  # DummyContext.new_page() raising is expected here
 
 
@@ -205,7 +210,7 @@ def test_search_jobs_builds_the_real_slug_url_and_converts_valid_cards(monkeypat
     ]
     page = FakeSearchPage(cards, consent_button=FakeConsentButton(visible=True))
     monkeypatch.setattr(
-        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
+        session, "open_context", lambda site_name, *, headless, off_screen=False: (FakeSearchPlaywright(), FakeSearchContext(page))
     )
 
     listings = CathoAdapter().search_jobs("Analista de Dados")
@@ -244,7 +249,7 @@ def test_search_jobs_paginates_until_max_results_or_an_empty_page(monkeypatch):
     ]
     page = FakeSearchPage([page_1, page_2], consent_button=None)
     monkeypatch.setattr(
-        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
+        session, "open_context", lambda site_name, *, headless, off_screen=False: (FakeSearchPlaywright(), FakeSearchContext(page))
     )
 
     listings = CathoAdapter().search_jobs("Analista de Dados", max_results=25)
@@ -260,7 +265,7 @@ def test_search_jobs_paginates_until_max_results_or_an_empty_page(monkeypatch):
 def test_search_jobs_skips_consent_click_when_banner_not_present(monkeypatch):
     page = FakeSearchPage([], consent_button=None)
     monkeypatch.setattr(
-        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
+        session, "open_context", lambda site_name, *, headless, off_screen=False: (FakeSearchPlaywright(), FakeSearchContext(page))
     )
 
     listings = CathoAdapter().search_jobs("Analista de Dados")

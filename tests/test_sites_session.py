@@ -73,10 +73,12 @@ class FakeChromium:
     def __init__(self, browser_factory=FakeBrowser):
         self._browser_factory = browser_factory
         self.launches: list[bool] = []
+        self.launch_args: list[list[str]] = []
         self.browsers: list[FakeBrowser] = []
 
-    def launch(self, headless):
+    def launch(self, headless, args=None):
         self.launches.append(headless)
+        self.launch_args.append(args or [])
         browser = self._browser_factory()
         self.browsers.append(browser)
         return browser
@@ -103,6 +105,42 @@ def test_open_context_hides_webdriver_flag(tmp_path, monkeypatch):
 
     assert session._HIDE_WEBDRIVER_FLAG in context.init_scripts
     assert fake_p.chromium.launches == [True]
+
+
+def test_open_context_no_window_position_arg_by_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "SITES_STATE_DIR", tmp_path)
+    fake_p = FakePlaywright()
+    monkeypatch.setattr(session, "sync_playwright", lambda: fake_p)
+
+    session.open_context("catho", headless=False)
+
+    assert fake_p.chromium.launch_args == [[]]
+
+
+def test_open_context_off_screen_moves_a_headed_window_off_the_visible_desktop(tmp_path, monkeypatch):
+    # Catho requires a real headed window (headless=True gets a 403 --
+    # see catho.py) -- off_screen=True keeps that window from popping up
+    # visibly, 2026-08-19, Nicholas asked for this explicitly.
+    monkeypatch.setattr(config, "SITES_STATE_DIR", tmp_path)
+    fake_p = FakePlaywright()
+    monkeypatch.setattr(session, "sync_playwright", lambda: fake_p)
+
+    session.open_context("catho", headless=False, off_screen=True)
+
+    assert fake_p.chromium.launch_args == [["--window-position=-32000,-32000"]]
+
+
+def test_open_context_off_screen_is_a_no_op_when_actually_headless(tmp_path, monkeypatch):
+    # off_screen only makes sense for a real, headed window -- a genuinely
+    # headless browser has no window to move, so the flag must not be
+    # passed (harmless either way, but keeps launch_args honest).
+    monkeypatch.setattr(config, "SITES_STATE_DIR", tmp_path)
+    fake_p = FakePlaywright()
+    monkeypatch.setattr(session, "sync_playwright", lambda: fake_p)
+
+    session.open_context("gupy", headless=True, off_screen=True)
+
+    assert fake_p.chromium.launch_args == [[]]
 
 
 def test_open_context_cleans_up_playwright_on_partial_failure(monkeypatch):

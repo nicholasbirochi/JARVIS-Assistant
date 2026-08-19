@@ -38,7 +38,7 @@ def has_saved_session(site_name: str) -> bool:
     return state_path(site_name).exists()
 
 
-def open_context(site_name: str, *, headless: bool) -> tuple[object, BrowserContext]:
+def open_context(site_name: str, *, headless: bool, off_screen: bool = False) -> tuple[object, BrowserContext]:
     """Launches a browser and returns (playwright, context) with the site's
     saved session loaded, if one exists. Caller is responsible for closing
     both (see `closing_context`). `playwright` is returned (not just the
@@ -46,12 +46,24 @@ def open_context(site_name: str, *, headless: bool) -> tuple[object, BrowserCont
     letting it get garbage-collected while the context is still in use
     crashes the driver.
 
+    `off_screen`: only meaningful when `headless=False` (e.g. Catho, which
+    403s when actually headless -- see catho.py's module docstring). Moves
+    the real, headed browser window far off the visible desktop area via
+    Chromium's own `--window-position` flag instead of running it headless
+    -- keeps the exact same headed browser fingerprint Catho's bot-check
+    accepts, but stops a real window from popping up on top of whatever
+    Nicholas is doing (2026-08-19: he asked for this explicitly). Not a
+    substitute for headless -- a window still genuinely exists and could
+    in principle be dragged back on-screen -- just not one that visibly
+    interrupts by default.
+
     Cleans up eagerly on a partial failure (browser launched but context
     creation fails, etc.) instead of leaking a Playwright/browser process
     that the caller never gets a handle to close."""
     p = sync_playwright().start()
     try:
-        browser = p.chromium.launch(headless=headless)
+        launch_args = ["--window-position=-32000,-32000"] if (off_screen and not headless) else []
+        browser = p.chromium.launch(headless=headless, args=launch_args)
         try:
             saved_state = state_path(site_name)
             context = browser.new_context(
