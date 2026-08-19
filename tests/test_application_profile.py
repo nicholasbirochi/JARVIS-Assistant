@@ -1,8 +1,12 @@
+import json
+
 from jarvis import config
 from jarvis.sites.application_profile import (
     ensure_profile_template,
     load_application_profile,
+    load_referral_contacts,
     profile_path,
+    referral_contacts_path,
 )
 
 
@@ -24,6 +28,8 @@ def test_load_application_profile_returns_all_none_when_file_missing(monkeypatch
         "nome_mae": None,
         "nome_pai": None,
         "naturalidade": None,
+        "raca_cor": None,
+        "pcd": None,
         "salary_estagio": None,
         "salary_junior": None,
         "salary_pleno": None,
@@ -44,6 +50,8 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
                 "JARVIS_APPLICATION_NOME_MAE=Maria da Silva",
                 "JARVIS_APPLICATION_NOME_PAI=João da Silva",
                 "JARVIS_APPLICATION_NATURALIDADE=São Paulo - SP",
+                "JARVIS_APPLICATION_RACA_COR=Branco",
+                "JARVIS_APPLICATION_PCD=Não",
                 "JARVIS_APPLICATION_SALARY_ESTAGIO=R$ 3.000,00",
                 "JARVIS_APPLICATION_SALARY_JUNIOR=R$ 4.500,00",
                 "JARVIS_APPLICATION_SALARY_PLENO=R$ 6.500,00",
@@ -62,6 +70,8 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
         "nome_mae": "Maria da Silva",
         "nome_pai": "João da Silva",
         "naturalidade": "São Paulo - SP",
+        "raca_cor": "Branco",
+        "pcd": "Não",
         "salary_estagio": "R$ 3.000,00",
         "salary_junior": "R$ 4.500,00",
         "salary_pleno": "R$ 6.500,00",
@@ -114,3 +124,30 @@ def test_ensure_profile_template_never_overwrites_existing_values(monkeypatch, t
 
     content = (tmp_path / "application_profile.env").read_text(encoding="utf-8")
     assert "12.345.678-9" in content
+
+
+def test_referral_contacts_path_lives_under_local_state_dir(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "LOCAL_STATE_DIR", tmp_path)
+
+    assert referral_contacts_path() == tmp_path / "referral_contacts.json"
+
+
+def test_load_referral_contacts_empty_when_file_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "LOCAL_STATE_DIR", tmp_path)
+
+    assert load_referral_contacts() == {}
+
+
+def test_load_referral_contacts_reads_real_values(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "LOCAL_STATE_DIR", tmp_path)
+    data = {"itau": {"name": "Ana Beatriz Ferreira", "email": "ana.ferreira@itau-unibanco.com.br"}}
+    (tmp_path / "referral_contacts.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    assert load_referral_contacts() == data
+
+
+def test_load_referral_contacts_returns_empty_on_malformed_json(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "LOCAL_STATE_DIR", tmp_path)
+    (tmp_path / "referral_contacts.json").write_text("not valid json{{{", encoding="utf-8")
+
+    assert load_referral_contacts() == {}

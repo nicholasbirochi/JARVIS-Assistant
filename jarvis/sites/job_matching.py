@@ -53,6 +53,43 @@ _SENIOR_EXCLUSION_TERMS = [
     "diretora",
 ]
 
+# Listings explicitly RESERVED for a demographic Nicholas isn't part of
+# ("não sou PCD, sou branco", 2026-08-19) -- Brazilian affirmative-
+# action/quota postings, legally distinct hiring tracks he isn't
+# eligible for. Deliberately requires the EXCLUSIVE-signaling phrase
+# ("exclusiva"/"afirmativa"/"cota"), not just the bare presence of
+# "PCD"/"negro"/"negra" -- a real, confirmed-live distinction: "Vaga
+# também para PcD" (Itaú's Tech Lead listing) means the role is open to
+# everyone, PCD candidates included, and must NOT be excluded, while
+# "Vaga Afirmativa para Pessoa com Deficiência (PCD)" and "(Afirmativa
+# para Pessoas Negras)" are real, exclusive quota postings he should
+# never see in his own results, let alone apply to.
+_AFFIRMATIVE_ACTION_EXCLUSIVE_TERMS = [
+    "vaga afirmativa",
+    "afirmativa para pessoa",
+    "afirmativa para pessoas",
+    "exclusiva para pcd",
+    "exclusiva pcd",
+    "vaga exclusiva pcd",
+    "exclusiva para pessoas com deficiência",
+    "exclusiva para pessoas com deficiencia",
+    "exclusiva para pessoas negras",
+    "exclusiva para pessoas pretas",
+    "cota racial",
+    "cota para negros",
+    "cota para pessoas negras",
+]
+
+
+def is_affirmative_action_only(title: str, snippet: str | None = None) -> bool:
+    """True if a listing is explicitly reserved for a demographic
+    Nicholas isn't part of -- see _AFFIRMATIVE_ACTION_EXCLUSIVE_TERMS
+    above for the real, confirmed-live distinction from a merely
+    inclusive listing."""
+    haystack = f"{title} {snippet or ''}".lower()
+    return any(term in haystack for term in _AFFIRMATIVE_ACTION_EXCLUSIVE_TERMS)
+
+
 # Explicit junior/entry-level signals -- deliberately NOT folded into the
 # search query itself (see module docstring: combining "Júnior" into the
 # InfoJobs query made results worse, not better). Used only for local
@@ -138,6 +175,9 @@ def is_relevant_match(title: str, snippet: str | None, keywords: list[str]) -> b
     haystack = f"{title} {snippet or ''}".lower()
 
     if any(term in haystack for term in _SENIOR_EXCLUSION_TERMS):
+        return False
+
+    if is_affirmative_action_only(title, snippet):
         return False
 
     for keyword in keywords:

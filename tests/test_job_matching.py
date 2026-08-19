@@ -10,6 +10,7 @@ from jarvis.sites.job_matching import (
     group_by_tier,
     has_international_signal,
     has_junior_signal,
+    is_affirmative_action_only,
     is_full_remote,
     is_in_target_region,
     is_relevant_match,
@@ -57,6 +58,38 @@ def test_is_relevant_match_false_for_senior_roles():
     assert not is_relevant_match("Analista De Dados Pleno", "5 anos de experiência", ["Analista de Dados"])
     assert not is_relevant_match("Analista De Dados SR (Python e SQL)", None, ["Analista de Dados"])
     assert not is_relevant_match("Coordenador De Business Intelligence", None, ["Business Intelligence"])
+
+
+def test_is_affirmative_action_only_true_for_real_exclusive_listings():
+    # Real listings found live, 2026-08-19.
+    assert is_affirmative_action_only(
+        "Sênior Analista Negocios - Growth - Vaga Afirmativa para Pessoa com Deficiência (PCD)"
+    )
+    assert is_affirmative_action_only("Advogado Consultivo e Contratos Sênior (Afirmativa para Pessoas Negras)")
+    assert is_affirmative_action_only(
+        "Engenharia de Software Backend Java/Python Pleno | Exclusiva para Pessoas com deficiência"
+    )
+    assert is_affirmative_action_only("Analista Administrativo | Campinas -SP ( Vaga Exclusiva PCD )")
+
+
+def test_is_affirmative_action_only_false_for_a_merely_inclusive_listing():
+    # Real, confirmed-live distinction: "também" (also/inclusive) means
+    # the role is open to everyone, PCD candidates included -- not an
+    # exclusive quota posting. Must NOT be excluded.
+    assert not is_affirmative_action_only("Tech Lead | Engenharia de Software", "Vaga também para PcD")
+    assert not is_affirmative_action_only("Analista de Dados Júnior", None)
+
+
+def test_is_relevant_match_false_for_affirmative_action_exclusive_listings():
+    assert not is_relevant_match(
+        "Analista de Dados Júnior - Vaga Afirmativa para Pessoa com Deficiência (PCD)",
+        None,
+        ["Analista de Dados"],
+    )
+
+
+def test_is_relevant_match_true_for_a_merely_inclusive_listing():
+    assert is_relevant_match("Analista de Dados Júnior", "Vaga também para PcD", ["Analista de Dados"])
 
 
 def test_is_relevant_match_short_acronym_keyword_does_not_false_positive_on_substring():

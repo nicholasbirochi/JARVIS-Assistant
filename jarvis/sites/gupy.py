@@ -138,6 +138,7 @@ candidate). Real, confirmed findings:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urljoin
@@ -157,6 +158,7 @@ from jarvis.sites.base import (
     UpdateResult,
     classify_question_field,
     detect_level,
+    find_referral_contact,
     is_hard_pii_question,
     question_requires_stop,
 )
@@ -742,6 +744,19 @@ class GupyAdapter(SiteAdapter):
         page.wait_for_load_state("networkidle", timeout=30_000)
         page.wait_for_timeout(2000)
 
+        # The initial gate's own text ("Você está se candidatando para a
+        # vaga X na empresa Y.") is the only place the company name
+        # appears in this flow -- captured here, BEFORE clicking
+        # "Continuar" navigates past it, so the referral-contact lookup
+        # below has something to match against.
+        gate_text = self._extract_step_text(page)
+        company = self._extract_company_from_gate_text(gate_text)
+        contact = None
+        if company:
+            from jarvis.sites.application_profile import load_referral_contacts
+
+            contact = find_referral_contact(company, load_referral_contacts())
+
         questions: list[ApplicationQuestion] = []
 
         self._click_text_button(page, "Continuar")
@@ -749,15 +764,38 @@ class GupyAdapter(SiteAdapter):
         page.wait_for_load_state("networkidle", timeout=30_000)
 
         referral_text = self._extract_step_text(page)
-        answered_count = self._answer_referral_labels(page)
+        is_referred = contact is not None
+        answered_count = self._answer_referral_labels(page, is_referred=is_referred)
         if answered_count:
-            questions.append(ApplicationQuestion(text=referral_text, answered=True, answer="Não (para todas)"))
+            if is_referred:
+                filled_contact = self._fill_referral_contact(page, contact)
+                # Real, named contact -- text never includes the actual
+                # name/email (same discipline as every other identity
+                # field here; this is a THIRD PARTY's PII too).
+                answer_label = (
+                    "Sim (contato conhecido preenchido)" if filled_contact else "Sim (não consegui preencher o contato)"
+                )
+            else:
+                answer_label = "Não (para todas)"
+            questions.append(ApplicationQuestion(text=referral_text, answered=True, answer=answer_label))
             page.wait_for_timeout(1000)
             self._click_text_button(page, "Salvar e continuar")
             page.wait_for_timeout(2000)
             page.wait_for_load_state("networkidle", timeout=30_000)
 
         return questions, None, level
+
+    @staticmethod
+    def _extract_company_from_gate_text(text: str) -> str | None:
+        """Parses "...na empresa <X>." out of the initial apply gate's
+        own confirmation text -- the only place in this flow the
+        company name appears as plain text (JobListing.company isn't
+        available here; preview_application()/
+        continue_application_with_profile() only take a job_url).
+        Returns None if the text doesn't match this exact pattern (a
+        page redesign, say) rather than guessing."""
+        match = re.search(r"na empresa ([^.\n]+)\.", text)
+        return match.group(1).strip() if match else None
 
     def _reach_company_questions_step(self, page) -> list[str] | None:
         """If the current step is a "Perguntas criadas pela empresa"
@@ -829,23 +867,51 @@ class GupyAdapter(SiteAdapter):
             """
         )
 
-    def _answer_referral_labels(self, page) -> int:
-        """Clicks every <label> wrapping a "Não" <span> -- see module
-        docstring's DOM-quirk note (no plain <input type="radio"> exists
-        to target instead)."""
+    def _answer_referral_labels(self, page, *, is_referred: bool = False) -> int:
+        """Answers Gupy's own two standard referral-step questions, in
+        real, confirmed-live DOM order: the FIRST "Sim"/"Não" pair is
+        "Alguém te indicou?" (answered per is_referred -- "Sim" only
+        when a known, named contact was found for this company, see
+        find_referral_contact()); the SECOND pair is "Você trabalha na
+        empresa X?", always "Não" -- unconditionally true for any
+        external candidate applying cold. See module docstring's DOM-
+        quirk note (no plain <input type="radio"> exists to target
+        instead, hence clicking the wrapping <label>)."""
         return page.evaluate(
             """
-            () => {
-                let count = 0;
-                document.querySelectorAll('label').forEach(label => {
-                    const span = Array.from(label.querySelectorAll('span'))
-                        .find(s => s.textContent.trim() === 'Não');
-                    if (span) { label.click(); count++; }
+            (isReferred) => {
+                const labels = Array.from(document.querySelectorAll('label'));
+                const simLabels = [];
+                const naoLabels = [];
+                labels.forEach(label => {
+                    const spans = Array.from(label.querySelectorAll('span'));
+                    if (spans.find(s => s.textContent.trim() === 'Sim')) simLabels.push(label);
+                    if (spans.find(s => s.textContent.trim() === 'Não')) naoLabels.push(label);
                 });
+                let count = 0;
+                if (simLabels.length && naoLabels.length) {
+                    (isReferred ? simLabels[0] : naoLabels[0]).click();
+                    count++;
+                }
+                if (naoLabels.length > 1) { naoLabels[1].click(); count++; }
                 return count;
             }
-            """
+            """,
+            is_referred,
         )
+
+    def _fill_referral_contact(self, page, contact: dict[str, str]) -> bool:
+        """Fills the real, stable-ID fields that appear only after
+        answering "Sim" to the referral question -- confirmed live
+        2026-08-19: #guiddedApplicationAdditionalDataIndicatedByNameInput
+        and #...IndicatedByEmailInput, unlike the company-specific
+        questions' dynamic, question-text-derived selectors."""
+        try:
+            page.fill("#guiddedApplicationAdditionalDataIndicatedByNameInput", contact.get("name", ""), timeout=5000)
+            page.fill("#guiddedApplicationAdditionalDataIndicatedByEmailInput", contact.get("email", ""), timeout=5000)
+            return True
+        except Exception:
+            return False
 
     def _extract_step_text(self, page) -> str:
         return page.evaluate("() => (document.querySelector('main') || document.body).innerText.trim()")

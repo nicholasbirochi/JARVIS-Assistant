@@ -35,6 +35,7 @@ engineering time. If LinkedIn is ever revisited, restrict it to
 from __future__ import annotations
 
 import re
+import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
@@ -159,6 +160,12 @@ class JobListing:
 # as RG/CPF -- classic Brazilian identity-verification fields (a bank's
 # own "security question" data), not casually less sensitive just
 # because they weren't named in the project's original PII rule.
+#
+# raca_cor/pcd added 2026-08-19: Nicholas stated two fixed, durable
+# facts about himself ("não sou PCD, sou branco") -- these are real,
+# self-declared demographic answers, not guesses, and they double as the
+# basis for filtering out affirmative-action-exclusive listings he
+# isn't eligible for (see job_matching.py's is_affirmative_action_only()).
 _FIELD_TERMS: dict[str, list[str]] = {
     "rg_orgao_estado": ["órgão e estado de emissão", "orgao e estado de emissao", "órgão emissor", "orgao emissor"],
     "rg": ["rg", "registro geral", "carteira de identidade"],
@@ -166,6 +173,8 @@ _FIELD_TERMS: dict[str, list[str]] = {
     "nome_mae": ["nome da mãe", "nome da mae"],
     "nome_pai": ["nome do pai"],
     "naturalidade": ["naturalidade"],
+    "raca_cor": ["raça", "raca", "cor da pele", "etnia"],
+    "pcd": ["pessoa com deficiência", "pessoa com deficiencia", "pcd"],
     "salary_expectation": [
         "remuneração",
         "remuneracao",
@@ -231,6 +240,39 @@ def detect_level(text: str) -> str:
         # against the real title "Engenheiro de Dados Pl.".
         return "pleno"
     return "junior"
+
+
+def _strip_accents(text: str) -> str:
+    """Same NFKD-then-ASCII approach as catho.py's _slugify -- Gupy's real
+    gate text reads "...na empresa Itaú Unibanco." (accented), while a
+    contact key typed by hand is more naturally the unaccented "itau" --
+    normalizing both sides to compare is simpler and more robust than
+    keeping two spellings in sync per contact."""
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+
+
+def find_referral_contact(company: str | None, contacts: dict[str, dict[str, str]]) -> dict[str, str] | None:
+    """Matches a job listing's company name against Nicholas's real,
+    named referral contacts (jarvis.sites.application_profile's
+    load_referral_contacts(), keyed by a short company identifier --
+    e.g. "itau"/"santander"/"xp") -- whole-word match, same discipline
+    as company_tier()'s _matches_known_name (a bare substring match on a
+    short key like "xp" would false-positive on all sorts of unrelated
+    words). Both sides are accent-stripped first -- a real bug caught
+    live: the unaccented key "itau" does NOT whole-word-match the real,
+    accented "Itaú Unibanco" gate text, since "itaú" and "itau" aren't
+    the same substring at all. Returns the {"name": ..., "email": ...}
+    dict for the first matching key, or None if this specific company
+    isn't one Nicholas named a real contact for -- added 2026-08-19
+    after he named three real people at three real companies who
+    already know him and are willing to refer him."""
+    if not company:
+        return None
+    haystack = _strip_accents(company.lower())
+    for key, contact in contacts.items():
+        if re.search(rf"\b{re.escape(_strip_accents(key.lower()))}\b", haystack):
+            return contact
+    return None
 
 
 def is_hard_pii_question(question_text: str) -> bool:

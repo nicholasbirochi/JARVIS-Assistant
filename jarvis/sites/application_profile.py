@@ -32,6 +32,20 @@ salarial" should honestly differ by which role is actually being
 applied to. base.py's detect_level() classifies the listing; the
 adapter picks the matching salary_<level> field at fill time.
 
+2026-08-19: raca_cor/pcd added -- two more fixed, self-declared facts
+("não sou PCD, sou branco"), used both to answer standard demographic
+questions and (see job_matching.py's is_affirmative_action_only()) to
+filter OUT listings explicitly reserved for people with disabilities or
+a specific race, which Nicholas isn't eligible for. Also added
+load_referral_contacts()/referral_contacts_path() -- a SEPARATE file
+(referral_contacts.json, not this module's .env) holding real, named
+people Nicholas already knows at specific companies who are willing to
+refer him. Kept in its own file/format since it's naturally keyed data
+(company -> {name, email}), not a fixed set of fields -- and because
+it's a THIRD PARTY's real name and email, not Nicholas's own data, it
+gets the exact same never-log/never-echo treatment as everything else
+here, extended to protect someone else's PII too.
+
 Real design constraints, all load-bearing for keeping this safe:
 - Lives at LOCAL_STATE_DIR/application_profile.env -- same location as
   site session cookies (jarvis/sites/session.py), OUTSIDE the
@@ -76,6 +90,8 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     "nome_mae": "JARVIS_APPLICATION_NOME_MAE",
     "nome_pai": "JARVIS_APPLICATION_NOME_PAI",
     "naturalidade": "JARVIS_APPLICATION_NATURALIDADE",
+    "raca_cor": "JARVIS_APPLICATION_RACA_COR",
+    "pcd": "JARVIS_APPLICATION_PCD",
     "salary_estagio": "JARVIS_APPLICATION_SALARY_ESTAGIO",
     "salary_junior": "JARVIS_APPLICATION_SALARY_JUNIOR",
     "salary_pleno": "JARVIS_APPLICATION_SALARY_PLENO",
@@ -127,3 +143,33 @@ def ensure_profile_template() -> Path:
     )
     path.write_text(template, encoding="utf-8")
     return path
+
+
+def referral_contacts_path() -> Path:
+    from jarvis.config import LOCAL_STATE_DIR
+
+    return LOCAL_STATE_DIR / "referral_contacts.json"
+
+
+def load_referral_contacts() -> dict[str, dict[str, str]]:
+    """Reads referral_contacts_path() -- real, named people Nicholas
+    already knows at specific companies who are willing to refer him
+    (2026-08-19: three real contacts at Itaú/Santander/XP). Keyed by a
+    short company identifier (matched against a listing's company name
+    by base.py's find_referral_contact()), each value a {"name":
+    ..., "email": ...} dict. JSON here (not the flat .env format) since
+    this is naturally nested, keyed data, not a fixed set of fields.
+    Missing file returns {} -- not having this set up is a normal
+    state, never an error. Never logs or prints the raw contents (these
+    are a THIRD PARTY's real name and email, not even Nicholas's own
+    data -- the same never-log/never-echo discipline applies)."""
+    path = referral_contacts_path()
+    if not path.exists():
+        return {}
+    try:
+        import json
+
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}

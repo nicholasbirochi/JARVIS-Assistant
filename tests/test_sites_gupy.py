@@ -7,6 +7,7 @@ from jarvis import config
 from jarvis.resume.schema import Bilingual, PersonalInfo, Resume
 from jarvis.sites import session
 from jarvis.sites.base import PlannedFieldChange, SiteProfileSnapshot, UpdatePlan
+from jarvis.sites import application_profile
 from jarvis.sites.gupy import (
     GupyAdapter,
     _card_to_job_listing,
@@ -492,6 +493,16 @@ def test_card_to_job_listing_converts_a_real_shaped_card():
     assert listing.url == card["href"]
 
 
+def test_extract_company_from_gate_text_parses_the_real_pattern():
+    text = "Você está se candidatando para a vaga Trainee Itaú Unibanco 2027 na empresa Itaú Unibanco."
+
+    assert GupyAdapter._extract_company_from_gate_text(text) == "Itaú Unibanco"
+
+
+def test_extract_company_from_gate_text_none_when_pattern_does_not_match():
+    assert GupyAdapter._extract_company_from_gate_text("Texto qualquer sem o padrão esperado") is None
+
+
 # --- preview_application() ---------------------------------------------
 #
 # Shapes real, live-confirmed script content (see gupy.py's module
@@ -518,6 +529,7 @@ class FakeApplicationPage:
         self.fill_selectors = fill_selectors  # None = every selector succeeds
         self.filled: dict[str, str] = {}
         self._page_title = page_title
+        self.last_is_referred = None
 
     def goto(self, url, timeout=None, wait_until=None):
         self.url = url
@@ -531,7 +543,7 @@ class FakeApplicationPage:
     def wait_for_timeout(self, ms):
         pass
 
-    def evaluate(self, script):
+    def evaluate(self, script, *args):
         if "apply-link" in script:
             return self.apply_href
         if "main h3, body h3" in script:
@@ -541,6 +553,8 @@ class FakeApplicationPage:
             self._step_text_idx = min(self._step_text_idx + 1, len(self.step_texts) - 1)
             return text
         if "querySelectorAll('label')" in script:
+            if args:
+                self.last_is_referred = args[0]
             return self.referral_answer_count
         for text, result in self.click_results.items():
             if repr(text) in script:
@@ -718,6 +732,8 @@ def _patch_profile(monkeypatch, **fields):
         "nome_mae": None,
         "nome_pai": None,
         "naturalidade": None,
+        "raca_cor": None,
+        "pcd": None,
         "salary_estagio": None,
         "salary_junior": None,
         "salary_pleno": None,
@@ -916,6 +932,108 @@ def test_continue_application_with_profile_still_refuses_birth_date_even_with_fu
 
     assert preview.can_submit is False
     assert page.filled == {}
+
+
+def test_continue_application_with_profile_answers_sim_and_fills_a_known_referral_contact(monkeypatch):
+    # Real, live-confirmed 2026-08-19 (see gupy.py's module docstring): when
+    # the job's own company matches a known referral contact
+    # (jarvis.sites.application_profile.load_referral_contacts()), the
+    # FIRST Sim/Não pair is answered "Sim" and the two real, stable-ID
+    # contact fields are filled -- the actual name/email must land in the
+    # page fill (the real automation write) but never leak onto the
+    # returned ApplicationQuestion or summary_text.
+    _patch_profile(monkeypatch)
+    contact = {"name": "Ana Beatriz Ferreira", "email": "ana.ferreira@itau-unibanco.com.br"}
+    monkeypatch.setattr(application_profile, "load_referral_contacts", lambda: {"itau": contact})
+
+    page = FakeApplicationPage(
+        step_texts=[
+            "Você está se candidatando para a vaga Trainee Itaú Unibanco 2027 na empresa Itaú Unibanco.",
+            "Alguém te indicou?\nSim\nNão\nVocê trabalha na empresa?\nSim\nNão",
+            "Tudo certo, revise sua candidatura.",
+        ],
+        referral_answer_count=2,
+        click_results={"Continuar": True, "Salvar e continuar": True},
+        fill_selectors={
+            "#guiddedApplicationAdditionalDataIndicatedByNameInput",
+            "#guiddedApplicationAdditionalDataIndicatedByEmailInput",
+        },
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.last_is_referred is True
+    assert page.filled == {
+        "#guiddedApplicationAdditionalDataIndicatedByNameInput": contact["name"],
+        "#guiddedApplicationAdditionalDataIndicatedByEmailInput": contact["email"],
+    }
+    assert preview.questions[0].answer == "Sim (contato conhecido preenchido)"
+    # The real name/email must never leak onto the question object or the
+    # human-facing summary -- same discipline as every other identity
+    # field in this project, extended here to a THIRD PARTY's PII.
+    assert contact["name"] not in str(preview.questions[0])
+    assert contact["email"] not in str(preview.questions[0])
+    assert contact["name"] not in (preview.summary_text or "")
+    assert contact["email"] not in (preview.summary_text or "")
+    assert "Continuar" in page.clicked
+    assert "Salvar e continuar" in page.clicked
+
+
+def test_continue_application_with_profile_reports_when_contact_fields_cannot_be_filled(monkeypatch):
+    # If the real, stable-ID contact fields aren't found (page changed
+    # since the last live check), the question is still recorded as
+    # answered "Sim" (the label click itself is separate from the fill)
+    # but flagged distinctly -- and still no PII leak.
+    _patch_profile(monkeypatch)
+    contact = {"name": "Rafael Tavares Lima", "email": "rafael.tavares@xpi.com.br"}
+    monkeypatch.setattr(application_profile, "load_referral_contacts", lambda: {"xp": contact})
+
+    page = FakeApplicationPage(
+        step_texts=[
+            "Você está se candidatando para a vaga Analista na empresa XP Investimentos.",
+            "Alguém te indicou?\nSim\nNão",
+            "Tudo certo, revise sua candidatura.",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True},
+        fill_selectors=set(),  # every fill() call fails -- selectors not found
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.last_is_referred is True
+    assert preview.questions[0].answer == "Sim (não consegui preencher o contato)"
+    assert contact["name"] not in (preview.summary_text or "")
+    assert contact["email"] not in (preview.summary_text or "")
+
+
+def test_continue_application_with_profile_answers_nao_when_company_has_no_known_contact(monkeypatch):
+    # Regression: a company that ISN'T one of the three named contacts
+    # must keep the original, always-"Não" behavior.
+    _patch_profile(monkeypatch)
+    monkeypatch.setattr(
+        application_profile,
+        "load_referral_contacts",
+        lambda: {"itau": {"name": "Ana Beatriz Ferreira", "email": "ana.ferreira@itau-unibanco.com.br"}},
+    )
+
+    page = FakeApplicationPage(
+        step_texts=[
+            "Você está se candidatando para a vaga Analista na empresa Nubank.",
+            "Alguém te indicou?\nSim\nNão",
+            "Tudo certo, revise sua candidatura.",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.last_is_referred is False
+    assert preview.questions[0].answer == "Não (para todas)"
 
 
 def test_card_to_job_listing_none_when_title_missing_or_id_undecodable():

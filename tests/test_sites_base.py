@@ -9,6 +9,7 @@ from jarvis.sites.base import (
     UpdateResult,
     classify_question_field,
     detect_level,
+    find_referral_contact,
     is_hard_pii_question,
     question_requires_stop,
 )
@@ -159,3 +160,34 @@ def test_detect_level_does_not_false_positive_on_unrelated_words():
     # "pl" as a bare substring inside other words must not trigger.
     assert detect_level("Desenvolvedor de Aplicativo") == "junior"
     assert detect_level("Analista de Exemplo") == "junior"
+
+
+def test_find_referral_contact_matches_a_known_company():
+    # Real bug caught live: the unaccented key "itau" must still match the
+    # real, accented "Itaú Unibanco" company name from Gupy's own gate
+    # text -- "itaú" and "itau" aren't the same substring at all, so this
+    # requires the accent-stripping in find_referral_contact, not just
+    # whole-word matching.
+    contacts = {"itau": {"name": "Ana Beatriz Ferreira", "email": "ana.ferreira@itau-unibanco.com.br"}}
+
+    assert find_referral_contact("Itaú Unibanco", contacts) == contacts["itau"]
+
+
+def test_find_referral_contact_none_for_an_unknown_company():
+    contacts = {"itau": {"name": "Ana Beatriz Ferreira", "email": "ana.ferreira@itau-unibanco.com.br"}}
+
+    assert find_referral_contact("Empresa Qualquer", contacts) is None
+
+
+def test_find_referral_contact_none_for_missing_company_or_empty_contacts():
+    assert find_referral_contact(None, {"itau": {}}) is None
+    assert find_referral_contact("Itaú", {}) is None
+
+
+def test_find_referral_contact_whole_word_match_not_bare_substring():
+    # "xp" as a short key -- must not false-positive on unrelated words
+    # that happen to contain "xp" as a substring.
+    contacts = {"xp": {"name": "Rafael Tavares Lima", "email": "rafael.tavares@xpi.com.br"}}
+
+    assert find_referral_contact("Expresso Logística", contacts) is None
+    assert find_referral_contact("XP Investimentos", contacts) == contacts["xp"]
