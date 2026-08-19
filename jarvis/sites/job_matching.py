@@ -307,6 +307,24 @@ _BANK_COMPANIES = [
     "citibank",
     "banco abc",
     "banrisul",
+    # 2026-08-19, "MELHORE AINDA MAISSSSS! TEM MUITO POUCAS OPÇÕES DE
+    # EMPRESAS" -- substantially widened every company tier, not just
+    # this one. Banco BV confirmed real and relevant live the same day
+    # (Rochaverá address lookup turned up an actual "Coordenação de
+    # Engenharia de Dados" opening there).
+    "banco bv",
+    "sicoob",
+    "sicredi",
+    "banco do nordeste",
+    "banestes",
+    "mercantil do brasil",
+    "banco bs2",
+    "banco fibra",
+    "banco alfa",
+    "deutsche bank",
+    "morgan stanley",
+    "barclays",
+    "bnp paribas",
 ]
 
 # Digital-native financial-tech companies -- added as its own tier
@@ -349,6 +367,19 @@ _FINTECH_COMPANIES = [
     "genial investimentos",
     "ame digital",
     "iugu",
+    # 2026-08-19 expansion (see _BANK_COMPANIES's note just above).
+    "agibank",
+    "dock pagamentos",
+    "celcoin",
+    "getnet",
+    "cielo",
+    "clear corretora",
+    "modalmais",
+    "qi tech",
+    "asaas",
+    "pagar.me",
+    "dlocal",
+    "recargapay",
 ]
 
 # Established, large, mostly publicly-traded tech companies -- global
@@ -380,6 +411,30 @@ _BIGTECH_COMPANIES = [
     "ifood",
     "totvs",
     "vtex",
+    # 2026-08-19, "cade o google? IBM?" -- both were already here (see
+    # above); what was actually missing is that no CURRENT listing from
+    # them matched that day's search (confirmed, not a list bug -- see
+    # the same date's startup-tier investigation). Widened the list
+    # anyway since it really was thin: databricks/snowflake added given
+    # they're literally in the résumé's own target_roles/skills, plus
+    # the big global tech-consultancies that hire heavily for data
+    # roles in Brazil.
+    "dell technologies",
+    "cisco",
+    "servicenow",
+    "snowflake",
+    "databricks",
+    "grupo globo",
+    "magazine luiza",
+    "magalu",
+    "locaweb",
+    "uol",
+    "accenture",
+    "deloitte",
+    "capgemini",
+    "thoughtworks",
+    "globant",
+    "ci&t",
 ]
 
 # Real, named Brazilian startups/scale-ups -- a genuine list (same
@@ -436,6 +491,28 @@ _STARTUP_COMPANIES = [
     "datarisk",
     "semantix",
     "indicium",
+    # 2026-08-19 expansion (see _BANK_COMPANIES's note above).
+    "nuvemshop",
+    "loggi",
+    "housi",
+    "trocafone",
+    "enjoei",
+    "elo7",
+    "mottu",
+    "indrive",
+    "solfácil",
+    "solfacil",
+    "sympla",
+    "wellhub",
+    "vindi",
+    "superlógica",
+    "superlogica",
+    "omie",
+    "bling",
+    "cobli",
+    "cerc",
+    "provu",
+    "cashme",
 ]
 
 

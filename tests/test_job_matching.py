@@ -283,6 +283,20 @@ def test_company_tier_recognizes_known_fintechs():
 def test_company_tier_recognizes_known_bigtechs():
     assert company_tier("Google Brasil") == "bigtech"
     assert company_tier("iFood") == "bigtech"
+    # 2026-08-19, "cade o google? IBM?" -- both were already listed;
+    # widened the list anyway (see job_matching.py's note) with, among
+    # others, the two tools literally named in the résumé's own
+    # target_roles/skills.
+    assert company_tier("Databricks") == "bigtech"
+    assert company_tier("Snowflake") == "bigtech"
+
+
+def test_company_tier_recognizes_the_2026_08_19_expansion():
+    # One spot-check per tier for that round's expansion ("MELHORE AINDA
+    # MAISSSSS! TEM MUITO POUCAS OPÇÕES DE EMPRESAS").
+    assert company_tier("Banco BV") == "banco"
+    assert company_tier("QI Tech") == "fintech"
+    assert company_tier("Mottu") == "startup"
 
 
 def test_company_tier_none_for_an_unrecognized_or_missing_company():
@@ -297,11 +311,15 @@ def test_company_tier_recognizes_known_startups():
 
 
 def test_company_tier_none_for_an_unrecognized_named_company():
-    # Real limitation, not a bug: a genuine, real startup that just isn't
-    # in the curated list (e.g. "Housi") comes back None, same as any
-    # other unrecognized name -- there's no company-size database here to
-    # check against, only the three named lists.
-    assert company_tier("Housi") is None
+    # Real limitation, not a bug: a genuine company that just isn't in
+    # the curated list comes back None, same as any other unrecognized
+    # name -- there's no company-size database here to check against,
+    # only the four named lists. (2026-08-19: this test previously used
+    # "Housi" as its example of an unlisted company -- it got added to
+    # _STARTUP_COMPANIES the same day, which silently flipped this
+    # test's assertion. Using an obviously fictional name instead so a
+    # future list expansion can't do that again.)
+    assert company_tier("Empresa Fictícia Qualquer LTDA") is None
 
 
 def test_company_tier_does_not_false_positive_on_a_bare_substring():
