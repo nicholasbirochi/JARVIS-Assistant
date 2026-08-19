@@ -299,6 +299,20 @@ def test_company_tier_recognizes_the_2026_08_19_expansion():
     assert company_tier("Mottu") == "startup"
 
 
+def test_company_tier_recognizes_companies_found_in_that_days_real_results():
+    # Round 2, same day: found by actually inspecting the "outras"
+    # bucket's real company names that the first widening pass still
+    # missed, not guessed.
+    assert company_tier("XP Inc.") == "fintech"
+    assert company_tier("Infosys") == "bigtech"
+    assert company_tier("Tata Consultancy Services") == "bigtech"
+    # "vem pra vivo" (Vivo's own recruiting campaign brand) sidesteps
+    # the false-positive risk of matching bare "vivo" (an ordinary
+    # Portuguese word) directly.
+    assert company_tier("Vem Pra Vivo") == "bigtech"
+    assert company_tier("Apenas Vivo Mesmo") is None
+
+
 def test_company_tier_none_for_an_unrecognized_or_missing_company():
     assert company_tier("Empresa Qualquer Ltda") is None
     assert company_tier(None) is None

@@ -380,6 +380,16 @@ _FINTECH_COMPANIES = [
     "pagar.me",
     "dlocal",
     "recargapay",
+    # 2026-08-19, round 2: found by actually inspecting that day's live
+    # "outras" results for real companies the wider lists still missed
+    # (not guessed) -- "XP Inc." doesn't contain the phrase "xp
+    # investimentos" already listed above, so bare "xp" is needed too
+    # (same whole-word-match safety already proven live for this exact
+    # short key -- see base.py's find_referral_contact tests). Capco and
+    # B3 are real, confirmed-present financial-services companies.
+    "xp",
+    "capco",
+    "b3",
 ]
 
 # Established, large, mostly publicly-traded tech companies -- global
@@ -435,6 +445,24 @@ _BIGTECH_COMPANIES = [
     "thoughtworks",
     "globant",
     "ci&t",
+    # 2026-08-19, round 2: found by actually inspecting that day's live
+    # "outras" results -- these were real companies with real listings
+    # that the first widening pass still missed, not guesses. "vem pra
+    # vivo" is Vivo/Telefônica's own recruiting campaign brand, used
+    # sidesteps the false-positive risk of bare "vivo" (an ordinary
+    # Portuguese word) while still catching their real listings.
+    "infosys",
+    "dxc technology",
+    "tata consultancy services",
+    "avanade",
+    "stefanini",
+    "t-systems",
+    "keyrus",
+    "serasa experian",
+    "vem pra vivo",
+    "ibope",
+    "cogna educação",
+    "cogna educacao",
 ]
 
 # Real, named Brazilian startups/scale-ups -- a genuine list (same
