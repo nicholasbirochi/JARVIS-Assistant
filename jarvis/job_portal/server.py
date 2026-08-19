@@ -66,6 +66,7 @@ _SITE_LABELS = {
     "gupy": "Gupy",
     "amazon_jobs": "Amazon Jobs",
     "ifood_careers": "iFood",
+    "btg_careers": "BTG Pactual",
     "linkedin": "LinkedIn",
     "indeed": "Indeed",
 }
@@ -78,6 +79,7 @@ _tiers_lock = threading.Lock()
 
 def _portal_adapters() -> dict[str, object]:
     from jarvis.sites.amazon_jobs import AmazonJobsAdapter
+    from jarvis.sites.btg_careers import BTGCareersAdapter
     from jarvis.sites.catho import CathoAdapter
     from jarvis.sites.gupy import GupyAdapter
     from jarvis.sites.ifood_careers import IFoodCareersAdapter
@@ -89,6 +91,7 @@ def _portal_adapters() -> dict[str, object]:
         "gupy": GupyAdapter(),
         "amazon_jobs": AmazonJobsAdapter(),
         "ifood_careers": IFoodCareersAdapter(),
+        "btg_careers": BTGCareersAdapter(),
     }
 
 
