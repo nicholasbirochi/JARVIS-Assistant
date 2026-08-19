@@ -152,12 +152,41 @@ def test_search_jobs_builds_the_real_query_url_and_converts_valid_cards(monkeypa
         {"jobId": "not-a-number", "text": "Lixo\n\nEmpresa"},
     ]
     page = FakeSearchPage(cards)
-    monkeypatch.setattr(
-        session, "open_context", lambda site_name, *, headless: (FakeSearchPlaywright(), FakeSearchContext(page))
-    )
+    seen_kwargs = {}
+
+    def fake_open_context(site_name, *, headless, off_screen=False):
+        seen_kwargs["headless"] = headless
+        seen_kwargs["off_screen"] = off_screen
+        return FakeSearchPlaywright(), FakeSearchContext(page)
+
+    monkeypatch.setattr(session, "open_context", fake_open_context)
 
     listings = LinkedInAdapter().search_jobs("Analista de Dados")
 
     assert len(listings) == 1
     assert listings[0].external_id == "4441485838"
     assert page.goto_calls == ["https://www.linkedin.com/jobs/search-results/?keywords=Analista+de+Dados"]
+    # 2026-08-19: off_screen=True so this required headed window doesn't
+    # pop up visibly (see session.py's open_context docstring).
+    assert seen_kwargs == {"headless": False, "off_screen": True}
+
+
+def test_search_jobs_accepts_max_results_for_run_job_search_compatibility(monkeypatch):
+    # jarvis.job_search.run_job_search() always calls
+    # adapter.search_jobs(term, max_results=...) -- this adapter has no
+    # real pagination, but must at least accept and honor the cap rather
+    # than raising a TypeError when wired into that call convention
+    # (2026-08-19, wired into jarvis.job_portal.server._portal_adapters()).
+    cards = [
+        {"jobId": str(1000000000 + i), "text": f"Vaga {i}\n\nEmpresa\n\nSão Paulo, SP"} for i in range(5)
+    ]
+    page = FakeSearchPage(cards)
+    monkeypatch.setattr(
+        session,
+        "open_context",
+        lambda site_name, *, headless, off_screen=False: (FakeSearchPlaywright(), FakeSearchContext(page)),
+    )
+
+    listings = LinkedInAdapter().search_jobs("Analista de Dados", max_results=2)
+
+    assert len(listings) == 2

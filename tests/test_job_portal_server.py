@@ -208,7 +208,10 @@ def test_check_endpoint_reports_errors_as_json_500(monkeypatch):
 
 
 def test_refresh_endpoint_calls_refresh_data_and_returns_counts(monkeypatch):
-    def _fake_refresh():
+    seen_adapters = []
+
+    def _fake_refresh(*, adapters=None):
+        seen_adapters.append(adapters)
         return {"banco": [make_listing("1", "X")], "fintech": [], "bigtech": [], "startup": []}
 
     monkeypatch.setattr(server, "refresh_data", _fake_refresh)
@@ -218,6 +221,26 @@ def test_refresh_endpoint_calls_refresh_data_and_returns_counts(monkeypatch):
 
     assert status == 200
     assert body == {"banco": 1, "fintech": 0, "bigtech": 0, "startup": 0, "outras": 0}
+    # The manually-clicked "Atualizar vagas agora" button is exactly the
+    # explicit, attended action that earns the extended (LinkedIn-
+    # included) adapter set -- see _portal_adapters()'s docstring.
+    assert "linkedin" in seen_adapters[0]
+
+
+def test_portal_adapters_excludes_linkedin_by_default():
+    assert "linkedin" not in server._portal_adapters()
+
+
+def test_portal_adapters_includes_linkedin_when_requested():
+    assert "linkedin" in server._portal_adapters(include_linkedin=True)
+
+
+def test_portal_adapters_never_includes_indeed():
+    # Real, confirmed live 2026-08-11 (see indeed.py): a handful of
+    # search_jobs() calls in a short window triggers a real IP-level
+    # block -- exactly this sweep's pattern (12+ terms back to back).
+    assert "indeed" not in server._portal_adapters()
+    assert "indeed" not in server._portal_adapters(include_linkedin=True)
 
 
 def test_render_page_never_raises_with_no_data():

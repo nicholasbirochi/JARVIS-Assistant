@@ -77,7 +77,24 @@ _tiers: dict[str, list[JobListing]] | None = None
 _tiers_lock = threading.Lock()
 
 
-def _portal_adapters() -> dict[str, object]:
+def _portal_adapters(*, include_linkedin: bool = False) -> dict[str, object]:
+    """The six base adapters always run, on every path (manual button
+    click or refresh_if_due()'s unattended daily timer). LinkedIn
+    (include_linkedin=True) is deliberately opt-in and NOT included by
+    default -- see linkedin.py's module docstring: it's this project's
+    highest-risk site, and while search_jobs() runs as an anonymous
+    guest (no real risk to Nicholas's actual account), it's still kept
+    out of the fully unattended daily refresh so it only ever runs when
+    he's the one triggering it (the portal's "Atualizar vagas agora"
+    button, or opening the portal for the first time).
+
+    Indeed (jarvis/sites/indeed.py) is deliberately NOT included here at
+    all, opt-in or not -- confirmed live 2026-08-11 that a handful of
+    search_jobs() calls in a short window (exactly this sweep's pattern:
+    12+ terms back to back) triggers a real IP-level block from Indeed
+    that also affects Nicholas's own normal browsing from this machine.
+    That's not a "be extra careful" call, it's an already-observed
+    failure mode this sweep would reliably reproduce."""
     from jarvis.sites.amazon_jobs import AmazonJobsAdapter
     from jarvis.sites.btg_careers import BTGCareersAdapter
     from jarvis.sites.catho import CathoAdapter
@@ -85,7 +102,7 @@ def _portal_adapters() -> dict[str, object]:
     from jarvis.sites.ifood_careers import IFoodCareersAdapter
     from jarvis.sites.infojobs import InfoJobsAdapter
 
-    return {
+    adapters: dict[str, object] = {
         "infojobs": InfoJobsAdapter(),
         "catho": CathoAdapter(),
         "gupy": GupyAdapter(),
@@ -93,6 +110,11 @@ def _portal_adapters() -> dict[str, object]:
         "ifood_careers": IFoodCareersAdapter(),
         "btg_careers": BTGCareersAdapter(),
     }
+    if include_linkedin:
+        from jarvis.sites.linkedin import LinkedInAdapter
+
+        adapters["linkedin"] = LinkedInAdapter()
+    return adapters
 
 
 def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> dict[str, list[JobListing]]:
@@ -100,8 +122,11 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
     tiers the combined local+remote relevant results via
     jarvis.sites.job_matching.group_by_tier(). Stores the result for
     subsequent page renders/route handlers. resume/adapters are
-    injectable for tests; production calls load the real résumé and use
-    _portal_adapters().
+    injectable for tests; production calls load the real résumé, and
+    default to _portal_adapters()'s base set (no LinkedIn) when adapters
+    isn't given -- callers that want the extended set (LinkedIn
+    included) pass adapters=_portal_adapters(include_linkedin=True)
+    explicitly (see _handle_refresh() and tools.open_job_portal()).
 
     Deliberately does NOT use run_job_search()'s bounded defaults
     (_MAX_TERMS=3) -- real gap found live 2026-08-14: once Nicholas set
@@ -346,7 +371,11 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _handle_refresh(self) -> None:
         try:
-            tiers = refresh_data()
+            # include_linkedin=True -- this is the manually-clicked
+            # "Atualizar vagas agora" button, an explicit, attended
+            # action (see _portal_adapters()'s docstring for why that
+            # distinction matters for LinkedIn specifically).
+            tiers = refresh_data(adapters=_portal_adapters(include_linkedin=True))
             self._write_json({tier: len(tiers.get(tier, [])) for tier in _TIER_KEYS})
         except Exception as exc:  # noqa: BLE001
             self._write_json({"error": str(exc)}, status=500)

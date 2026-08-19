@@ -42,12 +42,22 @@ Given this is the highest-risk site in this project (see base.py) and
 its DOM is comparatively fragile/likely to drift, search_jobs() here
 stays deliberately low-volume (no pagination, default max_results caps
 at whatever a single results page returns, ~25) rather than pushed as
-hard as the other four -- and is NOT wired into jarvis/job_search.py's
-automatic, unattended find_matching_jobs() tool, only reachable via an
-explicit, direct call. Same reasoning as never automating profile edits
-here: an unattended, repeated automatic search is exactly the kind of
-unsupervised use that risk profile argues against.
-"""
+hard as the other four -- and is still NOT wired into
+jarvis/job_search.py's automatic, unattended find_matching_jobs() tool.
+Same reasoning as never automating profile edits here: an unattended,
+repeated automatic search is exactly the kind of unsupervised use that
+risk profile argues against.
+
+2026-08-19: wired into jarvis/job_portal/server.py's _portal_adapters()
+-- but ONLY for the manually-triggered paths (the portal's own
+"Atualizar vagas agora" button, and the first open of the portal),
+NEVER for refresh_if_due()'s once-a-day unattended timer. Runs as an
+anonymous guest (search_jobs() never checks/uses a saved session), so
+this doesn't expose Nicholas's actual LinkedIn account to automation --
+the residual risk is IP-level rate limiting on the public job-search
+page, not account restriction, and it's kept out of the one path
+(the unattended timer) where he wouldn't be around to notice or step in
+if something looked off."""
 
 from __future__ import annotations
 
@@ -98,7 +108,7 @@ class LinkedInAdapter(SiteAdapter):
         if not session.has_saved_session(self.site_name):
             return SessionStatus.NOT_LOGGED_IN
 
-        p, context = session.open_context(self.site_name, headless=False)
+        p, context = session.open_context(self.site_name, headless=False, off_screen=True)
         try:
             return SessionStatus.AUTHENTICATED if _is_authenticated(context) else SessionStatus.SESSION_EXPIRED
         except Exception:
@@ -127,15 +137,20 @@ class LinkedInAdapter(SiteAdapter):
     def apply_changes(self, plan: UpdatePlan, confirmed: bool) -> UpdateResult:
         raise NotImplementedError(_PROFILE_EDITING_OUT_OF_SCOPE)
 
-    def search_jobs(self, query: str) -> list[JobListing]:
+    def search_jobs(self, query: str, *, max_results: int = 25) -> list[JobListing]:
         """Read-only -- callers should run the result through
         jarvis.sites.job_matching before treating it as "matches". No
-        pagination, deliberately low-volume -- see module docstring."""
+        pagination, deliberately low-volume -- see module docstring.
+        `max_results` accepted (not paginated against) so this matches
+        every other adapter's search_jobs(query, *, max_results=...)
+        signature -- 2026-08-19, needed to wire this into
+        jarvis.job_portal.server's run_job_search() call convention,
+        which always passes max_results as a keyword arg."""
         import urllib.parse
 
         url = f"{_SEARCH_URL}?{urllib.parse.urlencode({'keywords': query})}"
 
-        p, context = session.open_context(self.site_name, headless=False)
+        p, context = session.open_context(self.site_name, headless=False, off_screen=True)
         try:
             page = context.new_page()
             page.goto(url, timeout=45_000, wait_until="domcontentloaded")
@@ -150,6 +165,8 @@ class LinkedInAdapter(SiteAdapter):
             listing = _card_to_job_listing(card)
             if listing is not None:
                 listings.append(listing)
+            if len(listings) >= max_results:
+                break
         return listings
 
     def _extract_listing_cards(self, page) -> list[dict]:

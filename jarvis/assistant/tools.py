@@ -357,7 +357,10 @@ def open_job_portal() -> str:
 
     if server._tiers is None:  # first open this process -- fetch real data now
         try:
-            server.refresh_data()
+            # include_linkedin=True -- opening the portal is itself an
+            # explicit, attended action (see _portal_adapters()'s
+            # docstring for why that's the bar for including LinkedIn).
+            server.refresh_data(adapters=server._portal_adapters(include_linkedin=True))
         except Exception as exc:
             return f"Não consegui buscar as vagas ainda: {exc}. Tento de novo se você pedir."
 
