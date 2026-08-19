@@ -2,7 +2,7 @@
   "meta": {
     "schema_version": "2.0",
     "canonical_language": "pt-BR",
-    "last_updated": "2026-08-18T03:34:58.607575+00:00",
+    "last_updated": "2026-08-19T14:31:31.414827+00:00",
     "source_documents": [
       "Currículo - DataBase - Brasil ATS.docx",
       "Currículo - DataBase - International ATS.docx"
@@ -294,7 +294,10 @@
       "ETL",
       "Databricks",
       "Data Warehouse",
-      "Excel Avançado"
+      "Excel Avançado",
+      "Machine Learning",
+      "Data Analyst",
+      "Data Engineer"
     ],
     "notes": null,
     "availability": {
@@ -513,6 +516,43 @@
       ],
       "source": "voice",
       "note": "Testado ao vivo (2026-08-17): Estatística=20 relevantes, ETL=9, Databricks=4, Data Warehouse=2, Excel Avançado=2, Tableau=0 (não incluído)."
+    },
+    {
+      "timestamp": "2026-08-19T14:31:31.414252+00:00",
+      "field_path": "job_preferences.target_roles",
+      "old_value": [
+        "Analista de Dados",
+        "Cientista de Dados",
+        "Engenheiro de Dados",
+        "Business Intelligence",
+        "Power BI",
+        "Python",
+        "SQL",
+        "Estatística",
+        "ETL",
+        "Databricks",
+        "Data Warehouse",
+        "Excel Avançado"
+      ],
+      "new_value": [
+        "Analista de Dados",
+        "Cientista de Dados",
+        "Engenheiro de Dados",
+        "Business Intelligence",
+        "Power BI",
+        "Python",
+        "SQL",
+        "Estatística",
+        "ETL",
+        "Databricks",
+        "Data Warehouse",
+        "Excel Avançado",
+        "Machine Learning",
+        "Data Analyst",
+        "Data Engineer"
+      ],
+      "source": "manual_review",
+      "note": "2026-08-19: MAIS OPÇÕES -- adicionados termos de busca em inglês (Data Analyst/Data Engineer) e Machine Learning, distintos o suficiente dos termos já existentes pra achar vagas novas, não só reclassificar as mesmas."
     }
   ]
 }
