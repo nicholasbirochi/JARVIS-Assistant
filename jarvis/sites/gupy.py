@@ -171,6 +171,16 @@ SITE_NAME = "gupy"
 _WRITABLE_FIELDS = {"full_name", "phone"}
 
 
+def _clean_question_id(question_text: str) -> str:
+    """Strips the leading "N. " numbering and any trailing whitespace/
+    required-marker ("*") from a company question's raw text -- see
+    _fill_company_answer()'s docstring for why this exists (a real,
+    confirmed-live DOM inconsistency, not a guess)."""
+    text = re.sub(r"^\d+\.\s*", "", question_text)
+    text = re.sub(r"\*\s*$", "", text)
+    return text.strip()
+
+
 def _strip_country_code(phone: str | None) -> str | None:
     """Résumé phone numbers are stored as "+55 (11) 95827-5250"; Gupy's
     mobile-number field holds just "(11) 95827-5250" (country code is a
@@ -879,14 +889,28 @@ class GupyAdapter(SiteAdapter):
         rendered this way); a multiple-choice ("estado civil"?) question
         would need a different selector never observed live yet, so this
         deliberately fails closed (returns False) rather than guessing
-        at one."""
-        escaped = question_text.replace('"', '\\"')
-        selector = f'[id="input-{escaped}"]'
-        try:
-            page.fill(selector, value, timeout=5000)
-            return True
-        except Exception:
-            return False
+        at one.
+
+        Real, confirmed-live inconsistency found 2026-08-19 (Integra
+        CSC, during a supervised investigation): that listing's real id
+        was just "input-Qual sua pretensão salarial?" -- no "N. "
+        numbering prefix and no trailing whitespace/required-marker at
+        all, unlike the still-real 2026-08-13 BIP Brasil case this
+        method was originally built around (which used the full,
+        still-numbered question text). Different companies' Gupy forms
+        apparently generate this id differently. Tries the raw question
+        text first (preserves the original, still-real case), then a
+        cleaned version (numbering prefix and trailing "*"/whitespace
+        stripped) as a fallback, rather than assuming only one shape."""
+        for candidate in dict.fromkeys([question_text, _clean_question_id(question_text)]):
+            escaped = candidate.replace('"', '\\"')
+            selector = f'[id="input-{escaped}"]'
+            try:
+                page.fill(selector, value, timeout=5000)
+                return True
+            except Exception:
+                continue
+        return False
 
     def _get_apply_href(self, page) -> str | None:
         return page.evaluate(

@@ -11,6 +11,7 @@ from jarvis.sites import application_profile
 from jarvis.sites.gupy import (
     GupyAdapter,
     _card_to_job_listing,
+    _clean_question_id,
     _decode_job_id,
     _is_authenticated,
     _map_resume_to_gupy_fields,
@@ -754,6 +755,62 @@ def test_preview_application_closes_context_and_stops_playwright(monkeypatch):
 
     assert fake_context.closed is True
     assert fake_p.stopped is True
+
+
+# --- _clean_question_id() / _fill_company_answer() ----------------------
+#
+# Real, confirmed-live inconsistency found 2026-08-19 (Integra CSC,
+# during a supervised investigation): that listing's real input id was
+# "input-Qual sua pretensão salarial?" -- no "N. " numbering prefix, no
+# trailing whitespace/required-marker -- unlike the still-real
+# 2026-08-13 BIP Brasil case (full, still-numbered question text used
+# as-is). This is the real bug a supervised test caught: the original
+# selector never matched this listing's real DOM at all, so the fill
+# silently failed and nothing advanced.
+
+
+def test_clean_question_id_strips_numbering_and_trailing_marker():
+    assert _clean_question_id("1. Qual sua pretensão salarial? \xa0*") == "Qual sua pretensão salarial?"
+    assert _clean_question_id("12. Você tem CNH?*") == "Você tem CNH?"
+
+
+def test_clean_question_id_no_op_when_already_clean():
+    assert _clean_question_id("Qual sua pretensão salarial?") == "Qual sua pretensão salarial?"
+
+
+def test_fill_company_answer_tries_the_raw_text_selector_first():
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        fill_selectors={'[id="input-1. Qual sua pretensão salarial? \xa0*"]'},
+    )
+
+    ok = GupyAdapter()._fill_company_answer(page, "1. Qual sua pretensão salarial? \xa0*", "R$ 4.500,00")
+
+    assert ok is True
+    assert page.filled == {'[id="input-1. Qual sua pretensão salarial? \xa0*"]': "R$ 4.500,00"}
+
+
+def test_fill_company_answer_falls_back_to_the_cleaned_id_real_integracsc_case():
+    # The real, live-confirmed case that exposed this bug -- only the
+    # CLEANED selector exists on this listing's real DOM.
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        fill_selectors={'[id="input-Qual sua pretensão salarial?"]'},
+    )
+
+    ok = GupyAdapter()._fill_company_answer(page, "1. Qual sua pretensão salarial? \xa0*", "R$ 6.500,00")
+
+    assert ok is True
+    assert page.filled == {'[id="input-Qual sua pretensão salarial?"]': "R$ 6.500,00"}
+
+
+def test_fill_company_answer_fails_closed_when_neither_selector_matches():
+    page = FakeApplicationPage(step_texts=["algo"], fill_selectors=set())
+
+    ok = GupyAdapter()._fill_company_answer(page, "1. Qual sua pretensão salarial? \xa0*", "R$ 4.500,00")
+
+    assert ok is False
+    assert page.filled == {}
 
 
 # --- continue_application_with_profile() --------------------------------
