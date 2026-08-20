@@ -589,7 +589,9 @@ class GupyAdapter(SiteAdapter):
             context.close()
             p.stop()
 
-    def continue_application_with_profile(self, job_url: str, confirmed: bool) -> ApplicationPreview:
+    def continue_application_with_profile(
+        self, job_url: str, confirmed: bool, *, finalize: bool = False
+    ) -> ApplicationPreview:
         """A REAL, mutating action (unlike preview_application() above)
         -- refuses without confirmed=True, matching every other write
         action in this project (apply_changes()). Walks the same safe
@@ -605,10 +607,24 @@ class GupyAdapter(SiteAdapter):
         any field is unsupported, rather than partially filling a form
         that can't actually be completed. The real values themselves are
         NEVER stored on the returned ApplicationQuestion or anywhere
-        else -- only whether each field was filled. Still never clicks
-        a genuine final submit -- that step has never been observed live
-        (see module docstring) -- so even full success here only means
-        "got one step further than ever verified before," not "sent"."""
+        else -- only whether each field was filled.
+
+        finalize=False (default): stops right after saving the company
+        questions, same as always -- does not look for or click any
+        further button. finalize=True is a SECOND, separate real-write
+        gate on top of confirmed=True (both required) -- after saving
+        the company questions, looks for the real "Finalizar
+        candidatura" button (an optional "Apresente-se!" personalization
+        step may appear first, offering "Personalizar candidatura" vs
+        "Finalizar candidatura" -- this always takes the skip-
+        personalization path, never writes a free-text self-
+        introduction) and clicks it. Only sets submitted=True if the
+        resulting screen's own text actually says "Candidatura
+        finalizada" -- a click that doesn't produce that real
+        confirmation is reported as a failure, not assumed successful.
+        Confirmed live 2026-08-19 (Integra CSC, human-supervised,
+        Nicholas explicitly said "Eu quero que finalize!") -- the first
+        real, complete, human-approved submission in this project."""
         if not confirmed:
             return ApplicationPreview(
                 site_name=self.site_name,
@@ -711,11 +727,64 @@ class GupyAdapter(SiteAdapter):
             page.wait_for_timeout(2000)
             page.wait_for_load_state("networkidle", timeout=30_000)
 
+            if finalize:
+                clicked = self._click_text_button(page, "Finalizar candidatura")
+                if clicked:
+                    page.wait_for_timeout(2500)
+                    page.wait_for_load_state("networkidle", timeout=30_000)
+                    confirmation_text = self._extract_step_text(page)
+                    if "Candidatura finalizada" in confirmation_text:
+                        reason = (
+                            "Candidatura enviada e confirmada de verdade -- a página mostrou "
+                            '"Candidatura finalizada!" após o clique.'
+                        )
+                        return ApplicationPreview(
+                            site_name=self.site_name,
+                            job_url=job_url,
+                            can_submit=True,
+                            submitted=True,
+                            blocked_reason=None,
+                            questions=questions,
+                            summary_text=self._render_application_summary(reason, questions),
+                        )
+                    reason = (
+                        'Cliquei em "Finalizar candidatura" mas a página não mostrou a '
+                        "confirmação esperada depois -- confira manualmente antes de assumir "
+                        "que foi enviada."
+                    )
+                    return ApplicationPreview(
+                        site_name=self.site_name,
+                        job_url=job_url,
+                        can_submit=False,
+                        blocked_reason=reason,
+                        questions=questions,
+                        summary_text=self._render_application_summary(reason, questions),
+                    )
+                # finalize=True but the button never appeared (e.g. a
+                # step this project hasn't seen yet) -- fall through,
+                # but say so explicitly rather than reusing the
+                # finalize=False message below, which would wrongly
+                # imply finalize was never requested at all.
+                reason = (
+                    'Preenchi as perguntas da empresa e avancei, mas não encontrei o botão '
+                    '"Finalizar candidatura" nessa tela -- a vaga pode ter uma etapa diferente '
+                    "das já vistas. Parei aqui em vez de arriscar clicar em algo errado; "
+                    "confira manualmente."
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name,
+                    job_url=job_url,
+                    can_submit=False,
+                    blocked_reason=reason,
+                    questions=questions,
+                    summary_text=self._render_application_summary(reason, questions),
+                )
+
             reason = (
                 "Preenchi as perguntas da empresa com os dados do seu arquivo local e avancei "
-                "-- mas o clique final de envio nunca foi verificado ao vivo antes, então parei "
-                "aqui por segurança. Confira manualmente no navegador antes de qualquer envio "
-                "real -- as respostas não poderão ser editadas depois."
+                "-- mas não pedi pra enviar de verdade dessa vez (finalize=False), então parei "
+                "aqui. Confira manualmente no navegador, ou peça pra eu finalizar -- as "
+                "respostas não poderão ser editadas depois."
             )
             return ApplicationPreview(
                 site_name=self.site_name,

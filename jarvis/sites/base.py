@@ -320,17 +320,20 @@ class ApplicationQuestion:
 
 @dataclass
 class ApplicationPreview:
-    """Dry-run result of walking as far into a real job-application flow
-    as it's safe to go automatically -- the apply-flow equivalent of
-    ChangePreview/preview_changes() above. NEVER submits anything.
-    can_submit is always False in this project's current implementation
-    -- the real "click the final submit button" step has never been
-    reached in a live, human-supervised session (every real listing
-    tested so far stopped at a company-specific question first), so
-    there is no verified final-step selector to click yet. Claiming
-    can_submit=True without ever having seen a real successful
-    submission would violate this project's own "never claim full
-    support until tested end-to-end" rule."""
+    """Result of walking as far into a real job-application flow as
+    requested -- the apply-flow equivalent of ChangePreview/
+    preview_changes() above. preview_application() (read-only) NEVER
+    submits anything and NEVER sets submitted=True. can_submit meant
+    "reached a clean state with nothing blocking submission" and was
+    permanently False for a long time because the real final submit
+    step had never been reached live -- that changed 2026-08-19: a
+    real, human-supervised, explicitly-confirmed submission (Gupy,
+    Integra CSC, via continue_application_with_profile(finalize=True))
+    reached the real "Finalizar candidatura" button and got back a
+    genuine "Candidatura finalizada!" confirmation. submitted is the
+    stricter, more honest field for that: True only when this specific
+    run actually clicked a real submit button AND received a real
+    confirmation back, not just "nothing is blocking it."."""
 
     site_name: str
     job_url: str
@@ -338,6 +341,7 @@ class ApplicationPreview:
     blocked_reason: str | None
     questions: list[ApplicationQuestion] = field(default_factory=list)
     summary_text: str = ""
+    submitted: bool = False
 
 
 class SiteAdapter(ABC):

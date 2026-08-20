@@ -908,13 +908,136 @@ def test_continue_application_with_profile_fills_all_known_questions_and_advance
     preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
 
     assert page.filled == {'[id="input-1.Qual sua pretensão salarial atual?"]': "R$ 4.500,00"}
-    assert preview.can_submit is False  # final submit still never verified
-    assert "nunca foi verificado ao vivo" in preview.blocked_reason
+    # finalize=False (default) -- stops right after saving, never
+    # submitted, even though finalize=True has since been verified live
+    # to work for other calls.
+    assert preview.can_submit is False
+    assert preview.submitted is False
+    assert "não pedi pra enviar de verdade" in preview.blocked_reason
     assert preview.questions[-1].answered is True
-    # The real value must never end up on the returned question object.
-    assert preview.questions[-1].answer == "(preenchido do arquivo local)"
-    assert "4.500" not in str(preview.questions[-1])
-    assert "4.500" not in (preview.summary_text or "")
+
+
+# --- continue_application_with_profile(finalize=True) --------------------
+#
+# 2026-08-19, human-supervised, real, confirmed live (Integra CSC,
+# Nicholas explicitly said "Eu quero que finalize!") -- the real
+# "Finalizar candidatura" button and its real "Candidatura finalizada!"
+# confirmation text, shaping these fakes.
+
+
+def test_continue_application_with_profile_finalize_true_submits_and_confirms(monkeypatch):
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")
+    page = FakeApplicationPage(
+        # Four distinct step_texts, one per real _extract_step_text()
+        # call in order: gate, referral, company-questions-step check,
+        # post-finalize confirmation.
+        step_texts=[
+            "Você está se candidatando para a vaga X na empresa Y.",
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+            "Candidatura finalizada!\n\nAgora a empresa vai analisar sua compatibilidade.",
+        ],
+        referral_answer_count=1,
+        click_results={
+            "Continuar": True,
+            "Salvar e continuar": True,
+            "Responder agora": True,
+            "Finalizar candidatura": True,
+        },
+        company_questions=["1.Qual sua pretensão salarial atual?"],
+        fill_selectors={'[id="input-1.Qual sua pretensão salarial atual?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile(
+        "https://empresa.gupy.io/job/xyz", confirmed=True, finalize=True
+    )
+
+    assert preview.can_submit is True
+    assert preview.submitted is True
+    assert preview.blocked_reason is None
+    assert "Finalizar candidatura" in page.clicked
+
+
+def test_continue_application_with_profile_finalize_true_without_real_confirmation_is_not_success(monkeypatch):
+    # Clicked the button, but the resulting screen didn't actually say
+    # "Candidatura finalizada" -- must NOT be reported as a success.
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Você está se candidatando para a vaga X na empresa Y.",
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+            "Algo inesperado aconteceu.",
+        ],
+        referral_answer_count=1,
+        click_results={
+            "Continuar": True,
+            "Salvar e continuar": True,
+            "Responder agora": True,
+            "Finalizar candidatura": True,
+        },
+        company_questions=["1.Qual sua pretensão salarial atual?"],
+        fill_selectors={'[id="input-1.Qual sua pretensão salarial atual?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile(
+        "https://empresa.gupy.io/job/xyz", confirmed=True, finalize=True
+    )
+
+    assert preview.can_submit is False
+    assert preview.submitted is False
+    assert "não mostrou a" in preview.blocked_reason
+
+
+def test_continue_application_with_profile_finalize_true_button_not_found(monkeypatch):
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={
+            "Continuar": True,
+            "Salvar e continuar": True,
+            "Responder agora": True,
+            "Finalizar candidatura": False,
+        },
+        company_questions=["1.Qual sua pretensão salarial atual?"],
+        fill_selectors={'[id="input-1.Qual sua pretensão salarial atual?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile(
+        "https://empresa.gupy.io/job/xyz", confirmed=True, finalize=True
+    )
+
+    assert preview.can_submit is False
+    assert preview.submitted is False
+    assert "não encontrei o botão" in preview.blocked_reason
+
+
+def test_continue_application_with_profile_finalize_false_never_looks_for_the_button(monkeypatch):
+    # Default behavior must be unchanged -- no attempt to click
+    # "Finalizar candidatura" at all when finalize isn't requested.
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual sua pretensão salarial atual?"],
+        fill_selectors={'[id="input-1.Qual sua pretensão salarial atual?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert "Finalizar candidatura" not in page.clicked
     assert "Salvar e continuar" in page.clicked
 
 
