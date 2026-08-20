@@ -353,6 +353,25 @@ _BANK_COMPANIES = [
     "morgan stanley",
     "barclays",
     "bnp paribas",
+    # 2026-08-19, round 3 ("foque bastante em colocar bancos!! e
+    # fintechs!!!"). "ing bank" (not bare "ing" -- that 3-letter
+    # fragment appears inside dozens of ordinary English words like
+    # "banking"/"training", the exact class of false positive this
+    # project has already been bitten by once).
+    "banco pine",
+    "banco master",
+    "banco rendimento",
+    "banco ourinvest",
+    "novo banco continental",
+    "standard chartered",
+    "scotiabank",
+    "ing bank",
+    "bank of america",
+    "rabobank",
+    "société générale",
+    "societe generale",
+    "mizuho",
+    "sumitomo mitsui",
 ]
 
 # Digital-native financial-tech companies -- added as its own tier
@@ -418,6 +437,31 @@ _FINTECH_COMPANIES = [
     "xp",
     "capco",
     "b3",
+    # 2026-08-19, round 3 ("foque bastante em colocar bancos!! e
+    # fintechs!!!"). "ton" (Stone's own product) deliberately left out
+    # -- too short/generic a fragment (collides with unrelated words) to
+    # match safely the way the other short keys here ("xp", "b3") were
+    # already proven safe against with real regression tests.
+    "superdigital",
+    "infinitepay",
+    "zoop",
+    "meliuz",
+    "bxblue",
+    "nexoos",
+    "bitso",
+    "mercado bitcoin",
+    "foxbit",
+    "novadax",
+    "órama investimentos",
+    "orama investimentos",
+    "rico investimentos",
+    "easynvest",
+    "konduto",
+    "guiabolso",
+    "mobills",
+    "organizze",
+    "finanzero",
+    "credihome",
 ]
 
 # Established, large, mostly publicly-traded tech companies -- global

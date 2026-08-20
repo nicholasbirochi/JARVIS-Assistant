@@ -318,6 +318,25 @@ def test_company_tier_recognizes_the_2026_08_19_expansion():
     assert company_tier("Mottu") == "startup"
 
 
+def test_company_tier_recognizes_the_round_3_bank_and_fintech_expansion():
+    # 2026-08-19, round 3 ("foque bastante em colocar bancos!! e
+    # fintechs!!!").
+    assert company_tier("Banco Master") == "banco"
+    assert company_tier("ING Bank N.V.") == "banco"
+    assert company_tier("Meliuz") == "fintech"
+    assert company_tier("Mercado Bitcoin") == "fintech"
+
+
+def test_company_tier_does_not_false_positive_on_bare_ing_substring():
+    # Real risk this project has already been bitten by once (see
+    # _matches_known_name's docstring): "ing" as a bare 3-letter
+    # fragment appears inside ordinary words like "banking"/"training".
+    # "ing bank" (multi-word) is safe; bare "ing" was deliberately never
+    # added.
+    assert company_tier("Training Corp Consultoria") is None
+    assert company_tier("Banking Solutions LTDA") is None
+
+
 def test_company_tier_recognizes_companies_found_in_that_days_real_results():
     # Round 2, same day: found by actually inspecting the "outras"
     # bucket's real company names that the first widening pass still
