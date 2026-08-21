@@ -346,6 +346,7 @@ def test_company_tier_recognizes_companies_found_2026_08_21():
     assert company_tier("Mixpanel") == "bigtech"
     assert company_tier("Núclea") == "fintech"
     assert company_tier("TRACTIAN") == "startup"
+    assert company_tier("Anima Educação") == "bigtech"
 
 
 def test_company_tier_does_not_false_positive_on_bare_ing_substring():

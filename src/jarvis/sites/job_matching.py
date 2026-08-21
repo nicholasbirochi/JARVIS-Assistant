@@ -564,6 +564,8 @@ _BIGTECH_COMPANIES = [
     "rd saúde",
     "rd saude",
     "larsen & toubro",
+    "anima educação",
+    "anima educacao",
 ]
 
 # Real, named Brazilian startups/scale-ups -- a genuine list (same
