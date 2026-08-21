@@ -14,17 +14,17 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from jarvis.assistant.providers import get_provider  # noqa: E402
-from jarvis.config import (  # noqa: E402
+from assistant.providers import get_provider  # noqa: E402
+from config import (  # noqa: E402
     RESUME_PATH,
     RESUME_SCHEMA_PATH,
     REVIEW_DIR,
     SOURCE_RESUME_DOCS,
 )
-from jarvis.resume.docx_extract import extract_text  # noqa: E402
-from jarvis.resume.schema import Resume  # noqa: E402
+from resume.docx_extract import extract_text  # noqa: E402
+from resume.schema import Resume  # noqa: E402
 
 SYSTEM_PROMPT = """\
 Você recebe o texto bruto de duas versões (português e inglês) do mesmo \

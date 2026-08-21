@@ -1,9 +1,10 @@
 import json
 
 from jarvis import config
-from jarvis.indexing import proposer, runner
+from jarvis.indexing import runner
 from jarvis.indexing.proposals import LLMProposalBatch, LLMProposedChange
 from jarvis.resume.schema import Bilingual, PersonalInfo, Resume
+from jarvis.indexing import proposer
 
 
 def make_resume() -> Resume:

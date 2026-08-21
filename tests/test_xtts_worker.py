@@ -7,7 +7,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from jarvis.voice import xtts_engine, xtts_worker
+from jarvis.voice import xtts_worker
+from jarvis.voice import xtts_engine
 
 
 @pytest.fixture()

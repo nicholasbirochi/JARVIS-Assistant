@@ -1,6 +1,7 @@
 import pytest
 
-from jarvis import config, reminders
+from jarvis import reminders
+from jarvis import config
 
 
 @pytest.fixture(autouse=True)

@@ -12,10 +12,12 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from jarvis.indexing import extract, proposer, scanner
+from jarvis.indexing import extract
+from jarvis.indexing import scanner
 from jarvis.indexing.proposals import Proposal
 from jarvis.resume import store
 from jarvis.resume.schema import Resume
+from jarvis.indexing import proposer
 
 
 def run(resume: Resume | None = None, limit: int | None = None) -> Path | None:

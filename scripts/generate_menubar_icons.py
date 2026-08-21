@@ -18,7 +18,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from AppKit import (  # noqa: E402
     NSApplication,
@@ -40,7 +40,7 @@ from AppKit import (  # noqa: E402
 # plain script rather than from inside an app's run loop.
 NSApplication.sharedApplication()
 
-ASSETS_DIR = Path(__file__).resolve().parent.parent / "jarvis" / "assets"
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "src" / "jarvis" / "assets"
 
 ICONS = {
     "icon_off.png": "speaker.slash.fill",

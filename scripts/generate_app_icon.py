@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from AppKit import (  # noqa: E402
     NSApplication,
@@ -35,7 +35,7 @@ from AppKit import (  # noqa: E402
 NSApplication.sharedApplication()
 
 ICONSET_DIR = Path(__file__).resolve().parent.parent / "build" / "JARVIS.iconset"
-ICNS_OUTPUT = Path(__file__).resolve().parent.parent / "jarvis" / "assets" / "AppIcon.icns"
+ICNS_OUTPUT = Path(__file__).resolve().parent.parent / "src" / "jarvis" / "assets" / "AppIcon.icns"
 
 # (filename, pixel size) -- exactly what `iconutil -c icns` expects to find
 # inside an .iconset directory.

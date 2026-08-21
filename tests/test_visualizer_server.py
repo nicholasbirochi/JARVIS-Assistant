@@ -4,7 +4,8 @@ import urllib.request
 
 import pytest
 
-from jarvis.visualizer import server, state
+from jarvis.visualizer import state
+from jarvis.visualizer import server
 
 
 @pytest.fixture(autouse=True)

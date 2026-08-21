@@ -40,6 +40,8 @@ import threading
 
 from jarvis.assistant.llm_client import send_turn
 from jarvis.config import GREETING, STOP_PHRASES
+from jarvis.voice import tts
+from jarvis.voice import audio, stt
 
 GOODBYE = "Até logo, Senhor Nicholas."
 MAX_CONSECUTIVE_EMPTY_TRANSCRIPTIONS = 3
@@ -233,7 +235,7 @@ def run_voice_loop(
     import time
 
     from jarvis.visualizer import state as visualizer_state
-    from jarvis.voice import audio, stt, tts, xtts_client
+    from jarvis.voice import xtts_client
     from jarvis.voice.wake_word import WakeWordListener
 
     # Starts the XTTS worker as a genuinely separate OS process (see

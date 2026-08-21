@@ -6,7 +6,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from jarvis import config
-from jarvis.voice import xtts_client, xtts_engine
+from jarvis.voice import xtts_engine
+from jarvis.voice import xtts_client
 
 
 class FakePopen:
