@@ -265,6 +265,66 @@ def test_render_page_never_raises_with_no_data():
     assert "<html" in page.lower()
 
 
+# --- /api/status + the page's own auto-reload script ---------------------
+#
+# 2026-08-21, "deixe o site responsivo!": open_job_portal() opens the
+# page immediately and searches in a background thread (fixing "o site
+# continua sem funcionar" -- it used to be unreachable for the whole
+# search), but that left the page never updating itself once the search
+# actually finished. This is the fix: the page polls /api/status while
+# _tiers is still None, and reloads once it isn't.
+
+
+def test_render_page_includes_the_polling_script_while_still_searching():
+    server._tiers = None
+
+    page = server.render_page()
+
+    assert "/api/status" in page
+
+
+def test_render_page_omits_the_polling_script_once_data_exists():
+    # Even an empty-but-real result (a search that genuinely found
+    # nothing) must stop polling -- "still None" is the only "keep
+    # polling" signal, not "zero listings".
+    server._tiers = {tier: [] for tier in server._TIER_KEYS}
+
+    page = server.render_page()
+
+    assert "/api/status" not in page
+
+
+def test_status_endpoint_reports_not_ready_before_any_refresh():
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=5) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert resp.status == 200
+    assert body == {"ready": False}
+
+
+def test_status_endpoint_reports_ready_once_tiers_exist():
+    port = server.start(port=0)
+    server._tiers = {tier: [] for tier in server._TIER_KEYS}
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=5) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body == {"ready": True}
+
+
+def test_status_endpoint_never_triggers_a_search(monkeypatch):
+    # Unlike /api/refresh, polling this must be cheap and read-only.
+    port = server.start(port=0)
+    calls = []
+    monkeypatch.setattr(server, "refresh_data", lambda **kwargs: calls.append(1))
+
+    urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=5).read()
+
+    assert calls == []
+
+
 # --- daily refresh (is_refresh_due / refresh_if_due) ---------------------
 #
 # Own tracking file (portal_last_refresh.json), independent from

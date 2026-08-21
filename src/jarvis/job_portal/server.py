@@ -309,8 +309,32 @@ def _render_section(tier: str, listings: list[JobListing]) -> str:
     )
 
 
+# 2026-08-21, "deixe o site responsivo!" -- open_job_portal() now opens
+# the page immediately and runs the first search in a background
+# thread (see tools.py), which fixed the page being unreachable for up
+# to an hour, but left a new, real gap: the page never updated itself
+# once that search finished -- Nicholas had to know to hit Cmd+R
+# himself. This script polls /api/status every few seconds ONLY while
+# _tiers is still None (the "haven't fetched anything yet at all" case,
+# not "refresh finished and found 0 results" -- see _current_tiers()),
+# and reloads once real data exists. Deliberately NOT wired to
+# "Atualizar vagas agora" (that already reloads itself on its own
+# fetch's completion, synchronously, no polling needed there).
+_POLL_SCRIPT = """<script>
+(function () {
+  var iv = setInterval(function () {
+    fetch("/api/status").then(function (r) { return r.json(); }).then(function (data) {
+      if (data.ready) { clearInterval(iv); window.location.reload(); }
+    }).catch(function () {});
+  }, 4000);
+})();
+</script>"""
+
+
 def render_page() -> str:
     tiers = _current_tiers()
+    with _tiers_lock:
+        still_searching = _tiers is None
     # .get(tier, []) throughout -- "outras" is only populated by a real
     # refresh_data() call (include_other=True); older/injected _tiers
     # dicts (tests, or a page load before the first refresh finishes)
@@ -325,6 +349,7 @@ def render_page() -> str:
         startup_count=len(tiers.get("startup", [])),
         outras_count=len(tiers.get("outras", [])),
         sections=sections,
+        polling_script=_POLL_SCRIPT if still_searching else "",
     )
 
 
@@ -335,9 +360,19 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path in ("/", "/index.html"):
             self._serve_page()
+        elif self.path == "/api/status":
+            self._handle_status()
         else:
             self.send_response(404)
             self.end_headers()
+
+    def _handle_status(self) -> None:
+        # Cheap, read-only poll target for the page's own auto-reload
+        # script (_POLL_SCRIPT) -- never triggers a search itself,
+        # unlike /api/refresh.
+        with _tiers_lock:
+            ready = _tiers is not None
+        self._write_json({"ready": ready})
 
     def do_POST(self) -> None:
         if self.path == "/api/check":
