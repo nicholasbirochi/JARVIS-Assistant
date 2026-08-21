@@ -327,6 +327,17 @@ def test_company_tier_recognizes_the_round_3_bank_and_fintech_expansion():
     assert company_tier("Mercado Bitcoin") == "fintech"
 
 
+def test_company_tier_recognizes_companies_found_2026_08_21():
+    # Same technique, another day: inspecting that day's real "outras"
+    # results for companies the earlier rounds still missed.
+    assert company_tier("Whirlpool Corporation") == "bigtech"
+    assert company_tier("DoorDash") == "bigtech"
+    assert company_tier("Globo") == "bigtech"
+    assert company_tier("Mixpanel") == "bigtech"
+    assert company_tier("Núclea") == "fintech"
+    assert company_tier("TRACTIAN") == "startup"
+
+
 def test_company_tier_does_not_false_positive_on_bare_ing_substring():
     # Real risk this project has already been bitten by once (see
     # _matches_known_name's docstring): "ing" as a bare 3-letter

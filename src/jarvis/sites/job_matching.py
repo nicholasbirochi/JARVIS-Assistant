@@ -462,6 +462,14 @@ _FINTECH_COMPANIES = [
     "organizze",
     "finanzero",
     "credihome",
+    # 2026-08-21, round 3 -- same technique, inspecting that day's real
+    # "outras" results. "fundo garantidor de créditos" (not the bare
+    # "fgc" abbreviation) for the same short-key false-positive
+    # reasoning as "ton" above.
+    "núclea",
+    "nuclea",
+    "fundo garantidor de créditos",
+    "fundo garantidor de creditos",
 ]
 
 # Established, large, mostly publicly-traded tech companies -- global
@@ -535,6 +543,18 @@ _BIGTECH_COMPANIES = [
     "ibope",
     "cogna educação",
     "cogna educacao",
+    # 2026-08-21, round 3: same technique, inspecting that day's real
+    # "outras" results again -- these are real, high-scale companies
+    # the earlier rounds still missed.
+    "whirlpool",
+    "doordash",
+    "globo",
+    "gft technologies",
+    "mixpanel",
+    "wpp media",
+    "rd saúde",
+    "rd saude",
+    "larsen & toubro",
 ]
 
 # Real, named Brazilian startups/scale-ups -- a genuine list (same
@@ -613,6 +633,9 @@ _STARTUP_COMPANIES = [
     "cerc",
     "provu",
     "cashme",
+    # 2026-08-21, round 3 -- same technique, inspecting that day's real
+    # "outras" results.
+    "tractian",
 ]
 
 
