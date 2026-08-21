@@ -392,6 +392,15 @@ _BANK_COMPANIES = [
 _FINTECH_COMPANIES = [
     "nubank",
     "banco inter",
+    # 2026-08-21: bare "inter" -- checked the real collision risk before
+    # adding (Nicholas asked specifically). A real company field lists
+    # the registered name, not a nickname -- "Sport Club Internacional"
+    # (the soccer club, the actual worry) does NOT match \binter\b at
+    # all (it's one continuous word, "internacional"), so the risk is
+    # much lower than "inter" as a bare fragment usually implies. Also
+    # catches "Inter&Co", the bank's own current official rebrand.
+    "inter",
+    "inter&co",
     "c6 bank",
     "original",
     "neon",

@@ -327,6 +327,16 @@ def test_company_tier_recognizes_the_round_3_bank_and_fintech_expansion():
     assert company_tier("Mercado Bitcoin") == "fintech"
 
 
+def test_company_tier_recognizes_bare_inter_without_colliding_with_the_soccer_club():
+    # 2026-08-21, Nicholas asked directly: bare "inter" added after
+    # checking the real risk -- the soccer club's real, registered name
+    # ("Sport Club Internacional") is one continuous word and does NOT
+    # match \binter\b at all.
+    assert company_tier("Inter") == "fintech"
+    assert company_tier("Inter&Co") == "fintech"
+    assert company_tier("Sport Club Internacional") is None
+
+
 def test_company_tier_recognizes_companies_found_2026_08_21():
     # Same technique, another day: inspecting that day's real "outras"
     # results for companies the earlier rounds still missed.
