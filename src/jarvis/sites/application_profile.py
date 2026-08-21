@@ -96,6 +96,15 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     "salary_junior": "JARVIS_APPLICATION_SALARY_JUNIOR",
     "salary_pleno": "JARVIS_APPLICATION_SALARY_PLENO",
     "marital_status": "JARVIS_APPLICATION_MARITAL_STATUS",
+    # 2026-08-21: the recurring, generic company questions -- see
+    # base.py's _FIELD_TERMS comment. "linkedin" and "ja_trabalhou_aqui"
+    # deliberately have NO entry here -- they're resolved elsewhere
+    # (the résumé's own public link, and a fixed "Não" respectively),
+    # not from this confidential-data file.
+    "cnh": "JARVIS_APPLICATION_CNH",
+    "disponibilidade_viagem": "JARVIS_APPLICATION_DISPONIBILIDADE_VIAGEM",
+    "disponibilidade_fds": "JARVIS_APPLICATION_DISPONIBILIDADE_FDS",
+    "escolaridade": "JARVIS_APPLICATION_ESCOLARIDADE",
 }
 
 

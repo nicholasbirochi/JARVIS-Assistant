@@ -637,6 +637,24 @@ class GupyAdapter(SiteAdapter):
         from jarvis.sites.application_profile import load_application_profile
 
         profile = load_application_profile()
+        # Two fields resolved OUTSIDE the confidential .env profile,
+        # 2026-08-21 (see base.py's _FIELD_TERMS comment):
+        # - "ja_trabalhou_aqui" is always "Não" -- unconditionally true
+        #   for any external candidate applying cold, same reasoning as
+        #   the standard referral question's own "você trabalha na
+        #   empresa?" -- never worth asking Nicholas to confirm per job.
+        # - "linkedin" comes from the résumé's own public links (not a
+        #   secret -- it's already on his résumé/LinkedIn profile
+        #   itself), so a company matching Itaú/Santander/XP's referral
+        #   contact doesn't need a SEPARATE local .env entry duplicating
+        #   data that already lives in data/resume.json.
+        profile["ja_trabalhou_aqui"] = "Não"
+        if not profile.get("linkedin"):
+            from jarvis.resume import store as resume_store
+
+            resume_linkedin = resume_store.load().personal_info.links.linkedin
+            if resume_linkedin:
+                profile["linkedin"] = resume_linkedin
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:

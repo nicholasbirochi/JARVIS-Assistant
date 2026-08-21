@@ -185,6 +185,35 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "renda",
     ],
     "marital_status": ["estado civil"],
+    # 2026-08-21: compiled from the actual, real company-question text
+    # seen live across several listings (Autoglass, ALS Life Sciences,
+    # Camed Corretora, Fundação Itaú and others) -- the most generic,
+    # recurring ones, not a guess ("me mande as perguntas mais
+    # genéricas e que sempre aparecem"). "linkedin" is resolved from the
+    # résumé's own public links (not the confidential .env profile --
+    # see application_profile.py). "ja_trabalhou_aqui" gets a fixed
+    # "Não" answer in gupy.py rather than a real .env value -- same
+    # reasoning as the standard referral question's own "você trabalha
+    # na empresa?" (always false for an external candidate), not
+    # something that needs asking every time.
+    "linkedin": ["linkedin"],
+    "cnh": ["cnh", "carteira nacional de habilitação", "carteira nacional de habilitacao"],
+    "ja_trabalhou_aqui": [
+        "ex-colaborador",
+        "ex colaborador",
+        "já trabalhou nesta empresa",
+        "ja trabalhou nesta empresa",
+        "já trabalhou nessa empresa",
+        "ja trabalhou nessa empresa",
+    ],
+    "disponibilidade_viagem": ["disponibilidade para viajar", "disponível para viajar", "disponivel para viajar"],
+    "disponibilidade_fds": [
+        "trabalhar aos sábados",
+        "trabalhar aos sabados",
+        "disponibilidade para fins de semana",
+        "disponibilidade para final de semana",
+    ],
+    "escolaridade": ["ensino superior completo", "superior completo", "escolaridade"],
 }
 # RG/CPF and the other identity-verification fields (issuing authority,
 # parents' names, birthplace) -- the exact class of data this project

@@ -644,16 +644,20 @@ def test_preview_application_answers_referral_then_stops_at_company_questions_wi
 def test_preview_application_stops_at_company_questions_even_without_pii_terms(monkeypatch):
     # The broader rule: ANY company-specific question is a stop, not just
     # ones that hit the PII/financial blocklist -- see base.py's
-    # question_requires_stop() docstring. Not flagged as hard PII either,
-    # since "CNH" (driver's license) isn't a government-ID/birth-date term.
+    # question_requires_stop() docstring. Not flagged as hard PII either.
+    # (2026-08-21: this test previously used "Você tem CNH?" as its
+    # example of an unclassified question -- it became a real, classified
+    # field the same day, which would have silently flipped this
+    # assertion into the OTHER blocking bucket. Using a genuinely
+    # subjective/unclassified question instead.)
     page = FakeApplicationPage(
         step_texts=[
             "Alguém te indicou?\nSim\nNão",
-            "Perguntas criadas pela empresa\n1.Você tem CNH?\nResponder agora",
+            "Perguntas criadas pela empresa\n1.Qual seu nível de conhecimento em Python?\nResponder agora",
         ],
         referral_answer_count=1,
         click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
-        company_questions=["1.Você tem CNH?"],
+        company_questions=["1.Qual seu nível de conhecimento em Python?"],
     )
     _patch_open_context(monkeypatch, page)
 
@@ -832,6 +836,10 @@ def _patch_profile(monkeypatch, **fields):
         "salary_junior": None,
         "salary_pleno": None,
         "marital_status": None,
+        "cnh": None,
+        "disponibilidade_viagem": None,
+        "disponibilidade_fds": None,
+        "escolaridade": None,
     }
     full.update(fields)
     monkeypatch.setattr(application_profile, "load_application_profile", lambda: full)
@@ -1142,6 +1150,90 @@ def test_continue_application_with_profile_still_refuses_birth_date_even_with_fu
         referral_answer_count=1,
         click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
         company_questions=["1.Qual sua data de nascimento?"],
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert preview.can_submit is False
+    assert page.filled == {}
+
+
+def test_continue_application_with_profile_answers_ja_trabalhou_aqui_without_any_local_value(monkeypatch):
+    # 2026-08-21: "ja_trabalhou_aqui" always resolves to "Não" -- never
+    # needs a real .env value, same reasoning as the standard referral
+    # question's own "você trabalha na empresa?".
+    _patch_profile(monkeypatch)  # everything None, including ja_trabalhou_aqui
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Você já trabalhou nesta empresa?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Você já trabalhou nesta empresa?"],
+        fill_selectors={'[id="input-1.Você já trabalhou nesta empresa?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.filled == {'[id="input-1.Você já trabalhou nesta empresa?"]': "Não"}
+    assert preview.questions[-1].answered is True
+
+
+def test_continue_application_with_profile_fills_linkedin_from_the_resume(monkeypatch):
+    # 2026-08-21: "linkedin" comes from the résumé's own public links,
+    # not the confidential .env profile -- it's already public data.
+    from jarvis.resume import store as resume_store
+    from jarvis.resume.schema import Bilingual, Links, PersonalInfo, Resume
+
+    resume = Resume(
+        personal_info=PersonalInfo(
+            full_name="Nicholas Birochi",
+            links=Links(linkedin="https://www.linkedin.com/in/nicholasbirochi/"),
+        ),
+        summary=Bilingual(pt="Resumo."),
+    )
+    monkeypatch.setattr(resume_store, "load", lambda: resume)
+
+    _patch_profile(monkeypatch)  # linkedin is None in the .env-backed profile
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Compartilhe o link do seu LinkedIn:\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Compartilhe o link do seu LinkedIn:"],
+        fill_selectors={'[id="input-1.Compartilhe o link do seu LinkedIn:"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.filled == {
+        '[id="input-1.Compartilhe o link do seu LinkedIn:"]': "https://www.linkedin.com/in/nicholasbirochi/"
+    }
+    assert preview.questions[-1].answered is True
+
+
+def test_continue_application_with_profile_refuses_linkedin_question_when_resume_has_none(monkeypatch):
+    from jarvis.resume import store as resume_store
+    from jarvis.resume.schema import Bilingual, PersonalInfo, Resume
+
+    resume = Resume(personal_info=PersonalInfo(full_name="Nicholas Birochi"), summary=Bilingual(pt="Resumo."))
+    monkeypatch.setattr(resume_store, "load", lambda: resume)
+
+    _patch_profile(monkeypatch)
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Compartilhe o link do seu LinkedIn:\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Compartilhe o link do seu LinkedIn:"],
     )
     _patch_open_context(monkeypatch, page)
 

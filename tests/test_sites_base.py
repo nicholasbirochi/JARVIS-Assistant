@@ -105,8 +105,13 @@ def test_classify_question_field_none_for_birth_date_and_unrelated_questions():
     # Birth date is recognized as a hard stop (is_hard_pii_question),
     # but deliberately has no fillable field at all -- see base.py's
     # module comment for why.
+    # (2026-08-21: this test previously used "disponibilidade para
+    # viajar" as its example of an unrelated question -- it became a
+    # real, classified field the same day, which would have silently
+    # flipped this assertion. Using a genuinely subjective/unclassified
+    # question instead so a future field addition can't do that again.)
     assert classify_question_field("Qual sua data de nascimento?") is None
-    assert classify_question_field("Você tem disponibilidade para viajar?") is None
+    assert classify_question_field("Como você avalia seu nível de inglês?") is None
 
 
 def test_is_hard_pii_question_true_for_birth_date_with_no_fillable_field():
@@ -120,6 +125,22 @@ def test_classify_question_field_recognizes_the_new_identity_fields():
     assert classify_question_field("Nome da mãe") == "nome_mae"
     assert classify_question_field("Nome do pai") == "nome_pai"
     assert classify_question_field("Naturalidade (cidade e estado de nascimento)") == "naturalidade"
+
+
+def test_classify_question_field_recognizes_the_recurring_generic_fields():
+    # 2026-08-21: compiled from real company-question text seen live
+    # across several listings, per Nicholas's explicit request ("me
+    # mande as perguntas mais genéricas e que sempre aparecem").
+    assert classify_question_field("Por favor, compartilhe com a gente o link do seu LinkedIn:") == "linkedin"
+    assert classify_question_field("Você tem CNH?") == "cnh"
+    assert classify_question_field("Você é ex-colaborador? (exceto estagiários)") == "ja_trabalhou_aqui"
+    assert classify_question_field("Você já trabalhou nesta empresa?") == "ja_trabalhou_aqui"
+    assert classify_question_field("Você tem disponibilidade para viajar?") == "disponibilidade_viagem"
+    assert (
+        classify_question_field("Em casos pontuais, você possui disponibilidade para trabalhar aos sábados?")
+        == "disponibilidade_fds"
+    )
+    assert classify_question_field("Você possui ensino superior completo?") == "escolaridade"
 
 
 def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():

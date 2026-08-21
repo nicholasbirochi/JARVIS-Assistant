@@ -34,6 +34,10 @@ def test_load_application_profile_returns_all_none_when_file_missing(monkeypatch
         "salary_junior": None,
         "salary_pleno": None,
         "marital_status": None,
+        "cnh": None,
+        "disponibilidade_viagem": None,
+        "disponibilidade_fds": None,
+        "escolaridade": None,
     }
 
 
@@ -56,6 +60,10 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
                 "JARVIS_APPLICATION_SALARY_JUNIOR=R$ 4.500,00",
                 "JARVIS_APPLICATION_SALARY_PLENO=R$ 6.500,00",
                 "JARVIS_APPLICATION_MARITAL_STATUS=Solteiro",
+                "JARVIS_APPLICATION_CNH=Sim, categoria B",
+                "JARVIS_APPLICATION_DISPONIBILIDADE_VIAGEM=Sim",
+                "JARVIS_APPLICATION_DISPONIBILIDADE_FDS=Não",
+                "JARVIS_APPLICATION_ESCOLARIDADE=Ensino superior incompleto (cursando)",
             ]
         ),
         encoding="utf-8",
@@ -76,6 +84,10 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
         "salary_junior": "R$ 4.500,00",
         "salary_pleno": "R$ 6.500,00",
         "marital_status": "Solteiro",
+        "cnh": "Sim, categoria B",
+        "disponibilidade_viagem": "Sim",
+        "disponibilidade_fds": "Não",
+        "escolaridade": "Ensino superior incompleto (cursando)",
     }
 
 
