@@ -53,6 +53,58 @@ def test_push_resume_to_site_supported_site_says_not_implemented():
     assert "não foi implementada" in result.lower() or "nao foi implementada" in result.lower()
 
 
+# ---- open_job_portal ----
+#
+# 2026-08-21, real bug fixed: this used to run the whole deep search
+# BEFORE starting the HTTP server, so the page was unreachable for the
+# entire wait ("o site continua sem funcionar"). Now the server opens
+# immediately and the first search runs in a background thread.
+
+
+def test_open_job_portal_opens_immediately_before_the_search_finishes(monkeypatch):
+    import threading
+
+    from jarvis.job_portal import server
+
+    monkeypatch.setattr(server, "_tiers", None)
+    monkeypatch.setattr(server, "open_portal", lambda: "http://127.0.0.1:8766/")
+
+    refresh_started = threading.Event()
+    release_refresh = threading.Event()
+
+    def fake_refresh_data(*, adapters=None):
+        refresh_started.set()
+        release_refresh.wait(timeout=5)  # simulates the real, slow deep search
+        return {}
+
+    monkeypatch.setattr(server, "refresh_data", fake_refresh_data)
+    monkeypatch.setattr(server, "_portal_adapters", lambda **kwargs: {})
+
+    result = tools.open_job_portal()
+
+    # The call returns right away -- it does NOT wait for the search.
+    assert "http://127.0.0.1:8766/" in result
+    assert "segundo plano" in result
+    assert refresh_started.wait(timeout=2)  # the background thread really did start
+    release_refresh.set()  # let the fake background thread finish, don't leak it
+
+
+def test_open_job_portal_does_not_search_again_once_tiers_are_populated(monkeypatch):
+    from jarvis.job_portal import server
+
+    monkeypatch.setattr(server, "_tiers", {"banco": []})
+    monkeypatch.setattr(server, "open_portal", lambda: "http://127.0.0.1:8766/")
+
+    called = []
+    monkeypatch.setattr(server, "refresh_data", lambda **kwargs: called.append(kwargs))
+
+    result = tools.open_job_portal()
+
+    assert called == []
+    assert "segundo plano" not in result
+    assert "http://127.0.0.1:8766/" in result
+
+
 # ---- prepare_claude_prompt ----
 
 

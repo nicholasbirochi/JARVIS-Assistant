@@ -345,26 +345,47 @@ def open_job_portal() -> str:
     artefato hospedado na Anthropic, essa página roda um servidor local
     (jarvis/job_portal/) e os botões "Verificar"/"Continuar candidatura"
     de fato chamam check_job_application()/continue_job_application()
-    aqui no Mac dele. Busca vagas na primeira vez que for aberta nesta
-    sessão (pode levar alguns minutos) -- depois disso mostra o que já
-    tem, com um botão para atualizar quando quiser.
+    aqui no Mac dele.
+
+    2026-08-21, real bug fixed: this used to run the WHOLE deep search
+    (12-15 terms across 9 sites, up to ~an hour) BEFORE ever starting the
+    HTTP server, so the page was completely unreachable ("o site
+    continua sem funcionar") for the entire wait, with zero feedback.
+    Now the server starts and the browser opens immediately (showing the
+    real empty state page_template.html already handles), and the first
+    search runs in a background thread -- the page is reachable right
+    away and just fills in once the search actually finishes; a later
+    "Atualizar vagas agora" click, or reopening the tool, shows what's
+    there so far.
 
     Use quando o Nicholas pedir para abrir/ver as vagas localmente, ou
     pedir para poder se candidatar clicando em botões em vez de te
     pedir link por link.
     """
+    import threading
+
     from jarvis.job_portal import server
 
-    if server._tiers is None:  # first open this process -- fetch real data now
-        try:
-            # include_linkedin=True -- opening the portal is itself an
-            # explicit, attended action (see _portal_adapters()'s
-            # docstring for why that's the bar for including LinkedIn).
-            server.refresh_data(adapters=server._portal_adapters(include_linkedin=True))
-        except Exception as exc:
-            return f"Não consegui buscar as vagas ainda: {exc}. Tento de novo se você pedir."
-
     page_url = server.open_portal()
+
+    if server._tiers is None:  # first open this process -- fetch real data now
+        def _refresh_in_background() -> None:
+            try:
+                # include_linkedin=True -- opening the portal is itself
+                # an explicit, attended action (see _portal_adapters()'s
+                # docstring for why that's the bar for including
+                # LinkedIn).
+                server.refresh_data(adapters=server._portal_adapters(include_linkedin=True))
+            except Exception:
+                pass  # best-effort -- the page's own empty state already tells Nicholas nothing loaded yet
+
+        threading.Thread(target=_refresh_in_background, daemon=True, name="jarvis-job-portal-first-search").start()
+        return (
+            f"Abri {page_url} no seu navegador -- já dá pra acessar, mas a primeira busca "
+            "ainda está rodando em segundo plano (pode levar uns minutos). A página não "
+            "atualiza sozinha -- dê um F5/Cmd+R nela daqui a pouco pra ver as vagas."
+        )
+
     return f"Abri {page_url} no seu navegador -- os botões ali rodam de verdade, local."
 
 
