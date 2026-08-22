@@ -1052,10 +1052,28 @@ class GupyAdapter(SiteAdapter):
         apparently generate this id differently. Tries the raw question
         text first (preserves the original, still-real case), then a
         cleaned version (numbering prefix and trailing "*"/whitespace
-        stripped) as a fallback, rather than assuming only one shape."""
+        stripped) as a fallback, rather than assuming only one shape.
+
+        2026-08-22, a THIRD, structurally different id scheme found live
+        (PagBank, 2nd listing): that form's real ids don't derive from
+        the question's text at all -- they're
+        "additional-question-input-N" / "additional-question-textarea-N",
+        where N is just the question's own leading number ("1. RG" ->
+        N=1), completely independent of the wording. Tried last, only
+        when the question text actually starts with "N.", after both
+        text-derived forms above have already failed -- never assumed,
+        since most listings still use the text-derived id."""
+        selectors = []
         for candidate in dict.fromkeys([question_text, _clean_question_id(question_text)]):
             escaped = candidate.replace('"', '\\"')
-            selector = f'[id="input-{escaped}"]'
+            selectors.append(f'[id="input-{escaped}"]')
+        number_match = re.match(r"^(\d+)\.", question_text)
+        if number_match:
+            n = number_match.group(1)
+            selectors.append(f'[id="additional-question-input-{n}"]')
+            selectors.append(f'[id="additional-question-textarea-{n}"]')
+
+        for selector in selectors:
             try:
                 page.fill(selector, value, timeout=5000)
                 return True

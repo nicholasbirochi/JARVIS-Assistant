@@ -824,6 +824,52 @@ def test_fill_company_answer_fails_closed_when_neither_selector_matches():
     assert page.filled == {}
 
 
+def test_fill_company_answer_falls_back_to_the_numeric_id_real_pagbank_case():
+    # 2026-08-22, a THIRD real id scheme found live (PagBank, 2nd
+    # listing): neither text-derived selector exists on this form at
+    # all -- real ids are "additional-question-input-N" /
+    # "additional-question-textarea-N", where N is just the question's
+    # own leading number, unrelated to its wording.
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        fill_selectors={'[id="additional-question-textarea-3"]'},
+    )
+
+    ok = GupyAdapter()._fill_company_answer(page, "3. Nome da mãe *", "Maria Aparecida Souza")
+
+    assert ok is True
+    assert page.filled == {'[id="additional-question-textarea-3"]': "Maria Aparecida Souza"}
+
+
+def test_fill_company_answer_numeric_id_fallback_tries_both_input_and_textarea():
+    # RG (question 1) is a real <input>, not a <textarea>, on the same
+    # PagBank listing -- both tag variants must be tried since the
+    # question text alone doesn't say which one a given field is.
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        fill_selectors={'[id="additional-question-input-1"]'},
+    )
+
+    ok = GupyAdapter()._fill_company_answer(page, "1. RG *", "12.345.678-9")
+
+    assert ok is True
+    assert page.filled == {'[id="additional-question-input-1"]': "12.345.678-9"}
+
+
+def test_fill_company_answer_numeric_id_fallback_never_tried_without_a_leading_number():
+    # A question with no "N." prefix at all has no number to build a
+    # numeric-id selector from -- must still fail closed, not guess.
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        fill_selectors={'[id="additional-question-textarea-1"]'},
+    )
+
+    ok = GupyAdapter()._fill_company_answer(page, "Qual sua pretensão salarial?", "R$ 4.500,00")
+
+    assert ok is False
+    assert page.filled == {}
+
+
 # --- continue_application_with_profile() --------------------------------
 
 
