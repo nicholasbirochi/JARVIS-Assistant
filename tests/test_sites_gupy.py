@@ -517,8 +517,8 @@ def test_extract_company_from_gate_text_none_when_pattern_does_not_match():
 
 class FakeApplicationPage:
     def __init__(self, *, apply_href="/candidates/jobs/123/apply", step_texts, referral_answer_count=0,
-                 click_results=None, company_questions=None, fill_selectors=None,
-                 page_title="Página da Vaga | Analista de Dados"):
+                 click_results=None, company_questions=None, company_questions_via_label=None,
+                 fill_selectors=None, page_title="Página da Vaga | Analista de Dados"):
         self.apply_href = apply_href
         self.url = "https://empresa.gupy.io/job/xyz"
         self.step_texts = step_texts
@@ -526,6 +526,11 @@ class FakeApplicationPage:
         self.referral_answer_count = referral_answer_count
         self.click_results = click_results or {}
         self.company_questions = company_questions or []
+        # None = same as company_questions (existing tests don't care
+        # which selector "found" them); set explicitly to simulate the
+        # real 2026-08-21 PagBank case where <h3> found nothing but
+        # <label> did.
+        self.company_questions_via_label = company_questions_via_label
         self.clicked: list[str] = []
         self.fill_selectors = fill_selectors  # None = every selector succeeds
         self.filled: dict[str, str] = {}
@@ -548,7 +553,9 @@ class FakeApplicationPage:
         if "apply-link" in script:
             return self.apply_href
         if "main h3, body h3" in script:
-            return self.company_questions
+            return [] if self.company_questions_via_label is not None else self.company_questions
+        if "main label, body label" in script:
+            return self.company_questions_via_label if self.company_questions_via_label is not None else self.company_questions
         if "innerText" in script:
             text = self.step_texts[self._step_text_idx]
             self._step_text_idx = min(self._step_text_idx + 1, len(self.step_texts) - 1)
@@ -927,6 +934,30 @@ def test_continue_application_with_profile_fills_all_known_questions_and_advance
     assert preview.can_submit is False
     assert preview.submitted is False
     assert "não pedi pra enviar de verdade" in preview.blocked_reason
+    assert preview.questions[-1].answered is True
+
+
+def test_continue_application_with_profile_falls_back_to_label_based_questions(monkeypatch):
+    # 2026-08-21, real DOM variation found live (PagBank): this
+    # listing's company questions were rendered as <label> elements, not
+    # <h3> -- _extract_company_questions() must fall back to <label>
+    # instead of misreading the whole block as one unparseable question.
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Qual sua pretensão salarial atual?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions_via_label=["1.Qual sua pretensão salarial atual?"],
+        fill_selectors={'[id="input-1.Qual sua pretensão salarial atual?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.filled == {'[id="input-1.Qual sua pretensão salarial atual?"]': "R$ 4.500,00"}
     assert preview.questions[-1].answered is True
 
 

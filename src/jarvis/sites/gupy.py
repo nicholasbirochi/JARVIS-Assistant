@@ -1092,11 +1092,26 @@ class GupyAdapter(SiteAdapter):
         is build-hashed and NOT stable across Gupy deploys (same caveat
         as the "Não" radio labels elsewhere in this file), so matching is
         done on the numbered-prefix TEXT PATTERN instead, which is far
-        more likely to survive a redeploy."""
-        return page.evaluate(
+        more likely to survive a redeploy.
+
+        2026-08-21, real DOM variation found live (PagBank): this
+        listing's questions weren't <h3> elements at all -- each was a
+        <label>, same numbered-prefix text pattern otherwise. Falls back
+        to matching <label> elements when no <h3> matches are found,
+        rather than assuming every company's form uses the same tag."""
+        h3_matches = page.evaluate(
             """
             () => Array.from(document.querySelectorAll('main h3, body h3'))
                 .map(h => h.textContent.trim())
+                .filter(t => /^\\d+\\./.test(t))
+            """
+        )
+        if h3_matches:
+            return h3_matches
+        return page.evaluate(
+            """
+            () => Array.from(document.querySelectorAll('main label, body label'))
+                .map(l => l.textContent.trim())
                 .filter(t => /^\\d+\\./.test(t))
             """
         )
