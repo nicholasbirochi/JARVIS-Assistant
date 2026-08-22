@@ -135,6 +135,9 @@ def test_classify_question_field_recognizes_the_recurring_generic_fields():
     assert classify_question_field("Você tem CNH?") == "cnh"
     assert classify_question_field("Você é ex-colaborador? (exceto estagiários)") == "ja_trabalhou_aqui"
     assert classify_question_field("Você já trabalhou nesta empresa?") == "ja_trabalhou_aqui"
+    # Real miss found live (Cogna): "do grupo" phrasing is the same
+    # question, worded differently.
+    assert classify_question_field("Já trabalhou em alguma empresa do grupo?") == "ja_trabalhou_aqui"
     assert classify_question_field("Você tem disponibilidade para viajar?") == "disponibilidade_viagem"
     assert (
         classify_question_field("Em casos pontuais, você possui disponibilidade para trabalhar aos sábados?")

@@ -205,6 +205,9 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "ja trabalhou nesta empresa",
         "já trabalhou nessa empresa",
         "ja trabalhou nessa empresa",
+        # 2026-08-21, real miss found live (Cogna): "do grupo" phrasing
+        # is the same question, worded differently.
+        "trabalhou em alguma empresa do grupo",
     ],
     "disponibilidade_viagem": ["disponibilidade para viajar", "disponível para viajar", "disponivel para viajar"],
     "disponibilidade_fds": [
