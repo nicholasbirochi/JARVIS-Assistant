@@ -961,6 +961,65 @@ def test_continue_application_with_profile_falls_back_to_label_based_questions(m
     assert preview.questions[-1].answered is True
 
 
+def test_continue_application_with_profile_skips_inapplicable_parentesco_followup(monkeypatch):
+    # 2026-08-22, real gap found live (PagBank): "Qual nome e grau de
+    # parentesco?" is a follow-up to "parentes_na_empresa" rendered
+    # unconditionally by the form -- when the real answer is "Não"
+    # there's genuinely nothing to fill, so this must be skipped rather
+    # than blocking the whole application over a field with no local
+    # value (see gupy.py's _CONDITIONAL_SKIP_FIELDS).
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00", parentes_na_empresa="Não")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual sua pretensão salarial atual?", "9.Qual nome e grau de parentesco?"],
+        fill_selectors={'[id="input-1.Qual sua pretensão salarial atual?"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    # Only the fillable question was ever touched on the page -- the
+    # skipped one was never sent through fill() at all.
+    assert page.filled == {'[id="input-1.Qual sua pretensão salarial atual?"]': "R$ 4.500,00"}
+    assert preview.can_submit is False  # finalize=False default -- stops right after saving
+    assert "não pedi pra enviar de verdade" in preview.blocked_reason
+
+    skipped = [q for q in preview.questions if "parentesco" in q.text.lower()]
+    assert len(skipped) == 1
+    assert skipped[0].answered is True
+    assert "pulada" in skipped[0].answer
+
+
+def test_continue_application_with_profile_still_blocks_parentesco_followup_when_parent_answer_is_not_nao(monkeypatch):
+    # Regression: the skip is conditional on the parent answer actually
+    # being "Não" -- an unset (or any other) parentes_na_empresa value
+    # must still refuse the whole step, same as before this feature
+    # existed, rather than silently skipping something that might
+    # genuinely need a real name/relationship filled in.
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")  # parentes_na_empresa left None
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Qual sua pretensão salarial atual?", "9.Qual nome e grau de parentesco?"],
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert preview.can_submit is False
+    assert "tudo ou nada" in preview.blocked_reason
+    assert page.filled == {}  # nothing was actually typed into the page
+
+
 # --- continue_application_with_profile(finalize=True) --------------------
 #
 # 2026-08-19, human-supervised, real, confirmed live (Integra CSC,

@@ -249,6 +249,16 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "você tem parente",
         "voce tem parente",
     ],
+    # 2026-08-22, real gap found live (PagBank): a conditional follow-up
+    # to "parentes_na_empresa" above, asking for the actual name/degree
+    # of kinship -- some companies' forms render this unconditionally,
+    # even when the parent answer is "Não" and there's genuinely no one
+    # to name. See gupy.py's _CONDITIONAL_SKIP_FIELDS for how this gets
+    # skipped rather than blocking the whole application when that's the
+    # case -- deliberately has NO entry in application_profile.py's
+    # _FIELD_ENV_KEYS, since Nicholas never needs a real value here (his
+    # own parentes_na_empresa is always "Não").
+    "parentes_nome_grau": ["nome e grau de parentesco", "grau de parentesco"],
     # 2026-08-21, real miss found live (Vivo): "nome completo, sem
     # abreviações" -- resolved from the résumé's own personal_info.
     # full_name, not a separate .env value (same reasoning as

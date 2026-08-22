@@ -178,6 +178,19 @@ def test_classify_question_field_recognizes_round_3_found_live_at_vivo():
     )
 
 
+def test_classify_question_field_recognizes_the_parentesco_followup_found_live_at_pagbank():
+    # 2026-08-22, real gap found live (PagBank): a conditional follow-up
+    # to "parentes_na_empresa", asking for the actual name/degree of
+    # kinship -- distinct field, since it's skipped (not filled) when
+    # the parent answer is "Não" -- see gupy.py's _CONDITIONAL_SKIP_FIELDS.
+    assert classify_question_field("Qual nome e grau de parentesco?") == "parentes_nome_grau"
+    # Must not collide with the parent question's own classification.
+    assert (
+        classify_question_field("Possui parentes que trabalham ou estejam em fase de seleção na empresa?")
+        == "parentes_na_empresa"
+    )
+
+
 def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():
     # Real risk: "Órgão e Estado de emissão do RG" contains "RG" as its
     # own whole word too -- checking bare "rg" first would misclassify

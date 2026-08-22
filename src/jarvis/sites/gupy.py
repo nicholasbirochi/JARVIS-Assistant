@@ -181,6 +181,34 @@ def _clean_question_id(question_text: str) -> str:
     return text.strip()
 
 
+# Maps a conditionally-inapplicable field to the (parent_field,
+# trigger_value) that makes it genuinely have nothing to fill, rather
+# than merely "no local value on file". 2026-08-22, real gap found live
+# (PagBank): "Qual nome e grau de parentesco?" (base.py's
+# "parentes_nome_grau") is rendered as a follow-up to "parentes_na_empresa"
+# regardless of that answer -- when it's "Não" there's truthfully no
+# relative to name, so blocking the whole application over an unfillable
+# field here would be wrong, not just overly cautious. Compared
+# case-insensitively against the parent field's own local profile value.
+_CONDITIONAL_SKIP_FIELDS: dict[str, tuple[str, str]] = {
+    "parentes_nome_grau": ("parentes_na_empresa", "não"),
+}
+
+
+def _is_conditionally_inapplicable(field: str, profile: dict[str, str | None]) -> bool:
+    """True if `field` is a known conditional follow-up whose parent
+    question's own local answer makes it inapplicable (see
+    _CONDITIONAL_SKIP_FIELDS above) -- False for every other field,
+    including ones with genuinely no local value at all (still
+    unanswerable, still blocks, exactly as before)."""
+    parent = _CONDITIONAL_SKIP_FIELDS.get(field)
+    if parent is None:
+        return False
+    parent_field, trigger_value = parent
+    parent_value = (profile.get(parent_field) or "").strip().lower()
+    return parent_value == trigger_value
+
+
 def _strip_country_code(phone: str | None) -> str | None:
     """Résumé phone numbers are stored as "+55 (11) 95827-5250"; Gupy's
     mobile-number field holds just "(11) 95827-5250" (country code is a
@@ -697,6 +725,28 @@ class GupyAdapter(SiteAdapter):
                 (q_text, self._resolve_profile_field(classify_question_field(q_text), level))
                 for q_text in company_questions
             ]
+
+            # A conditional follow-up rendered even though its parent
+            # answer makes it genuinely inapplicable (see
+            # _CONDITIONAL_SKIP_FIELDS) -- recorded as answered (there's
+            # truthfully nothing to fill, not a gap) and removed from the
+            # plan entirely, before the unanswerable check below ever
+            # sees it.
+            def _skip(pair: tuple[str, str | None]) -> bool:
+                _q_text, field = pair
+                return field is not None and _is_conditionally_inapplicable(field, profile)
+
+            for q_text, _field in [p for p in plan if _skip(p)]:
+                questions.append(
+                    ApplicationQuestion(
+                        text=q_text,
+                        answered=True,
+                        answer="(pulada -- não aplicável à sua situação)",
+                        is_hard_pii=is_hard_pii_question(q_text),
+                    )
+                )
+            plan = [p for p in plan if not _skip(p)]
+
             unanswerable = [
                 q_text for q_text, field in plan if field is None or not profile.get(field)
             ]
