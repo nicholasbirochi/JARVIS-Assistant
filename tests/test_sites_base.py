@@ -144,6 +144,27 @@ def test_classify_question_field_recognizes_the_recurring_generic_fields():
         == "disponibilidade_fds"
     )
     assert classify_question_field("Você possui ensino superior completo?") == "escolaridade"
+    assert classify_question_field("Possui graduação completa ou em andamento na área de TI?") == "escolaridade"
+
+
+def test_classify_question_field_recognizes_round_2_of_the_recurring_generic_fields():
+    # 2026-08-21, round 2 -- found live during the one-at-a-time apply
+    # batch (FGC/PagSeguro/Stefanini).
+    assert (
+        classify_question_field("Possui disponibilidade para início imediato, caso seja aprovado?")
+        == "disponibilidade_inicio_imediato"
+    )
+    assert classify_question_field("Qual é o seu cargo atual?") == "cargo_atual"
+    assert (
+        classify_question_field(
+            "Possui parentes que trabalham ou estejam em fase de seleção ou admissão na empresa?"
+        )
+        == "parentes_na_empresa"
+    )
+    assert (
+        classify_question_field("Informe o semestre e o ano previstos para a conclusão do curso")
+        == "semestre_formatura"
+    )
 
 
 def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():

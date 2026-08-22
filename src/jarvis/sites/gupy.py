@@ -637,7 +637,7 @@ class GupyAdapter(SiteAdapter):
         from jarvis.sites.application_profile import load_application_profile
 
         profile = load_application_profile()
-        # Two fields resolved OUTSIDE the confidential .env profile,
+        # Fields resolved OUTSIDE the confidential .env profile,
         # 2026-08-21 (see base.py's _FIELD_TERMS comment):
         # - "ja_trabalhou_aqui" is always "Não" -- unconditionally true
         #   for any external candidate applying cold, same reasoning as
@@ -648,13 +648,24 @@ class GupyAdapter(SiteAdapter):
         #   itself), so a company matching Itaú/Santander/XP's referral
         #   contact doesn't need a SEPARATE local .env entry duplicating
         #   data that already lives in data/resume.json.
+        # - "disponibilidade_inicio_imediato" comes from the résumé's
+        #   own job_preferences.availability.status -- only resolved
+        #   when it's the real, explicit "immediate" value; any other
+        #   status ("notice_period"/"date"/"unspecified") is a real,
+        #   different answer this code shouldn't guess at, so it's left
+        #   unset (unanswerable) rather than assumed.
         profile["ja_trabalhou_aqui"] = "Não"
-        if not profile.get("linkedin"):
+        if not profile.get("linkedin") or profile.get("disponibilidade_inicio_imediato") is None:
             from jarvis.resume import store as resume_store
 
-            resume_linkedin = resume_store.load().personal_info.links.linkedin
-            if resume_linkedin:
-                profile["linkedin"] = resume_linkedin
+            resume = resume_store.load()
+            if not profile.get("linkedin"):
+                resume_linkedin = resume.personal_info.links.linkedin
+                if resume_linkedin:
+                    profile["linkedin"] = resume_linkedin
+            if profile.get("disponibilidade_inicio_imediato") is None:
+                if resume.job_preferences.availability.status == "immediate":
+                    profile["disponibilidade_inicio_imediato"] = "Sim"
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:

@@ -34,6 +34,9 @@ def test_load_application_profile_returns_all_none_when_file_missing(monkeypatch
         "salary_junior": None,
         "salary_pleno": None,
         "marital_status": None,
+        "cargo_atual": None,
+        "parentes_na_empresa": None,
+        "semestre_formatura": None,
         "cnh": None,
         "disponibilidade_viagem": None,
         "disponibilidade_fds": None,
@@ -64,6 +67,9 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
                 "JARVIS_APPLICATION_DISPONIBILIDADE_VIAGEM=Sim",
                 "JARVIS_APPLICATION_DISPONIBILIDADE_FDS=Não",
                 "JARVIS_APPLICATION_ESCOLARIDADE=Ensino superior incompleto (cursando)",
+                "JARVIS_APPLICATION_CARGO_ATUAL=Não estou empregado no momento",
+                "JARVIS_APPLICATION_PARENTES_NA_EMPRESA=Não",
+                "JARVIS_APPLICATION_SEMESTRE_FORMATURA=2º semestre de 2027",
             ]
         ),
         encoding="utf-8",
@@ -88,6 +94,9 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
         "disponibilidade_viagem": "Sim",
         "disponibilidade_fds": "Não",
         "escolaridade": "Ensino superior incompleto (cursando)",
+        "cargo_atual": "Não estou empregado no momento",
+        "parentes_na_empresa": "Não",
+        "semestre_formatura": "2º semestre de 2027",
     }
 
 

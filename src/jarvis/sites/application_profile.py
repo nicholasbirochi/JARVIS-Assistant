@@ -105,6 +105,13 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     "disponibilidade_viagem": "JARVIS_APPLICATION_DISPONIBILIDADE_VIAGEM",
     "disponibilidade_fds": "JARVIS_APPLICATION_DISPONIBILIDADE_FDS",
     "escolaridade": "JARVIS_APPLICATION_ESCOLARIDADE",
+    # 2026-08-21, round 2 -- found live during the one-at-a-time apply
+    # batch. "disponibilidade_inicio_imediato" deliberately has NO entry
+    # here -- resolved from the résumé's own job_preferences.availability
+    # instead (same reasoning as "linkedin").
+    "cargo_atual": "JARVIS_APPLICATION_CARGO_ATUAL",
+    "parentes_na_empresa": "JARVIS_APPLICATION_PARENTES_NA_EMPRESA",
+    "semestre_formatura": "JARVIS_APPLICATION_SEMESTRE_FORMATURA",
 }
 
 

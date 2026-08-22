@@ -216,7 +216,41 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "disponibilidade para fins de semana",
         "disponibilidade para final de semana",
     ],
-    "escolaridade": ["ensino superior completo", "superior completo", "escolaridade"],
+    "escolaridade": [
+        "ensino superior completo",
+        "superior completo",
+        "escolaridade",
+        # 2026-08-21, real miss found live (Stefanini): same question,
+        # different phrasing.
+        "graduação completa ou em andamento",
+        "graduacao completa ou em andamento",
+    ],
+    # 2026-08-21, round 2 of the recurring-questions expansion -- found
+    # live during the one-at-a-time apply batch (FGC/PagSeguro/
+    # Stefanini). "disponibilidade_inicio_imediato" is resolved from the
+    # résumé's own job_preferences.availability.status (already
+    # "immediate" there), same reasoning as "linkedin" -- no need for a
+    # separate .env value duplicating a fact already on record.
+    # "cargo_atual"/"parentes_na_empresa"/"semestre_formatura" need real
+    # .env values from Nicholas.
+    "disponibilidade_inicio_imediato": [
+        "disponibilidade para início imediato",
+        "disponibilidade para inicio imediato",
+        "início imediato",
+        "inicio imediato",
+    ],
+    "cargo_atual": ["qual é o seu cargo atual", "qual e o seu cargo atual", "cargo atual"],
+    "parentes_na_empresa": [
+        "possui parentes que trabalham",
+        "tem parentesco com algum colaborador",
+        "possui parentesco com algum colaborador",
+    ],
+    "semestre_formatura": [
+        "semestre e o ano previstos para a conclusão do curso",
+        "semestre e o ano previstos para a conclusao do curso",
+        "previsão de formatura",
+        "previsao de formatura",
+    ],
 }
 # RG/CPF and the other identity-verification fields (issuing authority,
 # parents' names, birthplace) -- the exact class of data this project
