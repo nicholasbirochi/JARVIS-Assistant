@@ -518,7 +518,8 @@ def test_extract_company_from_gate_text_none_when_pattern_does_not_match():
 class FakeApplicationPage:
     def __init__(self, *, apply_href="/candidates/jobs/123/apply", step_texts, referral_answer_count=0,
                  click_results=None, company_questions=None, company_questions_via_label=None,
-                 fill_selectors=None, page_title="Página da Vaga | Analista de Dados"):
+                 fill_selectors=None, page_title="Página da Vaga | Analista de Dados",
+                 already_answered_selectors=None):
         self.apply_href = apply_href
         self.url = "https://empresa.gupy.io/job/xyz"
         self.step_texts = step_texts
@@ -536,6 +537,12 @@ class FakeApplicationPage:
         self.filled: dict[str, str] = {}
         self._page_title = page_title
         self.last_is_referred = None
+        # Selectors whose real element already holds the exact value
+        # being asked for -- simulates the real 2026-08-22 PagBank case
+        # (a question answered on an earlier attempt, now rendered
+        # disabled with its saved value already in place). Empty by
+        # default -- existing tests never hit this fast path.
+        self.already_answered_selectors = already_answered_selectors or set()
 
     def goto(self, url, timeout=None, wait_until=None):
         self.url = url
@@ -564,6 +571,9 @@ class FakeApplicationPage:
             if args:
                 self.last_is_referred = args[0]
             return self.referral_answer_count
+        if "el.value === expected" in script:
+            selectors, _expected = args[0]
+            return any(sel in self.already_answered_selectors for sel in selectors)
         for text, result in self.click_results.items():
             if repr(text) in script:
                 if result:
@@ -868,6 +878,26 @@ def test_fill_company_answer_numeric_id_fallback_never_tried_without_a_leading_n
 
     assert ok is False
     assert page.filled == {}
+
+
+def test_fill_company_answer_treats_an_already_saved_field_as_answered_real_pagbank_case():
+    # 2026-08-22, same PagBank investigation: once a question was
+    # answered and saved on an EARLIER attempt, Gupy re-renders it
+    # DISABLED with its saved value already in place -- fill() can't
+    # act on a disabled element (correctly), but the question genuinely
+    # IS already answered, so this must succeed without ever calling
+    # fill() -- not report a failure that blocks the whole application
+    # over nothing left to do.
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        fill_selectors=set(),  # fill() would fail for every selector
+        already_answered_selectors={'[id="additional-question-input-1"]'},
+    )
+
+    ok = GupyAdapter()._fill_company_answer(page, "1. RG *", "12.345.678-9")
+
+    assert ok is True
+    assert page.filled == {}  # nothing was actually typed -- already saved
 
 
 # --- continue_application_with_profile() --------------------------------

@@ -1062,7 +1062,22 @@ class GupyAdapter(SiteAdapter):
         N=1), completely independent of the wording. Tried last, only
         when the question text actually starts with "N.", after both
         text-derived forms above have already failed -- never assumed,
-        since most listings still use the text-derived id."""
+        since most listings still use the text-derived id.
+
+        2026-08-22, also found live on that same PagBank listing (same
+        investigation): once a company question has already been
+        answered and saved on an earlier attempt, Gupy re-renders that
+        field DISABLED with its saved value already in place --
+        page.fill() correctly can't act on a disabled element, which
+        used to be reported as a filling failure even though the
+        question is genuinely, already answered, nothing left to do.
+        Checked FIRST: whether ANY candidate selector's element already
+        holds the exact value being asked to fill is compared entirely
+        inside the browser (only a boolean crosses back into this
+        process -- the real saved text is never read into Python, same
+        PII discipline as every other path here). If it already
+        matches, this returns True immediately without calling fill()
+        at all."""
         selectors = []
         for candidate in dict.fromkeys([question_text, _clean_question_id(question_text)]):
             escaped = candidate.replace('"', '\\"')
@@ -1072,6 +1087,18 @@ class GupyAdapter(SiteAdapter):
             n = number_match.group(1)
             selectors.append(f'[id="additional-question-input-{n}"]')
             selectors.append(f'[id="additional-question-textarea-{n}"]')
+
+        already_answered = page.evaluate(
+            """
+            ([selectors, expected]) => selectors.some(sel => {
+                const el = document.querySelector(sel);
+                return el && el.value === expected;
+            })
+            """,
+            [selectors, value],
+        )
+        if already_answered:
+            return True
 
         for selector in selectors:
             try:
