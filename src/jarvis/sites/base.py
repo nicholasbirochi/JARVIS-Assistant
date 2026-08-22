@@ -244,7 +244,16 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "possui parentes que trabalham",
         "tem parentesco com algum colaborador",
         "possui parentesco com algum colaborador",
+        # 2026-08-21, real miss found live (Vivo): "você tem parente(s)"
+        # is the same nepotism-disclosure question, worded differently.
+        "você tem parente",
+        "voce tem parente",
     ],
+    # 2026-08-21, real miss found live (Vivo): "nome completo, sem
+    # abreviações" -- resolved from the résumé's own personal_info.
+    # full_name, not a separate .env value (same reasoning as
+    # "linkedin" -- it's not confidential, it's already on the résumé).
+    "nome_completo": ["nome completo, sem abreviações", "nome completo sem abreviações", "nome completo, sem abreviacoes"],
     "semestre_formatura": [
         "semestre e o ano previstos para a conclusão do curso",
         "semestre e o ano previstos para a conclusao do curso",

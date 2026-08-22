@@ -844,6 +844,7 @@ def _patch_profile(monkeypatch, **fields):
         "cargo_atual": None,
         "parentes_na_empresa": None,
         "semestre_formatura": None,
+        "nome_completo": None,
     }
     full.update(fields)
     monkeypatch.setattr(application_profile, "load_application_profile", lambda: full)
@@ -1307,6 +1308,35 @@ def test_continue_application_with_profile_refuses_when_resume_availability_is_n
 
     assert preview.can_submit is False
     assert page.filled == {}
+
+
+def test_continue_application_with_profile_fills_nome_completo_from_the_resume(monkeypatch):
+    # 2026-08-21, real miss found live (Vivo): "nome completo, sem
+    # abreviações" resolved from the résumé's own full_name, same
+    # reasoning as "linkedin".
+    from jarvis.resume import store as resume_store
+    from jarvis.resume.schema import Bilingual, PersonalInfo, Resume
+
+    resume = Resume(personal_info=PersonalInfo(full_name="Nicholas Birochi"), summary=Bilingual(pt="Resumo."))
+    monkeypatch.setattr(resume_store, "load", lambda: resume)
+
+    _patch_profile(monkeypatch)
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Informe seu nome completo, sem abreviações:\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Informe seu nome completo, sem abreviações:"],
+        fill_selectors={'[id="input-1.Informe seu nome completo, sem abreviações:"]'},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.filled == {'[id="input-1.Informe seu nome completo, sem abreviações:"]': "Nicholas Birochi"}
+    assert preview.questions[-1].answered is True
 
 
 def test_continue_application_with_profile_answers_sim_and_fills_a_known_referral_contact(monkeypatch):

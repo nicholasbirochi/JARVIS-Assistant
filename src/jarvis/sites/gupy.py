@@ -643,11 +643,11 @@ class GupyAdapter(SiteAdapter):
         #   for any external candidate applying cold, same reasoning as
         #   the standard referral question's own "você trabalha na
         #   empresa?" -- never worth asking Nicholas to confirm per job.
-        # - "linkedin" comes from the résumé's own public links (not a
-        #   secret -- it's already on his résumé/LinkedIn profile
-        #   itself), so a company matching Itaú/Santander/XP's referral
-        #   contact doesn't need a SEPARATE local .env entry duplicating
-        #   data that already lives in data/resume.json.
+        # - "linkedin"/"nome_completo" come from the résumé's own public
+        #   fields (not secrets -- already on his résumé/LinkedIn
+        #   profile), so a listing asking for either doesn't need a
+        #   SEPARATE local .env entry duplicating data that already
+        #   lives in data/resume.json.
         # - "disponibilidade_inicio_imediato" comes from the résumé's
         #   own job_preferences.availability.status -- only resolved
         #   when it's the real, explicit "immediate" value; any other
@@ -655,7 +655,8 @@ class GupyAdapter(SiteAdapter):
         #   different answer this code shouldn't guess at, so it's left
         #   unset (unanswerable) rather than assumed.
         profile["ja_trabalhou_aqui"] = "Não"
-        if not profile.get("linkedin") or profile.get("disponibilidade_inicio_imediato") is None:
+        _resume_backed_fields = ("linkedin", "nome_completo", "disponibilidade_inicio_imediato")
+        if any(profile.get(f) is None for f in _resume_backed_fields):
             from jarvis.resume import store as resume_store
 
             resume = resume_store.load()
@@ -663,6 +664,8 @@ class GupyAdapter(SiteAdapter):
                 resume_linkedin = resume.personal_info.links.linkedin
                 if resume_linkedin:
                     profile["linkedin"] = resume_linkedin
+            if not profile.get("nome_completo"):
+                profile["nome_completo"] = resume.personal_info.full_name
             if profile.get("disponibilidade_inicio_imediato") is None:
                 if resume.job_preferences.availability.status == "immediate":
                     profile["disponibilidade_inicio_imediato"] = "Sim"

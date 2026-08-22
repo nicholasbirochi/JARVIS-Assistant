@@ -167,6 +167,17 @@ def test_classify_question_field_recognizes_round_2_of_the_recurring_generic_fie
     )
 
 
+def test_classify_question_field_recognizes_round_3_found_live_at_vivo():
+    assert (
+        classify_question_field("Você tem parente(s) (cônjuges ou pessoa análoga, pai, mãe, avós, filhos) na Vivo?")
+        == "parentes_na_empresa"
+    )
+    assert (
+        classify_question_field("Informe seu nome completo, sem abreviações e conforme documento oficial.")
+        == "nome_completo"
+    )
+
+
 def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():
     # Real risk: "Órgão e Estado de emissão do RG" contains "RG" as its
     # own whole word too -- checking bare "rg" first would misclassify
