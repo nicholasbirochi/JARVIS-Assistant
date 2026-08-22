@@ -571,8 +571,8 @@ class FakeApplicationPage:
             if args:
                 self.last_is_referred = args[0]
             return self.referral_answer_count
-        if "el.value === expected" in script:
-            selectors, _expected = args[0]
+        if "el.disabled && !!el.value" in script:
+            selectors = args[0]
             return any(sel in self.already_answered_selectors for sel in selectors)
         for text, result in self.click_results.items():
             if repr(text) in script:
@@ -898,6 +898,27 @@ def test_fill_company_answer_treats_an_already_saved_field_as_answered_real_pagb
 
     assert ok is True
     assert page.filled == {}  # nothing was actually typed -- already saved
+
+
+def test_fill_company_answer_already_saved_check_ignores_the_current_value_mismatch():
+    # Real, confirmed-live variation on the same PagBank listing: two
+    # OTHER fields (naturalidade, pretensão salarial) were ALSO disabled
+    # with a real, non-empty saved value, but one that did NOT match the
+    # current local profile value -- still correctly "answered" from
+    # Gupy's own point of view (the field is locked either way, nothing
+    # this code can do about a mismatch), so the already-answered check
+    # must only look at "disabled and has a value", never compare
+    # against the value being asked to fill.
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        fill_selectors=set(),
+        already_answered_selectors={'[id="additional-question-textarea-5"]'},
+    )
+
+    ok = GupyAdapter()._fill_company_answer(page, "5. Naturalidade (cidade e estado de nascimento) *", "S.André - SP")
+
+    assert ok is True
+    assert page.filled == {}
 
 
 # --- continue_application_with_profile() --------------------------------

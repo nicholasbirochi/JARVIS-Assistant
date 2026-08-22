@@ -1071,13 +1071,22 @@ class GupyAdapter(SiteAdapter):
         page.fill() correctly can't act on a disabled element, which
         used to be reported as a filling failure even though the
         question is genuinely, already answered, nothing left to do.
-        Checked FIRST: whether ANY candidate selector's element already
-        holds the exact value being asked to fill is compared entirely
-        inside the browser (only a boolean crosses back into this
-        process -- the real saved text is never read into Python, same
-        PII discipline as every other path here). If it already
-        matches, this returns True immediately without calling fill()
-        at all."""
+
+        Checked FIRST: whether any candidate selector's real element is
+        disabled AND already holds *some* non-empty value -- not
+        specifically the value being asked to fill now. A disabled
+        field can't be changed regardless of whether its saved answer
+        still matches the current local profile (confirmed live: two
+        fields on this same listing were disabled with a real,
+        non-empty value that did NOT match the current profile value --
+        still correctly "answered" from Gupy's own point of view, just
+        not something this code can act on either way), so re-checking
+        for an exact match here would just as often report a false
+        failure it has no way to fix. Only whether a value exists is
+        checked inside the browser -- the real saved text is never read
+        into Python, same PII discipline as every other path here. If
+        disabled-with-a-value, this returns True immediately without
+        ever calling fill()."""
         selectors = []
         for candidate in dict.fromkeys([question_text, _clean_question_id(question_text)]):
             escaped = candidate.replace('"', '\\"')
@@ -1090,12 +1099,12 @@ class GupyAdapter(SiteAdapter):
 
         already_answered = page.evaluate(
             """
-            ([selectors, expected]) => selectors.some(sel => {
+            (selectorsArg) => selectorsArg.some(sel => {
                 const el = document.querySelector(sel);
-                return el && el.value === expected;
+                return el && el.disabled && !!el.value;
             })
             """,
-            [selectors, value],
+            selectors,
         )
         if already_answered:
             return True
