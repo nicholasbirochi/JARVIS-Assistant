@@ -1,0 +1,499 @@
+"""Fourth real SiteAdapter implementation. See sites/base.py for
+the hard rules every adapter here follows (manual login only,
+apply_changes refuses without confirmed=True, dry-run always comes
+first).
+
+Login URL found via WebSearch, confirmed reachable live (not guessed) --
+see config.py's INFOJOBS_LOGIN_URL comment. Best of the sites
+tried so far: Playwright reaches it fine in both headless and headed
+mode -- no Cloudflare block like Vagas.com, no headless-only 403 like
+Catho -- so this adapter uses config.SITES_HEADLESS normally, unlike
+catho.py's hardcoded headless=False.
+
+Verified against the real, live site (not guessed), via an actual
+logged-in session:
+- The curriculum edit form lives at
+  https://www.infojobs.com.br/Candidate/CV/insert2.aspx -- reached from
+  the summary page's "Editar" link (which has an ambiguous/hidden
+  duplicate on the page, so this adapter navigates straight to the URL
+  rather than clicking it).
+- `wait_until="domcontentloaded"`, not the default "load"/networkidle --
+  the summary and edit pages both carry ad banners that keep the network
+  busy indefinitely, so waiting for it to go idle just times out.
+- Real field selectors, from the live DOM:
+  #ctl00_phMasterPage_cPersonalData_txtName (first name),
+  #ctl00_phMasterPage_cPersonalData_txtSurname (last name),
+  #ctl00_phMasterPage_cPersonalData_txtPhone1Code (area code, digits only,
+  e.g. "11"), #ctl00_phMasterPage_cPersonalData_txtPhone1 (number, digits
+  only, e.g. "958275250") -- phone is split into two fields, unlike the
+  résumé's single formatted string, so _parse_phone() below normalizes
+  between the two representations for comparison.
+- Save button: `a.js_btSend` ("SALVAR CV") -- an anchor styled as a
+  button, no id, distinct from the per-section "SALVAR FORMAÇÃO"/
+  "SALVAR EXPERIÊNCIA" buttons elsewhere on the same page.
+- Only full_name and phone are wired to real writes (_WRITABLE_FIELDS),
+  same reasoning as Gupy: email isn't even on this form (it's the login
+  identifier, kept on a separate account-settings page), so there's
+  nothing to guess there. CPF and birth date are visible on this same
+  page (next to name/phone) but never read or written -- see
+  _scrape_profile_fields() and _record_evidence().
+
+**Known limitation, root-caused live on 2026-08-11: EVERY save on this
+page is blocked by one unrelated, pre-existing empty required field on
+the account itself, not by anything this adapter does.** apply_changes()
+reloads the page before re-scraping specifically because of this
+investigation's first finding -- an earlier version re-scraped the same
+unreloaded DOM and falsely reported success, since the <input> elements
+still held whatever page.fill() itself had written, regardless of
+whether the site's own save handler ran.
+
+The real mechanism, traced through InfoJobs' own bundled JS
+(`HandlerCssJS.ashx?fileset=...`, fetched and grepped live): clicking
+`.js_btSend` calls `Validate_CV_Step2(e)`, which runs
+`ValidateHidden('#divTotalContent', ...)` -- a validation pass over
+*every* input on the whole page, not just the personal-data section --
+before ever clicking the real, separate submit trigger
+(`.js_btSrvSend`). If validation fails it calls `alert('Revise os campos
+em vermelho.')` and returns early, without ever touching `.js_btSrvSend`, so
+zero requests reach infojobs.com.br -- which is exactly what earlier,
+narrower network-log/console/ASP.NET-postback probing observed without
+yet explaining. Playwright auto-dismisses JS `alert()` dialogs by
+default, so this was silent until a `page.on("dialog", ...)` listener
+was added to capture the message instead of letting it vanish.
+
+Confirmed live: the one failing field is
+`#ctl00_phMasterPage_cPreferences_hdnCategory` (`rfvrequired="True"`,
+`rfverrormessage="Obrigatório"`) -- a hidden field backing the
+"Preferências" section's "Selecione até 3 Áreas de Atuação" (professional
+category) picker, which is empty on this account. It has nothing to do
+with name/phone/CPF/birth date, and nothing to do with this adapter's
+own code -- it blocks ANY save on this page, including ones that never
+touch Preferências at all. This needs a one-time manual fix: log into
+InfoJobs, go to Currículo > Editar > Preferências, pick at least one
+Área de Atuação, and save once by hand. Automated writes here should
+start working immediately afterward -- not yet re-verified, since this
+is a one-time account fix that has to happen on the user's own account,
+not something this code can or should do on the user's behalf (it's a
+genuine career-preference choice, not derivable from resume.json).
+
+Job search (search_jobs(), added 2026-08-11): the real query URL is
+https://www.infojobs.com.br/empregos.aspx?palabra=<query>&provincia=<id>
+-- found by watching where the homepage's own search box navigates to
+after a REAL simulated keystroke sequence (page.type(), not page.fill();
+the #keywordsCombo field silently resets to empty on a plain .fill() +
+click, confirmed live). provincia=64 is São Paulo state, found the same
+way. Listing cards are `div[id^="vacancy"]` (a naive `.js_rowCard`
+selector double-counts every listing -- that class is present on both
+the card and its outer wrapper). Confirmed live and important: InfoJobs'
+own search is loose free-text matching, not filtering -- searching the
+literal target role "Analista de Dados Júnior" returned zero genuinely
+relevant listings (finance/HR/warehouse roles that only share the word
+"Júnior"), while the shorter "Analista de Dados" returned real ones. So
+search_jobs() always queries on the bare keyword, and relevance
+filtering happens locally afterward (sites/job_matching.py) --
+never trust the site's own result set as pre-filtered.
+"""
+
+from __future__ import annotations
+
+import re
+import urllib.parse
+from typing import Any
+
+from resume.schema import Resume
+from sites import session
+from sites.base import (
+    ChangePreview,
+    JobListing,
+    SessionStatus,
+    SiteAdapter,
+    SiteProfileSnapshot,
+    UpdatePlan,
+    UpdateResult,
+)
+
+SITE_NAME = "infojobs"
+
+_EDIT_URL = "https://www.infojobs.com.br/Candidate/CV/insert2.aspx"
+_SEARCH_URL = "https://www.infojobs.com.br/empregos.aspx"
+# São Paulo state -- found live by submitting the homepage's location field
+# with "São Paulo, SP" and reading the resulting query string.
+SAO_PAULO_PROVINCIA_ID = 64
+
+# Only these site_field values have a real, live-verified write path (see
+# module docstring). Anything else in a plan makes apply_changes() refuse
+# the whole plan rather than silently writing part of it.
+_WRITABLE_FIELDS = {"full_name", "phone"}
+
+
+def _parse_phone(phone: str | None) -> tuple[str, str] | tuple[None, None]:
+    """Résumé phone numbers are stored as "+55 (11) 95827-5250"; InfoJobs
+    splits area code and number into two separate digits-only fields.
+    Verified live: "+55 (11) 95827-5250" -> area code "11", number
+    "958275250"."""
+    if phone is None:
+        return None, None
+    digits = re.sub(r"\D", "", phone)
+    if digits.startswith("55") and len(digits) >= 12:
+        digits = digits[2:]  # strip the country code
+    return digits[:2], digits[2:]
+
+
+def _split_full_name(full_name: str) -> tuple[str, str]:
+    """InfoJobs stores first/last name as two separate fields; the résumé
+    keeps one combined string. Splits on the first space, same convention
+    verified live for Gupy (see gupy.py) -- a name with no space becomes
+    an empty last name rather than raising."""
+    first, _, rest = full_name.partition(" ")
+    return first, rest
+
+
+def _map_resume_to_infojobs_fields(resume: Resume) -> dict[str, Any]:
+    """Canonical résumé -> InfoJobs' own field names. Only the personal-
+    data fields verified on the real edit page are mapped -- experience/
+    education/skills live in separate sub-forms on the same page, not yet
+    inspected; left out rather than guessed."""
+    area_code, number = _parse_phone(resume.personal_info.phone)
+    return {
+        "full_name": resume.personal_info.full_name,
+        "phone": f"{area_code} {number}" if area_code else None,
+    }
+
+
+def _is_authenticated(context) -> bool:
+    """Checks that navigating to the login page itself doesn't stay there --
+    an authenticated session gets redirected away from it.
+
+    Uses the same "domcontentloaded + explicit wait" pattern as the edit
+    page (see module docstring): this page also carries the same ad-banner
+    traffic that keeps wait_for_load_state("networkidle") from ever
+    resolving, which was intermittently timing out check_session() with a
+    generic UNKNOWN_ERROR -- confirmed live, not guessed, after check_session
+    failed a few real runs in a row for no real auth reason."""
+    from config import INFOJOBS_LOGIN_URL
+
+    page = context.new_page()
+    try:
+        page.goto(INFOJOBS_LOGIN_URL, timeout=60_000, wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+        return "Account/Login" not in page.url
+    finally:
+        page.close()
+
+
+class InfoJobsAdapter(SiteAdapter):
+    site_name = SITE_NAME
+
+    def check_session(self) -> SessionStatus:
+        if not session.has_saved_session(self.site_name):
+            return SessionStatus.NOT_LOGGED_IN
+
+        from config import SITES_HEADLESS
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            return SessionStatus.AUTHENTICATED if _is_authenticated(context) else SessionStatus.SESSION_EXPIRED
+        except Exception:
+            return SessionStatus.UNKNOWN_ERROR
+        finally:
+            context.close()
+            p.stop()
+
+    def login(self) -> bool:
+        """Not part of the SiteAdapter interface (check_session() never logs
+        in itself, by design) -- this is the explicit, separate, one-time
+        manual step the CLI's `infojobs-login` command calls. Returns
+        whether the session actually verified as authenticated afterward."""
+        from config import INFOJOBS_LOGIN_URL
+
+        return session.login_interactively(self.site_name, INFOJOBS_LOGIN_URL, verify_fn=_is_authenticated)
+
+    def inspect_current_profile(self) -> SiteProfileSnapshot:
+        from datetime import datetime, timezone
+
+        from config import SITES_HEADLESS
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            page = context.new_page()
+            page.goto(_EDIT_URL, timeout=45_000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)  # the form fields populate slightly after DOMContentLoaded
+            fields = self._scrape_profile_fields(page)
+        finally:
+            context.close()
+            p.stop()
+        return SiteProfileSnapshot(
+            site_name=self.site_name,
+            fields=fields,
+            captured_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+    def _scrape_profile_fields(self, page) -> dict[str, Any]:
+        first_name = page.input_value("#ctl00_phMasterPage_cPersonalData_txtName")
+        last_name = page.input_value("#ctl00_phMasterPage_cPersonalData_txtSurname")
+        area_code = page.input_value("#ctl00_phMasterPage_cPersonalData_txtPhone1Code")
+        number = page.input_value("#ctl00_phMasterPage_cPersonalData_txtPhone1")
+        return {
+            "full_name": f"{first_name} {last_name}".strip(),
+            "phone": f"{area_code} {number}" if area_code or number else "",
+        }
+
+    def build_update_plan(self, resume: Resume, current: SiteProfileSnapshot) -> UpdatePlan:
+        from sites.base import PlannedFieldChange
+
+        desired = _map_resume_to_infojobs_fields(resume)
+        resume_field_paths = {"full_name": "personal_info.full_name", "phone": "personal_info.phone"}
+        changes = [
+            PlannedFieldChange(
+                site_field=field_name,
+                current_value=current.fields.get(field_name),
+                new_value=new_value,
+                resume_field_path=resume_field_paths[field_name],
+            )
+            for field_name, new_value in desired.items()
+            if new_value is not None and current.fields.get(field_name) != new_value
+        ]
+        return UpdatePlan(site_name=self.site_name, changes=changes)
+
+    def preview_changes(self, plan: UpdatePlan) -> ChangePreview:
+        if not plan.changes:
+            summary = "Nenhuma mudança -- o perfil no InfoJobs já bate com o currículo local."
+        else:
+            lines = [
+                f"- {c.site_field}: {c.current_value!r} -> {c.new_value!r} (origem: {c.resume_field_path})"
+                for c in plan.changes
+            ]
+            summary = f"{len(plan.changes)} mudança(s) propostas para {plan.site_name}:\n" + "\n".join(lines)
+        return ChangePreview(site_name=self.site_name, plan=plan, summary_text=summary)
+
+    def apply_changes(self, plan: UpdatePlan, confirmed: bool) -> UpdateResult:
+        if not confirmed:
+            return UpdateResult(
+                site_name=self.site_name,
+                applied=False,
+                error="Recusado: apply_changes exige confirmed=True, só depois de "
+                "preview_changes() ter sido mostrado a um humano.",
+            )
+        if not plan.changes:
+            return UpdateResult(site_name=self.site_name, applied=True, changes_applied=[])
+
+        unsupported = [c.site_field for c in plan.changes if c.site_field not in _WRITABLE_FIELDS]
+        if unsupported:
+            raise NotImplementedError(
+                f"Envio real ainda não coberto para: {', '.join(unsupported)}. Nome e "
+                "telefone já foram inspecionados ao vivo (ver o docstring de infojobs.py)."
+            )
+
+        from config import SITES_HEADLESS
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            page = context.new_page()
+
+            # InfoJobs' own client-side validation (Validate_CV_Step2, see
+            # module docstring) blocks the save with a JS alert() when ANY
+            # field on the page is invalid -- not just the ones this
+            # adapter writes. Playwright auto-dismisses alert()s by
+            # default, so without this listener that failure would be
+            # silent: zero requests fire, and the only symptom is the
+            # post-save verification below not matching.
+            dialog_messages: list[str] = []
+            page.on("dialog", lambda d: (dialog_messages.append(d.message), d.dismiss()))
+
+            page.goto(_EDIT_URL, timeout=45_000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+
+            for change in plan.changes:
+                self._fill_field(page, change.site_field, change.new_value)
+
+            save_btn = page.query_selector("a.js_btSend")
+            if save_btn is None:
+                return UpdateResult(
+                    site_name=self.site_name,
+                    applied=False,
+                    error="Botão Salvar CV não encontrado -- a página pode ter mudado desde "
+                    "a última verificação ao vivo.",
+                )
+            save_btn.click()
+            page.wait_for_timeout(3000)
+
+            if dialog_messages:
+                return UpdateResult(
+                    site_name=self.site_name,
+                    applied=False,
+                    error="InfoJobs recusou o salvamento (validação de outro campo da página, "
+                    "não relacionado a esta mudança): " + " / ".join(dialog_messages) + ". Confira "
+                    "o perfil manualmente no site -- ver o docstring de infojobs.py para o campo "
+                    "vazio já identificado (Preferências > Área de Atuação).",
+                )
+
+            evidence_path = self._record_evidence(plan)
+
+            # Reload before re-scraping -- otherwise this reads back the same
+            # <input> elements we just wrote via page.fill(), which still
+            # hold our own in-memory value regardless of whether the site's
+            # own save handler actually ran. Confirmed live: the "SALVAR CV"
+            # click can silently do nothing server-side (verified via network
+            # logging -- zero requests to infojobs.com.br after the click)
+            # while the unreloaded DOM still "looks" saved. A real reload
+            # forces us to read the server's own truth.
+            page.reload(wait_until="domcontentloaded", timeout=45_000)
+            page.wait_for_timeout(3000)
+
+            fields_after = self._scrape_profile_fields(page)
+            failed = [c for c in plan.changes if fields_after.get(c.site_field) != c.new_value]
+            if failed:
+                return UpdateResult(
+                    site_name=self.site_name,
+                    applied=False,
+                    error="Clicou Salvar CV, mas o perfil não reflete a mudança em: "
+                    f"{', '.join(c.site_field for c in failed)} -- confira manualmente.",
+                    evidence_path=evidence_path,
+                )
+            return UpdateResult(
+                site_name=self.site_name, applied=True, changes_applied=plan.changes, evidence_path=evidence_path
+            )
+        finally:
+            context.close()
+            p.stop()
+
+    def _fill_field(self, page, site_field: str, value: Any) -> None:
+        if site_field == "full_name":
+            first, last = _split_full_name(value)
+            page.fill("#ctl00_phMasterPage_cPersonalData_txtName", first)
+            page.fill("#ctl00_phMasterPage_cPersonalData_txtSurname", last)
+        elif site_field == "phone":
+            area_code, number = value.split(" ", 1)
+            page.fill("#ctl00_phMasterPage_cPersonalData_txtPhone1Code", area_code)
+            page.fill("#ctl00_phMasterPage_cPersonalData_txtPhone1", number)
+        else:  # pragma: no cover -- unreachable, apply_changes filters first
+            raise NotImplementedError(f"Campo não suportado para escrita: {site_field!r}")
+
+    def _record_evidence(self, plan: UpdatePlan) -> str | None:
+        """Audit-trail record for a real submission -- deliberately a small
+        JSON record of what changed (field/old/new/when), NOT a screenshot.
+        The profile page also displays CPF and birth date right next to the
+        fields we actually write; a full-page screenshot would capture
+        those incidentally even though the write itself never touches
+        them. Best-effort -- a failed write here shouldn't fail the whole
+        apply, the actual site write already happened by this point."""
+        import json
+        from datetime import datetime, timezone
+
+        from config import SITES_EVIDENCE_DIR
+
+        try:
+            SITES_EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            path = SITES_EVIDENCE_DIR / f"{self.site_name}_{stamp}.json"
+            record = {
+                "site_name": self.site_name,
+                "applied_at": datetime.now(timezone.utc).isoformat(),
+                "changes": [
+                    {
+                        "field": c.site_field,
+                        "old_value": c.current_value,
+                        "new_value": c.new_value,
+                        "resume_field_path": c.resume_field_path,
+                    }
+                    for c in plan.changes
+                ],
+            }
+            path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+            return str(path)
+        except Exception:
+            return None
+
+    def search_jobs(
+        self, query: str, *, province: int | None = SAO_PAULO_PROVINCIA_ID, max_results: int = 60
+    ) -> list[JobListing]:
+        """Read-only: runs InfoJobs' own job search and returns whatever it
+        gives back, unfiltered -- callers should run the result through
+        jarvis.sites.job_matching.filter_relevant() before treating it as
+        "matches", since InfoJobs' own search is loose (see module
+        docstring). Never touches apply_changes()'s login-writing machinery
+        -- entirely separate, read-only flow. max_results is a target, not
+        a guarantee -- scrolling stops early once a scroll stops adding new
+        cards (real end of results) or after a bounded number of attempts,
+        whichever comes first."""
+        from config import SITES_HEADLESS
+
+        params = {"palabra": query}
+        if province is not None:
+            params["provincia"] = str(province)
+        url = f"{_SEARCH_URL}?{urllib.parse.urlencode(params)}"
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            page = context.new_page()
+            page.goto(url, timeout=45_000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+            # InfoJobs' results load via infinite scroll -- confirmed live,
+            # a single scroll-to-bottom roughly doubles the card count (22
+            # -> 42). Scroll repeatedly until either the target is reached
+            # or a scroll stops adding new cards (end of real results).
+            cards = self._extract_listing_cards(page)
+            attempts = 0
+            while len(cards) < max_results and attempts < 6:
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                page.wait_for_timeout(2000)
+                new_cards = self._extract_listing_cards(page)
+                if len(new_cards) <= len(cards):
+                    break
+                cards = new_cards
+                attempts += 1
+        finally:
+            context.close()
+            p.stop()
+
+        listings = []
+        for card in cards:
+            listing = _card_to_job_listing(card)
+            if listing is not None:
+                listings.append(listing)
+        return listings
+
+    def _extract_listing_cards(self, page) -> list[dict]:
+        """Raw card data, straight off the DOM -- kept as a thin, separate
+        method so _card_to_job_listing()'s conversion/validation logic
+        (below) can be unit-tested without a real page.evaluate() call."""
+        return page.evaluate(
+            """
+            () => Array.from(document.querySelectorAll("div[id^='vacancy']")).map(c => {
+                const title = c.querySelector('.js_vacancyTitle');
+                const link = c.querySelector('a.text-decoration-none[href]');
+                const companySpan = c.querySelector('.text-body a.text-body span.text-nowrap');
+                const locationDiv = c.querySelector('.mb-8');
+                const descDivs = Array.from(c.querySelectorAll('.text-medium'))
+                    .filter(d => !d.classList.contains('small'));
+                return {
+                    external_id: c.id.replace('vacancy', ''),
+                    title: title ? title.textContent.trim() : null,
+                    href: link ? link.getAttribute('href') : null,
+                    company: companySpan ? companySpan.childNodes[0].textContent.trim() : null,
+                    location: locationDiv ? locationDiv.childNodes[0].textContent.trim() : null,
+                    snippet: descDivs.length ? descDivs[descDivs.length - 1].textContent.trim() : null,
+                };
+            })
+            """
+        )
+
+
+def _card_to_job_listing(card: dict) -> JobListing | None:
+    """None for cards that aren't real listings -- confirmed live: a
+    `div[id^="vacancy"]` selector also catches at least one unrelated
+    employer-detail widget with no title/href, which must be dropped
+    rather than turned into a bogus JobListing."""
+    if not card.get("title") or not card.get("href") or not card.get("external_id"):
+        return None
+    href = card["href"]
+    url = href if href.startswith("http") else f"https://www.infojobs.com.br{href}"
+    return JobListing(
+        site_name=SITE_NAME,
+        external_id=card["external_id"],
+        title=card["title"],
+        company=card.get("company"),
+        location=card.get("location"),
+        url=url,
+        snippet=card.get("snippet"),
+    )

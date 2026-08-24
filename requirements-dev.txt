@@ -1,0 +1,4 @@
+# Testing only. Install with: pip install -r requirements-dev.txt
+-r requirements.txt
+
+pytest>=8.0.0

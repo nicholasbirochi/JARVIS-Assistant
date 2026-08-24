@@ -7,8 +7,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Estudos/Projetos/54 - J.A.R.V.I.S/.venv/bin/python</string>
-        <string>-m</string>
-        <string>jarvis</string>
+        <string>src/cli.py</string>
         <string>menubar</string>
     </array>
     <key>WorkingDirectory</key>

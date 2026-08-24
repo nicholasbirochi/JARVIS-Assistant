@@ -1,0 +1,172 @@
+"""Hand-written tool-call loop for the live voice/text conversation, driven
+through the LocalLLMProvider abstraction (assistant/providers.py) --
+no direct dependency on `ollama` here, so swapping providers later doesn't
+touch this file."""
+
+from __future__ import annotations
+
+from assistant.providers import LocalLLMProvider, get_provider
+from assistant.tool_schema import functions_to_tool_specs
+from assistant.tools import TOOLS
+
+_BASE_SYSTEM_PROMPT = """\
+Você é o JARVIS, o assistente pessoal do Nicholas. Fale sempre em português \
+do Brasil, de forma direta e respeitosa, tratando-o como "Senhor Nicholas" \
+quando apropriado -- sem exagerar na formalidade.
+
+Você também é apaixonado por dados -- análise de dados, estatística, machine \
+learning, visualização -- os mesmos temas em que o Nicholas se especializa e \
+busca atuar profissionalmente. Quando o assunto surgir na conversa, mostre \
+entusiasmo e conhecimento real sobre isso, não só sobre o currículo -- mas \
+sem perder a objetividade abaixo.
+{specialization_block}
+Sua função principal é conversar sobre o currículo do Nicholas: consultar \
+dados (ferramenta read_resume), editar campos quando ele pedir (ferramenta \
+update_resume_field), e informar quais sites de vagas já são suportados \
+(list_supported_sites) ou tentar publicar nele (push_resume_to_site -- ainda \
+não implementado para nenhum site, apenas explique isso quando pedido).
+
+Sempre que for editar um campo, primeiro use read_resume para confirmar o \
+caminho e o valor atual antes de chamar update_resume_field. Depois de \
+editar, confirme em uma frase curta o que mudou.
+
+Se o Nicholas pedir para mudar algo no código do JARVIS, em outro projeto \
+dele, ou quiser passar um pedido para o Claude Code implementar, use a \
+ferramenta prepare_claude_prompt. Escreva você mesmo o prompt completo e \
+bem estruturado, com todo o contexto necessário -- não repita a fala dele \
+ao pé da letra, capriche como se estivesse escrevendo para um \
+desenvolvedor de verdade. Nunca invente qual projeto ou arquivo é, a \
+menos que ele tenha dito -- quem decide onde colar é ele. Depois, \
+confirme em uma frase curta que o prompt foi copiado.
+
+Se ele pedir para anotar uma ideia futura para o próprio JARVIS (uma \
+melhoria, algo para revisitar depois -- não algo para fazer agora), use \
+add_roadmap_item. Se pedir para anotar um lembrete pessoal (qualquer \
+assunto, não sobre o JARVIS), use add_reminder; para ver os lembretes já \
+anotados, use list_reminders.
+
+Se ele pedir para buscar/procurar vagas de emprego, use find_matching_jobs \
+-- avise antes que é uma busca real e pode levar um ou dois minutos. Para \
+ver de novo o resultado da última busca sem buscar de novo, use \
+list_recent_job_matches.
+
+Se ele perguntar sobre patrimônio, investimentos, quanto tem guardado, ou \
+pedir uma avaliação financeira, use evaluate_investments.
+
+Se ele pedir para verificar uma vaga específica pelo link, use \
+check_job_application -- e deixe claro que isso NÃO envia a candidatura \
+de verdade, só checa até onde dá pra avançar com segurança.
+
+Se ele pedir para avançar/continuar uma candidatura usando os dados \
+locais dele, use continue_job_application -- deixe claro que isso \
+preenche de verdade mas ainda NÃO envia, ele precisa confirmar o envio \
+final manualmente. Se ele pedir para configurar esses dados (RG, CPF, \
+pretensão salarial, estado civil), use setup_application_profile e \
+nunca leia esses valores em voz alta.
+
+Se ele pedir para abrir/ver as vagas numa página local, ou clicar em \
+botões em vez de te dar link por link, use open_job_portal.
+
+Fale o mínimo necessário. Cada resposta deve ter, no máximo, uma ou duas \
+frases curtas -- só o essencial para responder ao que foi perguntado, sem \
+introdução, sem repetir o que o Nicholas disse, sem markdown, listas, ou \
+oferecer ajuda extra que não foi pedida ("posso ajudar com mais algo?" só \
+se fizer sentido de verdade, não por padrão). Se a resposta puder ser uma \
+frase, não use duas.
+"""
+
+
+def _specialization_summary() -> str:
+    """Pulls a short, factual line of what Nicholas actually studies from
+    the résumé -- so the data-enthusiast trait above is grounded in his
+    real specialization, not generic. Best-effort: an empty string (never
+    an exception) if the résumé can't be read for any reason, since a
+    missing personality flourish must never block a conversation turn."""
+    try:
+        from resume import store
+
+        resume = store.load()
+        skill_items = [item for category in resume.skills for item in category.items]
+        cert_names = [c.name for c in resume.certifications if c.name]
+    except Exception:
+        return ""
+
+    parts = []
+    if skill_items:
+        parts.append(f"Habilidades técnicas dele: {', '.join(skill_items[:12])}.")
+    if cert_names:
+        parts.append(f"Certificações/cursos: {', '.join(cert_names[:6])}.")
+    return " ".join(parts)
+
+
+def _build_system_prompt() -> str:
+    """Rebuilt fresh each turn (not a module-level constant) so it always
+    reflects the current résumé -- certifications/skills added later show
+    up here without needing a restart."""
+    specialization = _specialization_summary()
+    specialization_block = f"\n{specialization}\n" if specialization else ""
+    return _BASE_SYSTEM_PROMPT.format(specialization_block=specialization_block)
+
+
+MAX_TOOL_ITERATIONS = 8
+
+_provider: LocalLLMProvider | None = None
+_functions_by_name = {f.__name__: f for f in TOOLS}
+_tool_specs = functions_to_tool_specs(TOOLS)
+
+
+def _get_provider() -> LocalLLMProvider:
+    global _provider
+    if _provider is None:
+        _provider = get_provider()
+    return _provider
+
+
+def send_turn(messages: list[dict]) -> str:
+    """Runs the tool loop for the conversation so far (last entry must be the
+    new user turn already appended by the caller). Mutates `messages` in
+    place with every assistant/tool turn produced, and returns the final
+    assistant text to speak back."""
+
+    provider = _get_provider()
+
+    for _ in range(MAX_TOOL_ITERATIONS):
+        response = provider.chat(
+            messages=[{"role": "system", "content": _build_system_prompt()}, *messages],
+            tool_specs=_tool_specs,
+        )
+
+        # Preserve tool_calls on the replayed assistant turn -- the model
+        # needs to see its own prior calls to make sense of the "tool"-role
+        # results that follow, or multi-turn tool history silently breaks.
+        assistant_message: dict = {"role": "assistant", "content": response.content}
+        if response.tool_calls:
+            assistant_message["tool_calls"] = [
+                {"function": {"name": call.name, "arguments": call.arguments}}
+                for call in response.tool_calls
+            ]
+        messages.append(assistant_message)
+
+        if not response.tool_calls:
+            return response.content
+
+        for call in response.tool_calls:
+            function = _functions_by_name.get(call.name)
+            if function is None:
+                output = f"Ferramenta desconhecida: {call.name}"
+            else:
+                # A real, observed failure: the local model hallucinated an
+                # argument that doesn't exist (read_resume(path=...) --
+                # read_resume takes none) -- TypeError propagated all the
+                # way out of send_turn(), which run_voice_loop's broad
+                # exception handler then misdiagnosed as a mic problem and
+                # "recovered" from, silently dropping the user's turn with
+                # no reply at all. A bad tool call is the model's mistake to
+                # see and correct, not a reason to blow up the whole turn.
+                try:
+                    output = function(**call.arguments)
+                except Exception as exc:
+                    output = f"Erro ao executar {call.name}: {exc}"
+            messages.append({"role": "tool", "content": str(output), "tool_name": call.name})
+
+    return "Desculpe, Senhor Nicholas, me perdi tentando executar essa ação. Pode repetir?"

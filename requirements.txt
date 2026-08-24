@@ -1,0 +1,29 @@
+# Base dependencies -- everything needed to actually run JARVIS day to day.
+# Install with: pip install -r requirements.txt
+#
+# Requires Python >=3.11. There's no installable package anymore (no
+# pyproject.toml/setup.py) -- src/ is a flat folder of plain modules, not a
+# distribution. Run things from inside it (`cd src && python cli.py ...`)
+# or with `PYTHONPATH=src`; tests find src/ on their own via
+# src/conftest.py. See readme.md's "Rodando sem instalar" section.
+#
+# Optional extras (not installed by this file):
+#   requirements-dev.txt            -- pytest, for running the test suite
+#   requirements-voice-cloning.txt  -- XTTS-v2 voice cloning (heavy, fragile)
+#   requirements-packaging.txt      -- py2app, only for building JARVIS.app
+
+ollama>=0.4.0
+docstring-parser>=0.16
+openwakeword>=0.6.0
+pypdf>=4.0.0
+openpyxl>=3.1.0
+rumps>=0.4.0
+pvporcupine>=3.0.0
+pvrecorder>=1.2.0
+faster-whisper>=1.0.0
+numpy>=1.26.0
+pydantic>=2.6.0
+python-docx>=1.1.0
+python-dotenv>=1.0.0
+playwright>=1.45.0
+pyobjc-framework-WebKit>=10.0
