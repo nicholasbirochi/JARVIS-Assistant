@@ -224,3 +224,41 @@ def test_prepare_claude_prompt_still_succeeds_if_logging_itself_fails(monkeypatc
     result = tools.prepare_claude_prompt("qualquer coisa")
 
     assert "copiado" in result.lower()
+
+
+def test_continue_job_application_defaults_to_finalize_false(monkeypatch):
+    # Voice/text calls (the only caller that ever omits finalize) must
+    # keep the old, safer fill-only behavior -- only the portal's apply
+    # button (job_portal/server.py's _do_apply) is allowed to pass
+    # finalize=True.
+    from sites import gupy
+
+    calls = []
+
+    class _FakeAdapter:
+        def continue_application_with_profile(self, url, confirmed, *, finalize=False):
+            calls.append((url, confirmed, finalize))
+            return type("Preview", (), {"summary_text": "ok", "blocked_reason": None})()
+
+    monkeypatch.setattr(gupy, "GupyAdapter", _FakeAdapter)
+
+    tools.continue_job_application("https://empresa.gupy.io/job/xyz")
+
+    assert calls == [("https://empresa.gupy.io/job/xyz", True, False)]
+
+
+def test_continue_job_application_forwards_finalize_true(monkeypatch):
+    from sites import gupy
+
+    calls = []
+
+    class _FakeAdapter:
+        def continue_application_with_profile(self, url, confirmed, *, finalize=False):
+            calls.append((url, confirmed, finalize))
+            return type("Preview", (), {"summary_text": "ok", "blocked_reason": None})()
+
+    monkeypatch.setattr(gupy, "GupyAdapter", _FakeAdapter)
+
+    tools.continue_job_application("https://empresa.gupy.io/job/xyz", finalize=True)
+
+    assert calls == [("https://empresa.gupy.io/job/xyz", True, True)]

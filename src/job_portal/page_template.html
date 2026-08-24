@@ -135,7 +135,7 @@
   <header class="cover">
     <p class="eyebrow"><b>J&middot;A&middot;R&middot;V&middot;I&middot;S</b> &middot; local, roda no seu Mac</p>
     <h1>Vagas por empresa</h1>
-    <p class="subtitle">Página local (não hospedada) -- os botões aqui rodam de verdade no seu computador, chamando o mesmo código que o JARVIS usa por voz. "Verificar" nunca envia nada. "Continuar candidatura" preenche de verdade usando seu perfil local, mas nunca clica no envio final.</p>
+    <p class="subtitle">Página local (não hospedada) -- os botões aqui rodam de verdade no seu computador, chamando o mesmo código que o JARVIS usa por voz. "Verificar" nunca envia nada. "Enviar candidatura" preenche de verdade usando seu perfil local e, se tudo bater, <strong>envia a candidatura de verdade</strong> -- é uma ação definitiva.</p>
     <div class="top-actions">
       <button class="top-btn" id="refresh-btn" onclick="refreshVagas()">Atualizar vagas agora</button>
       <span id="refresh-status" style="font-size:12px;color:var(--text-dim);"></span>
@@ -260,12 +260,12 @@
   }};
 
   window.continuarCandidatura = function (btn, url) {{
-    if (!confirm("Isso vai preencher de verdade as perguntas dessa vaga com os dados do seu perfil local (RG/CPF/salário/estado civil), se todas baterem. NÃO envia a candidatura final. Continuar?")) {{
+    if (!confirm("Isso vai preencher de verdade as perguntas dessa vaga com os dados do seu perfil local (RG/CPF/salário/estado civil) e, se todas baterem, ENVIAR a candidatura de verdade -- ação definitiva, não dá pra desfazer. Continuar?")) {{
       return;
     }}
     var box = btn.closest(".action-row").nextElementSibling;
     btn.disabled = true;
-    btn.textContent = "Preenchendo...";
+    btn.textContent = "Enviando...";
     fetch("/api/apply", {{
       method: "POST", headers: {{"Content-Type": "application/json"}},
       body: JSON.stringify({{url: url}}),
@@ -277,7 +277,7 @@
       box.classList.add("visible");
     }}).finally(function () {{
       btn.disabled = false;
-      btn.textContent = "Continuar candidatura";
+      btn.textContent = "Enviar candidatura";
     }});
   }};
 

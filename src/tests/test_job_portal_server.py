@@ -75,7 +75,7 @@ def test_serves_the_page_with_real_tier_data(monkeypatch):
     assert "Analista de Dados Júnior" in body
     assert "Itaú" in body
     assert "JÚNIOR" in body
-    assert "Continuar candidatura" in body  # gupy listing -> real apply button shown
+    assert "Enviar candidatura" in body  # gupy listing -> real apply button shown
 
 
 def test_serves_the_fintech_tier(monkeypatch):
@@ -176,18 +176,28 @@ def test_check_endpoint_calls_check_job_application(monkeypatch):
     assert calls == ["https://empresa.gupy.io/job/xyz"]
 
 
-def test_apply_endpoint_calls_continue_job_application(monkeypatch):
+def test_apply_endpoint_calls_continue_job_application_with_finalize_true(monkeypatch):
+    # 2026-08-25, real behavior change at Nicholas's explicit request:
+    # the portal's apply button now submits for real, not just fills --
+    # this is the one caller of continue_job_application() that must
+    # always pass finalize=True (voice/text calls it with the default
+    # finalize=False -- see assistant/tools.py's docstring for why the
+    # two callers deliberately differ).
     from assistant import tools
 
     calls = []
-    monkeypatch.setattr(tools, "continue_job_application", lambda url: calls.append(url) or "resultado do preenchimento")
+    monkeypatch.setattr(
+        tools,
+        "continue_job_application",
+        lambda url, *, finalize=False: calls.append((url, finalize)) or "resultado do envio",
+    )
     port = server.start(port=0)
 
     status, body = _post(port, "/api/apply", {"url": "https://empresa.gupy.io/job/xyz"})
 
     assert status == 200
-    assert body["summary"] == "resultado do preenchimento"
-    assert calls == ["https://empresa.gupy.io/job/xyz"]
+    assert body["summary"] == "resultado do envio"
+    assert calls == [("https://empresa.gupy.io/job/xyz", True)]
 
 
 def test_check_endpoint_reports_errors_as_json_500(monkeypatch):

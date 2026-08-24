@@ -284,23 +284,38 @@ def check_job_application(url: str) -> str:
     return preview.summary_text or (preview.blocked_reason or "Não deu pra avançar nessa vaga.")
 
 
-def continue_job_application(url: str) -> str:
+def continue_job_application(url: str, *, finalize: bool = False) -> str:
     """Avança de verdade numa candidatura (vagas do Gupy) usando os dados
     do arquivo local de perfil de candidatura (RG, CPF, pretensão
     salarial, estado civil) -- só preenche uma pergunta da empresa se
     TODAS as perguntas daquela etapa tiverem valor real no arquivo local;
     se faltar uma só, não preenche nada (tudo ou nada, pra não deixar o
-    formulário pela metade). NUNCA clica no envio final -- essa etapa
-    nunca foi confirmada ao vivo, então sempre para antes dela, mesmo
-    quando consegue preencher tudo.
+    formulário pela metade).
+
+    finalize=False (padrão, usado por voz/texto): NUNCA clica no envio
+    final -- sempre para depois de preencher, mesmo quando consegue
+    preencher tudo, já que aqui não existe uma confirmação explícita e
+    imediata do Nicholas por vaga antes de disparar.
+
+    finalize=True (só usado pelo botão "Continuar candidatura" do portal
+    local -- 2026-08-25, a pedido explícito do Nicholas, depois do
+    diálogo de confirmação em page_template.html já avisar que isso
+    envia de verdade): clica no envio final também, se chegar até lá.
+    submitted só vem True se a tela seguinte realmente confirmar
+    ("Candidatura finalizada") -- um clique que não confirma isso é
+    reportado como falha, nunca como sucesso assumido.
 
     Use quando o Nicholas pedir explicitamente para continuar/avançar
     numa candidatura específica usando os dados que ele já configurou.
-    Deixe claro que isso preenche de verdade mas NÃO envia -- ele ainda
-    precisa confirmar manualmente o envio final no navegador.
+    Por voz/texto (finalize=False, o padrão), deixe claro que isso
+    preenche de verdade mas NÃO envia -- ele ainda precisa confirmar
+    manualmente o envio final no navegador.
 
     Args:
         url: Link da vaga (ex.: um dos retornados por find_matching_jobs).
+        finalize: Se True, também clica no envio final depois de
+            preencher tudo. Nunca passe True aqui a partir de uma
+            chamada por voz/texto -- é exclusivo do botão do portal.
     """
     if "gupy.io" not in url:
         return (
@@ -311,7 +326,7 @@ def continue_job_application(url: str) -> str:
     from sites.gupy import GupyAdapter
 
     try:
-        preview = GupyAdapter().continue_application_with_profile(url, confirmed=True)
+        preview = GupyAdapter().continue_application_with_profile(url, confirmed=True, finalize=finalize)
     except Exception as exc:
         return f"Não consegui avançar essa candidatura: {exc}"
 

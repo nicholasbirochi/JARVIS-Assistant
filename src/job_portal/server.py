@@ -18,12 +18,16 @@ Routes:
   fetched yet in this process.
 - POST /api/check   -- {"url": "..."} -> jarvis.assistant.tools.
   check_job_application(url) -- read-only, never submits anything.
-- POST /api/apply   -- {"url": "..."} -> jarvis.assistant.tools.
-  continue_job_application(url) -- a REAL, mutating action (fills a
-  live form using the local application profile), gated by the same
-  all-or-nothing/never-final-submit rules as everywhere else in this
-  project. The browser's own confirm() dialog (in page_template.html)
-  is the human-in-the-loop check before this ever fires.
+- POST /api/apply   -- {"url": "..."} -> assistant.tools.
+  continue_job_application(url, finalize=True) -- a REAL, mutating,
+  FINAL action: fills the live form using the local application
+  profile (same all-or-nothing rule as everywhere else -- one missing
+  field blocks the whole step) and, if that succeeds, clicks the real
+  final submit button too (2026-08-25, changed at Nicholas's explicit
+  request -- previously stopped right after filling). The browser's
+  own confirm() dialog (in page_template.html) -- which spells out that
+  this sends the application for real -- is the human-in-the-loop check
+  before this ever fires, not a second code-level gate.
 - POST /api/refresh -- reruns a real, fresh multi-site search
   (blocking -- the client's fetch() just waits, showing a loading
   state; no fake progress bar, no background job queue for this first
@@ -271,7 +275,7 @@ def _render_row(listing: JobListing) -> str:
     is_gupy = listing.site_name == "gupy"
     apply_actions = (
         f'<button class="action-btn" type="button" onclick="verificarVaga(this, \'{_esc(listing.url)}\')">Verificar</button>'
-        f'<button class="action-btn warn" type="button" onclick="continuarCandidatura(this, \'{_esc(listing.url)}\')">Continuar candidatura</button>'
+        f'<button class="action-btn warn" type="button" onclick="continuarCandidatura(this, \'{_esc(listing.url)}\')">Enviar candidatura</button>'
         if is_gupy
         else '<span style="font-size:12px;color:var(--text-faint);">Verificação automática só existe pro Gupy por enquanto.</span>'
     )
@@ -423,7 +427,10 @@ class _Handler(BaseHTTPRequestHandler):
     def _do_apply(self, url: str) -> str:
         from assistant.tools import continue_job_application
 
-        return continue_job_application(url)
+        # finalize=True -- 2026-08-25, explicit Nicholas request: the
+        # portal button now submits for real, not just fills. See this
+        # module's docstring and page_template.html's confirm() text.
+        return continue_job_application(url, finalize=True)
 
     def _handle_refresh(self) -> None:
         try:
