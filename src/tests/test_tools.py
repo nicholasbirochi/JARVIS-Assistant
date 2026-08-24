@@ -67,7 +67,7 @@ def test_open_job_portal_opens_immediately_before_the_search_finishes(monkeypatc
     from job_portal import server
 
     monkeypatch.setattr(server, "_tiers", None)
-    monkeypatch.setattr(server, "open_portal", lambda: "http://127.0.0.1:8766/")
+    monkeypatch.setattr(server, "open_portal", lambda: "http://127.0.0.1:8767/")
 
     refresh_started = threading.Event()
     release_refresh = threading.Event()
@@ -83,7 +83,7 @@ def test_open_job_portal_opens_immediately_before_the_search_finishes(monkeypatc
     result = tools.open_job_portal()
 
     # The call returns right away -- it does NOT wait for the search.
-    assert "http://127.0.0.1:8766/" in result
+    assert "http://127.0.0.1:8767/" in result
     assert "segundo plano" in result
     assert refresh_started.wait(timeout=2)  # the background thread really did start
     release_refresh.set()  # let the fake background thread finish, don't leak it
@@ -93,7 +93,7 @@ def test_open_job_portal_does_not_search_again_once_tiers_are_populated(monkeypa
     from job_portal import server
 
     monkeypatch.setattr(server, "_tiers", {"banco": []})
-    monkeypatch.setattr(server, "open_portal", lambda: "http://127.0.0.1:8766/")
+    monkeypatch.setattr(server, "open_portal", lambda: "http://127.0.0.1:8767/")
 
     called = []
     monkeypatch.setattr(server, "refresh_data", lambda **kwargs: called.append(kwargs))
@@ -102,7 +102,7 @@ def test_open_job_portal_does_not_search_again_once_tiers_are_populated(monkeypa
 
     assert called == []
     assert "segundo plano" not in result
-    assert "http://127.0.0.1:8766/" in result
+    assert "http://127.0.0.1:8767/" in result
 
 
 # ---- prepare_claude_prompt ----

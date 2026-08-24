@@ -9,8 +9,8 @@ Artifact structurally can't do this).
 Same pattern as visualizer/server.py: plain stdlib http.server,
 bound to 127.0.0.1 only, ThreadingHTTPServer so a slow request (real
 Playwright automation, 10-30+ seconds) doesn't block other connections.
-Different port (8766, not the visualizer's 8765) so both can run at
-once.
+Different port (8767, not the visualizer's 8765 or the xtts worker's
+8766) so all three can run at once.
 
 Routes:
 - GET  /            -- the page, rendered fresh from the in-memory
@@ -264,16 +264,16 @@ def _render_row(listing: JobListing) -> str:
     if junior:
         badges.append('<span class="junior-badge">JÚNIOR</span>')
     if is_in_target_region(listing.location):
-        badges.append('<span class="site-badge" style="background:var(--tag-bg);color:var(--tag-text);">perto de você</span>')
+        badges.append('<span class="site-badge" style="background:var(--surface-3);color:var(--accent-bright);">perto de você</span>')
     elif is_remote(listing.title, listing.snippet, listing.location):
-        badges.append('<span class="site-badge" style="background:var(--tag-bg);color:var(--tag-text);">home office</span>')
+        badges.append('<span class="site-badge" style="background:var(--surface-3);color:var(--accent-bright);">home office</span>')
 
     is_gupy = listing.site_name == "gupy"
     apply_actions = (
         f'<button class="action-btn" type="button" onclick="verificarVaga(this, \'{_esc(listing.url)}\')">Verificar</button>'
         f'<button class="action-btn warn" type="button" onclick="continuarCandidatura(this, \'{_esc(listing.url)}\')">Continuar candidatura</button>'
         if is_gupy
-        else '<span style="font-size:12px;color:var(--text-muted);">Verificação automática só existe pro Gupy por enquanto.</span>'
+        else '<span style="font-size:12px;color:var(--text-faint);">Verificação automática só existe pro Gupy por enquanto.</span>'
     )
 
     return f"""<li class="row{' row-junior' if junior else ''}">
@@ -437,10 +437,18 @@ class _Handler(BaseHTTPRequestHandler):
             self._write_json({"error": str(exc)}, status=500)
 
 
-def start(port: int = 8766) -> int:
+def start(port: int = 8767) -> int:
     """Starts the server at most once per process -- calling again just
     returns the already-running port, same idempotency as the
-    visualizer's server.start()."""
+    visualizer's server.start().
+
+    2026-08-25, real bug found live: this defaulted to 8766, the exact
+    same default as config.XTTS_WORKER_PORT -- if the voice-cloning
+    worker happened to be running (or anything else squatting on 8766)
+    when the portal tried to start, the bind failed outright
+    ("Address already in use") and the portal silently never came up.
+    8767 doesn't collide with the visualizer (8765) or the xtts worker
+    (8766)."""
     global _server
     with _server_lock:
         if _server is not None:

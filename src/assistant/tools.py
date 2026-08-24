@@ -61,7 +61,7 @@ first.
 open_job_portal() drives job_portal/ -- 2026-08-14, Nicholas
 asked to move off the Claude Artifact ("mude para local...") after
 being told the hosted page structurally can't reach local Playwright.
-This is a real local HTTP server (127.0.0.1 only, port 8766) whose
+This is a real local HTTP server (127.0.0.1 only, port 8767) whose
 buttons call the exact same check_job_application()/
 continue_job_application() functions above -- opened in Nicholas's real
 default browser, not a WKWebView."""
