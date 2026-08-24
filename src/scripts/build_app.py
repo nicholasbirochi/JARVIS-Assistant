@@ -88,7 +88,8 @@ def main() -> None:
     if check.returncode != 0:
         print(
             "py2app não está instalado no venv -- rode "
-            "`.venv/bin/pip install -r requirements-packaging.txt` primeiro.",
+            "descomente a seção de empacotamento em requirements.txt e rode "
+            "`.venv/bin/pip install -r requirements.txt` primeiro.",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -89,7 +89,7 @@ deles, via `src/conftest.py`.
 brew install python@3.12
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 cp .env.example .env   # opcional -- ver abaixo
 
 # Modelo local (Ollama) -- roda como serviço em background, gerenciado pelo Homebrew
@@ -102,11 +102,12 @@ ollama pull qwen2.5:7b   # ~4.7GB, baixa uma vez -- ~4x mais rápido que o 14b u
 playwright install chromium
 
 # Só necessário para a voz clonada (voice/xtts_engine.py) -- ~4GB de
-# dependências (torch/coqui-tts) + FFmpeg do sistema (não é pacote Python,
-# é lib nativa que o torchaudio carrega em runtime pra decodificar o
-# clipe de referência). Ver "Voz clonada (XTTS-v2)" abaixo.
+# dependências (torch/coqui-tts), comentadas por padrão em requirements.txt
+# (descomente a seção "Voz clonada" lá antes de rodar o pip install acima) +
+# FFmpeg do sistema (não é pacote Python, é lib nativa que o torchaudio
+# carrega em runtime pra decodificar o clipe de referência). Ver "Voz
+# clonada (XTTS-v2)" abaixo.
 brew install ffmpeg
-pip install -r requirements-voice-cloning.txt
 ```
 
 Nenhuma chave é obrigatória por padrão. `.env` só é necessário se você quiser usar o
@@ -188,7 +189,8 @@ até o próximo login (não fica sendo religado). Logs em `~/Library/Logs/JARVIS
 **Ou como um app de verdade**, pra abrir pelo Launchpad/Spotlight/Finder em vez do terminal:
 
 ```bash
-.venv/bin/pip install -r requirements-packaging.txt   # só a primeira vez -- instala o py2app
+# só a primeira vez -- descomente a seção "Empacotamento" em requirements.txt, então:
+.venv/bin/pip install -r requirements.txt
 python src/scripts/generate_app_icon.py       # gera src/assets/AppIcon.icns -- só precisa rodar uma vez
 python src/scripts/build_app.py               # cria /Applications/JARVIS.app
 ```
@@ -238,7 +240,8 @@ vez de usar uma das vozes prontas do macOS). É o motor padrão (`TTS_ENGINE=xtt
 entra em ação se as duas condições abaixo forem verdadeiras -- **sem elas, `speak()` cai
 de volta pra voz padrão (`TTS_VOICE`, ex: Felipe) automaticamente, sem erro nenhum**:
 
-1. `pip install -r requirements-voice-cloning.txt` rodado (~4GB: torch + coqui-tts).
+1. Seção "Voz clonada" descomentada em `requirements.txt` e `pip install -r
+   requirements.txt` rodado (~4GB: torch + coqui-tts).
 2. Um clipe de referência salvo em `~/Library/Application Support/JARVIS/voice/jarvis_reference.wav`
    (`TTS_XTTS_SPEAKER_WAV_PATH` em `config.py`) -- **de propósito fora da pasta do
    projeto** (que é sincronizada com o OneDrive) e **nunca baixado por mim/pelo JARVIS**:
@@ -321,8 +324,9 @@ certificações também ficam de fora -- vivem num sub-formulário separado da G
 
 ## Testes
 
+`pytest` já vem no `requirements.txt` base (seção "Dev").
+
 ```bash
-pip install -r requirements-dev.txt
 pytest src/tests/
 ```
 

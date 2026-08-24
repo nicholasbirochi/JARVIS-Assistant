@@ -1,17 +1,13 @@
-# Base dependencies -- everything needed to actually run JARVIS day to day.
 # Install with: pip install -r requirements.txt
 #
 # Requires Python >=3.11. There's no installable package anymore (no
 # pyproject.toml/setup.py) -- src/ is a flat folder of plain modules, not a
-# distribution. Run things from inside it (`cd src && python cli.py ...`)
-# or with `PYTHONPATH=src`; tests find src/ on their own via
-# src/conftest.py. See readme.md's "Rodando sem instalar" section.
-#
-# Optional extras (not installed by this file):
-#   requirements-dev.txt            -- pytest, for running the test suite
-#   requirements-voice-cloning.txt  -- XTTS-v2 voice cloning (heavy, fragile)
-#   requirements-packaging.txt      -- py2app, only for building JARVIS.app
+# distribution. Run things from inside it (`python src/cli.py ...`, from
+# anywhere -- Python always puts a script's own directory on sys.path) or
+# with `PYTHONPATH=src`; tests find src/ on their own via src/conftest.py.
+# See readme.md's "Setup" section.
 
+# --- Base -- tudo que é necessário pra rodar o JARVIS no dia a dia ---
 ollama>=0.4.0
 docstring-parser>=0.16
 openwakeword>=0.6.0
@@ -27,3 +23,40 @@ python-docx>=1.1.0
 python-dotenv>=1.0.0
 playwright>=1.45.0
 pyobjc-framework-WebKit>=10.0
+
+# --- Dev -- só pra rodar a suíte de testes (pytest src/tests/) ---
+pytest>=8.0.0
+
+# --- Voz clonada (opcional, comentado por padrão) ---
+# Voice cloning (voice/xtts_engine.py) -- não instalada por padrão: pesada
+# (~4GB combinados), e genuinamente frágil de instalar (2026-08) -- o
+# próprio "transformers>=4.57" declarado pelo coqui-tts resolve pra um 5.x
+# que quebra ele (um helper removido, transformers.pytorch_utils),
+# torch/torchaudio/torchcodec não são declarados como dependência dele em
+# nenhum momento (precisam ser instalados à parte, mesma prática de outras
+# libs de ML que não forçam uma build de torch que talvez não bata com o
+# hardware). Pins abaixo são exatamente o que foi verificado funcionando
+# junto nesta máquina (Apple Silicon, Python 3.12) -- não é chute. Descomente
+# pra usar:
+# coqui-tts[codec]>=0.27.5
+# torch>=2.13.0
+# torchaudio>=2.11.0
+# transformers>=4.57,<5
+
+# --- Empacotamento (opcional, comentado por padrão) ---
+# Só pra src/scripts/build_app.py, nunca importado em runtime. O modo
+# "alias" do py2app é a correção real de um bug de verdade: o python@3.12
+# do Homebrew é uma build "framework" do macOS, e o próprio código C de
+# startup do CPython reexecuta silenciosamente pra dentro de
+# .../Resources/Python.app/Contents/MacOS/Python sempre que não está
+# rodando já como esse binário exato (confirmado via `strings` no próprio
+# interpretador -- incondicional, compilado, não é algo que uma env var
+# desliga). Essa troca muda a identidade do processo de
+# com.nicholasbirochi.jarvis pra org.python.python genérico, que foi
+# exatamente o que quebrava o NSStatusItem (o ícone da barra de menu nunca
+# aparecia -- confirmado ao vivo via Console.app: "AppKit:StatusBar] scene
+# activation failed" em todo double-click real). O modo alias constrói um
+# .app de verdade cujo próprio stub compilado é dono dessa identidade desde
+# o início, continuando a rodar direto do código-fonte/venv deste projeto
+# -- sem congelar, sem empacotar dependências junto. Descomente pra usar:
+# py2app>=0.28
