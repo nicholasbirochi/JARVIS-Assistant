@@ -382,8 +382,8 @@ def open_job_portal() -> str:
         threading.Thread(target=_refresh_in_background, daemon=True, name="jarvis-job-portal-first-search").start()
         return (
             f"Abri {page_url} no seu navegador -- já dá pra acessar, mas a primeira busca "
-            "ainda está rodando em segundo plano (pode levar uns minutos). A página não "
-            "atualiza sozinha -- dê um F5/Cmd+R nela daqui a pouco pra ver as vagas."
+            "ainda está rodando em segundo plano (pode levar uns minutos). A página se "
+            "atualiza sozinha assim que os resultados ficam prontos, sem precisar de F5."
         )
 
     return f"Abri {page_url} no seu navegador -- os botões ali rodam de verdade, local."
