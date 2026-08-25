@@ -61,7 +61,6 @@
     letter-spacing: 0.02em; padding: 8px 13px; border-radius: 999px; border: 1px solid var(--line-bright);
     background: var(--surface); color: var(--text-dim); cursor: pointer;
   }}
-  .filter-chip .n {{ font: 700 11px "SF Mono", monospace; opacity: 0.8; }}
   .filter-chip[aria-pressed="true"] {{ background: var(--surface-3); border-color: var(--accent); color: var(--accent-bright); }}
   .tier-section {{ margin-top: 8px; }}
   .tier-section.tier-hidden {{ display: none; }}
@@ -160,11 +159,11 @@
 
   <div class="filter-bar" role="group" aria-label="Filtrar por categoria">
     <span class="filter-label">Mostrar:</span>
-    <button type="button" class="filter-chip" data-tier="banco" aria-pressed="true" onclick="toggleTier(this)">🏦 Bancos <span class="n">{banco_count}</span></button>
-    <button type="button" class="filter-chip" data-tier="fintech" aria-pressed="true" onclick="toggleTier(this)">💳 Fintechs <span class="n">{fintech_count}</span></button>
-    <button type="button" class="filter-chip" data-tier="bigtech" aria-pressed="true" onclick="toggleTier(this)">💻 Bigtechs <span class="n">{bigtech_count}</span></button>
-    <button type="button" class="filter-chip" data-tier="startup" aria-pressed="true" onclick="toggleTier(this)">🚀 Startups <span class="n">{startup_count}</span></button>
-    <button type="button" class="filter-chip" data-tier="outras" aria-pressed="true" onclick="toggleTier(this)">🏢 Outras <span class="n">{outras_count}</span></button>
+    <button type="button" class="filter-chip" data-tier="banco" aria-pressed="true" onclick="toggleTier(this)">🏦 Bancos</button>
+    <button type="button" class="filter-chip" data-tier="fintech" aria-pressed="true" onclick="toggleTier(this)">💳 Fintechs</button>
+    <button type="button" class="filter-chip" data-tier="bigtech" aria-pressed="true" onclick="toggleTier(this)">💻 Bigtechs</button>
+    <button type="button" class="filter-chip" data-tier="startup" aria-pressed="true" onclick="toggleTier(this)">🚀 Startups</button>
+    <button type="button" class="filter-chip" data-tier="outras" aria-pressed="true" onclick="toggleTier(this)">🏢 Outras</button>
   </div>
 
   {sections}
