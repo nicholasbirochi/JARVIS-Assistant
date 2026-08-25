@@ -330,6 +330,11 @@ def continue_job_application(url: str, *, finalize: bool = False) -> str:
     except Exception as exc:
         return f"Não consegui avançar essa candidatura: {exc}"
 
+    if preview.submitted:
+        from sites.application_log import record_application
+
+        record_application(url, preview.site_name)
+
     return preview.summary_text or (preview.blocked_reason or "Não deu pra avançar nessa vaga.")
 
 

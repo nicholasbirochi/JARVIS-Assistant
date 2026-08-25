@@ -7,6 +7,7 @@ src/data/proposals/
 src/data/index_state.json
 src/data/reminders.json
 src/data/job_matches/
+src/data/applications_sent.json
 # legacy path -- session state now defaults outside the repo (see config.py's LOCAL_STATE_DIR); kept as a safety net
 src/data/sites/
 .pytest_cache/

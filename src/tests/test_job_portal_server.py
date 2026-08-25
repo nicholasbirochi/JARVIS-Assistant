@@ -153,6 +153,39 @@ def test_non_gupy_listing_does_not_offer_continue_button(monkeypatch):
     assert "só existe pro Gupy por enquanto" in body
 
 
+def test_already_applied_listing_shows_badge_and_no_apply_button(monkeypatch, tmp_path):
+    # 2026-08-25, real Nicholas request: the portal should show which
+    # jobs were already really submitted (sites/application_log.py),
+    # not offer to apply again.
+    from sites import application_log
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    listing = make_listing("1", "Analista de Dados Júnior")
+    application_log.record_application(listing.url, "gupy")
+    monkeypatch.setattr(server, "_tiers", {"banco": [listing], "fintech": [], "bigtech": [], "startup": []})
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "CANDIDATURA ENVIADA" in body
+    assert "continuarCandidatura(this" not in body
+    assert "Enviada em" in body
+
+
+def test_not_yet_applied_listing_still_shows_the_apply_button(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    listing = make_listing("1", "Analista de Dados Júnior")
+    monkeypatch.setattr(server, "_tiers", {"banco": [listing], "fintech": [], "bigtech": [], "startup": []})
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "CANDIDATURA ENVIADA" not in body
+    assert "continuarCandidatura(this" in body
+
+
 def test_unknown_path_is_404():
     port = server.start(port=0)
 

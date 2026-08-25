@@ -226,6 +226,14 @@ def test_prepare_claude_prompt_still_succeeds_if_logging_itself_fails(monkeypatc
     assert "copiado" in result.lower()
 
 
+def _fake_preview(*, submitted=False, site_name="gupy"):
+    return type(
+        "Preview",
+        (),
+        {"summary_text": "ok", "blocked_reason": None, "submitted": submitted, "site_name": site_name},
+    )()
+
+
 def test_continue_job_application_defaults_to_finalize_false(monkeypatch):
     # Voice/text calls (the only caller that ever omits finalize) must
     # keep the old, safer fill-only behavior -- only the portal's apply
@@ -238,7 +246,7 @@ def test_continue_job_application_defaults_to_finalize_false(monkeypatch):
     class _FakeAdapter:
         def continue_application_with_profile(self, url, confirmed, *, finalize=False):
             calls.append((url, confirmed, finalize))
-            return type("Preview", (), {"summary_text": "ok", "blocked_reason": None})()
+            return _fake_preview(submitted=False)
 
     monkeypatch.setattr(gupy, "GupyAdapter", _FakeAdapter)
 
@@ -255,10 +263,49 @@ def test_continue_job_application_forwards_finalize_true(monkeypatch):
     class _FakeAdapter:
         def continue_application_with_profile(self, url, confirmed, *, finalize=False):
             calls.append((url, confirmed, finalize))
-            return type("Preview", (), {"summary_text": "ok", "blocked_reason": None})()
+            return _fake_preview(submitted=False)
 
     monkeypatch.setattr(gupy, "GupyAdapter", _FakeAdapter)
 
     tools.continue_job_application("https://empresa.gupy.io/job/xyz", finalize=True)
 
     assert calls == [("https://empresa.gupy.io/job/xyz", True, True)]
+
+
+def test_continue_job_application_records_a_real_submission(monkeypatch, tmp_path):
+    # 2026-08-25, real Nicholas request: the portal should remember
+    # which jobs were actually, successfully applied to across
+    # restarts -- record_application() is the write side of that.
+    from sites import application_log, gupy
+    import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+
+    class _FakeAdapter:
+        def continue_application_with_profile(self, url, confirmed, *, finalize=False):
+            return _fake_preview(submitted=True, site_name="gupy")
+
+    monkeypatch.setattr(gupy, "GupyAdapter", _FakeAdapter)
+
+    tools.continue_job_application("https://empresa.gupy.io/job/xyz", finalize=True)
+
+    log = application_log.load_applications_log()
+    assert "https://empresa.gupy.io/job/xyz" in log
+    assert log["https://empresa.gupy.io/job/xyz"]["site_name"] == "gupy"
+
+
+def test_continue_job_application_does_not_record_when_not_submitted(monkeypatch, tmp_path):
+    from sites import application_log, gupy
+    import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+
+    class _FakeAdapter:
+        def continue_application_with_profile(self, url, confirmed, *, finalize=False):
+            return _fake_preview(submitted=False)
+
+    monkeypatch.setattr(gupy, "GupyAdapter", _FakeAdapter)
+
+    tools.continue_job_application("https://empresa.gupy.io/job/xyz", finalize=True)
+
+    assert application_log.load_applications_log() == {}

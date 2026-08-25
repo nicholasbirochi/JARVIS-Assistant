@@ -258,11 +258,12 @@ def _esc(s: str | None) -> str:
     return html.escape(s or "", quote=True)
 
 
-def _render_row(listing: JobListing) -> str:
+def _render_row(listing: JobListing, applied_log: dict[str, dict]) -> str:
     from sites.job_matching import has_junior_signal, is_in_target_region, is_remote
 
     site_label = _SITE_LABELS.get(listing.site_name, listing.site_name)
     key = f"{listing.site_name}:{listing.external_id}"
+    applied = applied_log.get(listing.url)
     badges = [f'<span class="site-badge site-{_esc(listing.site_name)}">{_esc(site_label)}</span>']
     junior = has_junior_signal(listing.title, listing.snippet)
     if junior:
@@ -271,16 +272,25 @@ def _render_row(listing: JobListing) -> str:
         badges.append('<span class="site-badge" style="background:var(--surface-3);color:var(--accent-bright);">perto de você</span>')
     elif is_remote(listing.title, listing.snippet, listing.location):
         badges.append('<span class="site-badge" style="background:var(--surface-3);color:var(--accent-bright);">home office</span>')
+    if applied:
+        badges.append('<span class="applied-badge">✅ CANDIDATURA ENVIADA</span>')
 
     is_gupy = listing.site_name == "gupy"
-    apply_actions = (
-        f'<button class="action-btn" type="button" onclick="verificarVaga(this, \'{_esc(listing.url)}\')">Verificar</button>'
-        f'<button class="action-btn warn" type="button" onclick="continuarCandidatura(this, \'{_esc(listing.url)}\')">Enviar candidatura</button>'
-        if is_gupy
-        else '<span style="font-size:12px;color:var(--text-faint);">Verificação automática só existe pro Gupy por enquanto.</span>'
-    )
+    if applied:
+        # Já enviada de verdade (ver sites/application_log.py) -- sem
+        # botões de ação pra não arriscar reenviar por engano; a data
+        # vem do próprio registro, nunca adivinhada.
+        sent_date = _esc(_format_applied_date(applied.get("submitted_at")))
+        apply_actions = f'<span class="applied-note">Enviada em {sent_date}.</span>'
+    elif is_gupy:
+        apply_actions = (
+            f'<button class="action-btn" type="button" onclick="verificarVaga(this, \'{_esc(listing.url)}\')">Verificar</button>'
+            f'<button class="action-btn warn" type="button" onclick="continuarCandidatura(this, \'{_esc(listing.url)}\')">Enviar candidatura</button>'
+        )
+    else:
+        apply_actions = '<span style="font-size:12px;color:var(--text-faint);">Verificação automática só existe pro Gupy por enquanto.</span>'
 
-    return f"""<li class="row{' row-junior' if junior else ''}">
+    return f"""<li class="row{' row-junior' if junior else ''}{' row-applied' if applied else ''}">
         <label class="row-check">
           <input type="checkbox" data-key="{_esc(key)}" data-url="{_esc(listing.url)}" onchange="onCheck(this)" aria-label="Selecionar {_esc(listing.title)}">
         </label>
@@ -298,12 +308,24 @@ def _render_row(listing: JobListing) -> str:
       </li>"""
 
 
-def _render_section(tier: str, listings: list[JobListing]) -> str:
+def _format_applied_date(iso_timestamp: str | None) -> str:
+    """dd/mm/aaaa from a stored ISO 8601 UTC timestamp -- falls back to
+    the raw stored value (never crashes the whole page render) if it's
+    ever missing or in an unexpected shape."""
+    if not iso_timestamp:
+        return "data desconhecida"
+    try:
+        return datetime.fromisoformat(iso_timestamp).strftime("%d/%m/%Y")
+    except ValueError:
+        return iso_timestamp
+
+
+def _render_section(tier: str, listings: list[JobListing], applied_log: dict[str, dict]) -> str:
     meta = _TIER_META[tier]
     body = (
         '<p class="empty-note">Nenhuma vaga relevante nesta categoria ainda -- clique em "Atualizar vagas agora".</p>'
         if not listings
-        else '<ul class="list">' + "".join(_render_row(l) for l in listings) + "</ul>"
+        else '<ul class="list">' + "".join(_render_row(l, applied_log) for l in listings) + "</ul>"
     )
     return (
         f'<section class="tier-section" data-tier="{tier}">'
@@ -336,14 +358,17 @@ _POLL_SCRIPT = """<script>
 
 
 def render_page() -> str:
+    from sites.application_log import load_applications_log
+
     tiers = _current_tiers()
     with _tiers_lock:
         still_searching = _tiers is None
+    applied_log = load_applications_log()
     # .get(tier, []) throughout -- "outras" is only populated by a real
     # refresh_data() call (include_other=True); older/injected _tiers
     # dicts (tests, or a page load before the first refresh finishes)
     # may not have it yet, and that must render as empty, not crash.
-    sections = "".join(_render_section(tier, tiers.get(tier, [])) for tier in _TIER_KEYS)
+    sections = "".join(_render_section(tier, tiers.get(tier, []), applied_log) for tier in _TIER_KEYS)
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     return template.format(
         total=sum(len(tiers.get(tier, [])) for tier in _TIER_KEYS),
