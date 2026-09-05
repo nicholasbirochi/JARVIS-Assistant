@@ -40,6 +40,7 @@ def test_load_application_profile_returns_all_none_when_file_missing(monkeypatch
         "cnh": None,
         "disponibilidade_viagem": None,
         "disponibilidade_fds": None,
+        "disponibilidade_hibrido": None,
         "escolaridade": None,
     }
 
@@ -66,6 +67,7 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
                 "JARVIS_APPLICATION_CNH=Sim, categoria B",
                 "JARVIS_APPLICATION_DISPONIBILIDADE_VIAGEM=Sim",
                 "JARVIS_APPLICATION_DISPONIBILIDADE_FDS=Não",
+                "JARVIS_APPLICATION_DISPONIBILIDADE_HIBRIDO=Sim",
                 "JARVIS_APPLICATION_ESCOLARIDADE=Ensino superior incompleto (cursando)",
                 "JARVIS_APPLICATION_CARGO_ATUAL=Não estou empregado no momento",
                 "JARVIS_APPLICATION_PARENTES_NA_EMPRESA=Não",
@@ -93,6 +95,7 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
         "cnh": "Sim, categoria B",
         "disponibilidade_viagem": "Sim",
         "disponibilidade_fds": "Não",
+        "disponibilidade_hibrido": "Sim",
         "escolaridade": "Ensino superior incompleto (cursando)",
         "cargo_atual": "Não estou empregado no momento",
         "parentes_na_empresa": "Não",

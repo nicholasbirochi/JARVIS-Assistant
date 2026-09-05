@@ -191,6 +191,20 @@ def test_classify_question_field_recognizes_the_parentesco_followup_found_live_a
     )
 
 
+def test_classify_question_field_recognizes_hibrido_availability_found_live():
+    # 2026-08-27, real gap found live (Núclea/Stefanini): hybrid/
+    # in-person work arrangement -- two real phrasings, distinct from
+    # disponibilidade_viagem (travel) and disponibilidade_fds (weekends).
+    assert (
+        classify_question_field("Possui disponibilidade para atuar em modelo híbrido (presencial 2x por semana) em São Paulo - SP?")
+        == "disponibilidade_hibrido"
+    )
+    assert (
+        classify_question_field("Aceita trabalhar no modelo hibrido, sendo 3 x semana em Osasco - SP?")
+        == "disponibilidade_hibrido"
+    )
+
+
 def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():
     # Real risk: "Órgão e Estado de emissão do RG" contains "RG" as its
     # own whole word too -- checking bare "rg" first would misclassify

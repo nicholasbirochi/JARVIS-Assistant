@@ -104,6 +104,10 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     "cnh": "JARVIS_APPLICATION_CNH",
     "disponibilidade_viagem": "JARVIS_APPLICATION_DISPONIBILIDADE_VIAGEM",
     "disponibilidade_fds": "JARVIS_APPLICATION_DISPONIBILIDADE_FDS",
+    # 2026-08-27, round 3 -- found live (Núclea/Stefanini): hybrid/
+    # in-person work arrangement, distinct from disponibilidade_viagem
+    # (travel) and disponibilidade_fds (weekends).
+    "disponibilidade_hibrido": "JARVIS_APPLICATION_DISPONIBILIDADE_HIBRIDO",
     "escolaridade": "JARVIS_APPLICATION_ESCOLARIDADE",
     # 2026-08-21, round 2 -- found live during the one-at-a-time apply
     # batch. "disponibilidade_inicio_imediato" deliberately has NO entry

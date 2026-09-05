@@ -216,6 +216,13 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "disponibilidade para fins de semana",
         "disponibilidade para final de semana",
     ],
+    # 2026-08-27, real gap found live in the same one-at-a-time apply
+    # batch (Núclea: "modelo híbrido (presencial 2x por semana)";
+    # Stefanini: "modelo hibrido, sendo 3 x semana") -- same underlying
+    # question (hybrid/in-person work arrangement), two real phrasings,
+    # neither mentioning "viajar" or "fins de semana" so this needed its
+    # own field rather than reusing disponibilidade_viagem/_fds.
+    "disponibilidade_hibrido": ["modelo híbrido", "modelo hibrido"],
     "escolaridade": [
         "ensino superior completo",
         "superior completo",
