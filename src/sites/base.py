@@ -174,7 +174,16 @@ _FIELD_TERMS: dict[str, list[str]] = {
     "nome_pai": ["nome do pai"],
     "naturalidade": ["naturalidade"],
     "raca_cor": ["raça", "raca", "cor da pele", "etnia"],
-    "pcd": ["pessoa com deficiência", "pessoa com deficiencia", "pcd"],
+    # 2026-08-27, real false-positive found live (Stefanini): the bare
+    # "pcd" abbreviation matched a COMPLETELY different question ("Você
+    # chegou até esta oportunidade por meio de alguma instituição...
+    # (PcD ou não PcD)?" -- a referral-institution radio group, not a
+    # disability-status question) purely because it mentions "PcD"
+    # parenthetically. A genuine PCD question always spells out "pessoa
+    # com deficiência" too (confirmed across every real listing seen so
+    # far), so the bare abbreviation added false-positive risk without
+    # ever being needed to catch a real one -- removed.
+    "pcd": ["pessoa com deficiência", "pessoa com deficiencia"],
     "salary_expectation": [
         "remuneração",
         "remuneracao",

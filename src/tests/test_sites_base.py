@@ -205,6 +205,27 @@ def test_classify_question_field_recognizes_hibrido_availability_found_live():
     )
 
 
+def test_classify_question_field_pcd_no_longer_false_positives_on_mere_mentions():
+    # 2026-08-27, real bug found live (Stefanini): a referral-institution
+    # radio-group question ("Você chegou até esta oportunidade por meio
+    # de alguma instituição... (PcD ou não PcD)?") was misclassified as
+    # "pcd" purely because it mentions the abbreviation parenthetically
+    # -- nothing to do with disability status. The code then believed
+    # it had answered a radio group with Nicholas's real pcd="Não"
+    # value without ever actually testing whether it could be filled
+    # (_fill_company_answer() can't fill a radio group either way, but
+    # the preview text claimed success). A genuine PCD question still
+    # matches via the full phrase.
+    assert classify_question_field("Você é uma pessoa com deficiência (PcD)?") == "pcd"
+    assert (
+        classify_question_field(
+            "Você chegou até esta oportunidade por meio de alguma instituição, parceiro ou "
+            "comunidade de inclusão e empregabilidade (PcD ou não PcD)?"
+        )
+        is None
+    )
+
+
 def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():
     # Real risk: "Órgão e Estado de emissão do RG" contains "RG" as its
     # own whole word too -- checking bare "rg" first would misclassify
