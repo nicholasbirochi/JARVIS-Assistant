@@ -518,6 +518,7 @@ def test_extract_company_from_gate_text_none_when_pattern_does_not_match():
 class FakeApplicationPage:
     def __init__(self, *, apply_href="/candidates/jobs/123/apply", step_texts, referral_answer_count=0,
                  click_results=None, company_questions=None, company_questions_via_label=None,
+                 company_questions_via_legend=None,
                  fill_selectors=None, page_title="Página da Vaga | Analista de Dados",
                  already_answered_selectors=None):
         self.apply_href = apply_href
@@ -532,6 +533,14 @@ class FakeApplicationPage:
         # real 2026-08-21 PagBank case where <h3> found nothing but
         # <label> did.
         self.company_questions_via_label = company_questions_via_label
+        # None = contributes nothing (most listings have no multi-option
+        # questions at all); set explicitly to simulate the real
+        # 2026-08-25 PagBank case where a checkbox-group question's own
+        # text lives in a <legend>, mixed on the SAME page alongside
+        # <label>-based ones -- see _extract_company_questions()'s
+        # docstring. Unlike company_questions_via_label, this is always
+        # UNIONED with the other sources, never a fallback.
+        self.company_questions_via_legend = company_questions_via_legend
         self.clicked: list[str] = []
         self.fill_selectors = fill_selectors  # None = every selector succeeds
         self.filled: dict[str, str] = {}
@@ -563,6 +572,8 @@ class FakeApplicationPage:
             return [] if self.company_questions_via_label is not None else self.company_questions
         if "main label, body label" in script:
             return self.company_questions_via_label if self.company_questions_via_label is not None else self.company_questions
+        if "main legend, body legend" in script:
+            return self.company_questions_via_legend or []
         if "innerText" in script:
             text = self.step_texts[self._step_text_idx]
             self._step_text_idx = min(self._step_text_idx + 1, len(self.step_texts) - 1)
@@ -1056,6 +1067,57 @@ def test_continue_application_with_profile_falls_back_to_label_based_questions(m
 
     assert page.filled == {'[id="input-1.Qual sua pretensão salarial atual?"]': "R$ 4.500,00"}
     assert preview.questions[-1].answered is True
+
+
+def test_extract_company_questions_unions_label_and_legend_sources():
+    # 2026-08-25, real bug found live (PagBank, 2nd listing, second
+    # visit): a multi-option (checkbox-group) question's text lives in
+    # a <legend>, mixed on the SAME real page alongside <label>-based
+    # text questions -- the old h3-then-label FALLBACK logic silently
+    # dropped the <legend> one entirely. All three sources must be
+    # unioned, not tried in either/or order.
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        company_questions_via_label=["1.Qual sua pretensão salarial atual?"],
+        company_questions_via_legend=["7.Já trabalhou em alguma empresa do Grupo UOL?"],
+    )
+
+    result = GupyAdapter()._extract_company_questions(page)
+
+    assert result == ["1.Qual sua pretensão salarial atual?", "7.Já trabalhou em alguma empresa do Grupo UOL?"]
+
+
+def test_continue_application_with_profile_blocks_before_saving_when_a_legend_question_cant_be_filled(monkeypatch):
+    # The real, observed failure mode this fix prevents: because the
+    # multi-option question used to be invisible to extraction, the
+    # code believed everything was answered and clicked "Salvar e
+    # continuar" anyway -- which Gupy's own form correctly rejected
+    # (stayed on the same page, "Campo obrigatório"). Now that
+    # extraction sees it, the all-or-nothing gate must block BEFORE
+    # ever clicking that button, since a checkbox-group question has no
+    # working fill() selector regardless of having a local value.
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")  # ja_trabalhou_aqui is always "Não" already
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions_via_label=["1.Qual sua pretensão salarial atual?"],
+        company_questions_via_legend=["7.Já trabalhou em alguma empresa do Grupo UOL?"],
+        fill_selectors={'[id="input-1.Qual sua pretensão salarial atual?"]'},  # no selector for question 7 at all
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert preview.can_submit is False
+    # "Salvar e continuar" is clicked once already inside
+    # _start_application (saving the referral gate's answer) --
+    # a SECOND click would mean the company-questions step wrongly
+    # proceeded to save despite question 7 never actually filling.
+    assert page.clicked.count("Salvar e continuar") == 1
 
 
 def test_continue_application_with_profile_skips_inapplicable_parentesco_followup(monkeypatch):

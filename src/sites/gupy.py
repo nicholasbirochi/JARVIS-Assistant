@@ -1200,25 +1200,41 @@ class GupyAdapter(SiteAdapter):
 
         2026-08-21, real DOM variation found live (PagBank): this
         listing's questions weren't <h3> elements at all -- each was a
-        <label>, same numbered-prefix text pattern otherwise. Falls back
-        to matching <label> elements when no <h3> matches are found,
-        rather than assuming every company's form uses the same tag."""
-        h3_matches = page.evaluate(
-            """
-            () => Array.from(document.querySelectorAll('main h3, body h3'))
-                .map(h => h.textContent.trim())
-                .filter(t => /^\\d+\\./.test(t))
-            """
-        )
-        if h3_matches:
-            return h3_matches
-        return page.evaluate(
-            """
-            () => Array.from(document.querySelectorAll('main label, body label'))
-                .map(l => l.textContent.trim())
-                .filter(t => /^\\d+\\./.test(t))
-            """
-        )
+        <label>, same numbered-prefix text pattern otherwise.
+
+        2026-08-25, real bug found live (PagBank, 2nd listing, second
+        visit): a multi-option (checkbox-group) question's own text
+        lives in neither <h3> nor <label> -- it's a <legend> inside a
+        <fieldset class="multi-option">. Worse, this real page MIXES
+        tag types on the SAME form (questions 1-6/9 as <label>, 7-8 as
+        <legend>) -- the old "try h3, else fall back to label" logic
+        silently dropped 7/8 from the result entirely, so the
+        all-or-nothing gate downstream never saw them as unanswered and
+        the code went ahead and clicked "Salvar e continuar" with two
+        required fields still empty, which Gupy's own form correctly
+        rejected (stayed on the same page, "Campo obrigatório").
+
+        Every source (h3, label, legend) is now UNIONED, not tried in
+        fallback order, deduplicated by leading number, and returned in
+        that numeric order -- so a mixed-tag page surfaces every real
+        question, even ones _fill_company_answer() still can't actually
+        fill (that's the existing, separate, documented fail-closed
+        behavior for multiple-choice questions; this fix is only about
+        extraction seeing them at all, so "tudo ou nada" can do its job
+        before any click, not after a rejected one)."""
+        found: dict[int, str] = {}
+        for selector in ("main h3, body h3", "main label, body label", "main legend, body legend"):
+            matches = page.evaluate(
+                f"""
+                () => Array.from(document.querySelectorAll('{selector}'))
+                    .map(el => el.textContent.trim())
+                    .filter(t => /^\\d+\\./.test(t))
+                """
+            )
+            for text in matches:
+                number = int(re.match(r"^(\d+)\.", text).group(1))
+                found.setdefault(number, text)
+        return [found[n] for n in sorted(found)]
 
     def _render_application_summary(self, reason: str, questions: list[ApplicationQuestion]) -> str:
         lines = [f"Candidatura em {self.site_name}: BLOQUEADA -- {reason}"]
