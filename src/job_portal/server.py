@@ -57,6 +57,18 @@ from sites.base import JobListing
 _TEMPLATE_PATH = Path(__file__).resolve().parent / "page_template.html"
 
 _TIER_META = {
+    # 2026-09-05, "quero candidaturas focadas nesse tipo de vagas
+    # também! internacionais remotas!!!!" -- listed first, ahead of
+    # "banco", as the explicit new focus. Cross-cutting (see
+    # group_by_tier()'s docstring): the same listing can also appear in
+    # its normal company tier below, so its count is deliberately
+    # excluded from the "vagas no total" stat (see render_page()) to
+    # avoid double-counting.
+    "internacional": {
+        "label": "Remoto/Internacional",
+        "emoji": "🌎",
+        "sub": "Vagas 100% remotas -- empresa estrangeira aberta a candidatos no Brasil, remoto nacional comum, ou 'trabalhe de qualquer lugar' sem restrição de país (as 3 leituras que você validou)",
+    },
     "banco": {"label": "Bancos", "emoji": "🏦", "sub": "Bancos tradicionais nomeados (Itaú, Bradesco, Santander, BTG e outros)"},
     "fintech": {"label": "Fintechs", "emoji": "💳", "sub": "Fintechs nomeadas (Nubank, C6 Bank, Stone, PicPay, Cora e outras)"},
     "bigtech": {"label": "Bigtechs", "emoji": "💻", "sub": "Bigtechs nomeadas (Google, Amazon, Mercado Livre, iFood e outras)"},
@@ -162,6 +174,12 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
     bucket now holds every other relevant listing (still real, still
     matches every other restriction) instead of silently dropping it.
 
+    group_by_tier(..., include_international=True) -- 2026-09-05, "quero
+    candidaturas focadas nesse tipo de vagas também! internacionais
+    remotas!!!!": adds a sixth, cross-cutting "internacional" bucket
+    (full home-office listings, any company) -- see that function's own
+    docstring for why it's not also gated on has_international_signal().
+
     max_results_per_term=100 -- 2026-08-19 ("cace cada vez mais!!!!!"):
     raised from 50 after noticing it was the ACTUAL bottleneck for
     several sites, not their own capacity -- Catho/Gupy/InfoJobs each
@@ -181,7 +199,7 @@ def refresh_data(resume=None, *, adapters: dict[str, object] | None = None) -> d
 
     report = run_job_search(resume, adapters=adapters, max_terms=0, max_results_per_term=100)
     combined = report.local + report.remote
-    tiers = group_by_tier(combined, include_other=True)
+    tiers = group_by_tier(combined, include_other=True, include_international=True)
 
     with _tiers_lock:
         global _tiers
@@ -246,7 +264,14 @@ def refresh_if_due(resume=None, *, adapters: dict[str, object] | None = None, no
     return True
 
 
-_TIER_KEYS = ("banco", "fintech", "bigtech", "startup", "outras")
+# "internacional" first -- see _TIER_META's comment: it's the newest,
+# explicitly-requested focus. It's also cross-cutting (a listing can be
+# here AND in its normal company tier -- see group_by_tier()), which is
+# why _EXCLUSIVE_TIER_KEYS exists separately below: that's the set whose
+# sizes actually partition every relevant listing exactly once, used for
+# the "vagas no total" stat so it doesn't double-count.
+_TIER_KEYS = ("internacional", "banco", "fintech", "bigtech", "startup", "outras")
+_EXCLUSIVE_TIER_KEYS = ("banco", "fintech", "bigtech", "startup", "outras")
 
 
 def _current_tiers() -> dict[str, list[JobListing]]:
@@ -259,7 +284,7 @@ def _esc(s: str | None) -> str:
 
 
 def _render_row(listing: JobListing, applied_log: dict[str, dict]) -> str:
-    from sites.job_matching import has_junior_signal, is_in_target_region, is_remote
+    from sites.job_matching import has_international_signal, has_junior_signal, is_in_target_region, is_remote
 
     site_label = _SITE_LABELS.get(listing.site_name, listing.site_name)
     key = f"{listing.site_name}:{listing.external_id}"
@@ -272,6 +297,14 @@ def _render_row(listing: JobListing, applied_log: dict[str, dict]) -> str:
         badges.append('<span class="site-badge" style="background:var(--surface-3);color:var(--accent-bright);">perto de você</span>')
     elif is_remote(listing.title, listing.snippet, listing.location):
         badges.append('<span class="site-badge" style="background:var(--surface-3);color:var(--accent-bright);">home office</span>')
+    # 2026-09-05: on top of the looser "home office" badge above, flag
+    # listings that ALSO show a real international signal (foreign
+    # currency, "global"/"international" framing) -- helps Nicholas spot
+    # the genuinely international ones inside the broader, cross-cutting
+    # "internacional" tier at a glance, without gating that tier itself
+    # on this stricter signal (see group_by_tier()'s docstring).
+    if has_international_signal(listing.title, listing.snippet):
+        badges.append('<span class="site-badge" style="background:var(--violet-soft);color:var(--violet);">🌎 internacional</span>')
     if applied:
         badges.append('<span class="applied-badge">✅ CANDIDATURA ENVIADA</span>')
 
@@ -371,7 +404,11 @@ def render_page() -> str:
     sections = "".join(_render_section(tier, tiers.get(tier, []), applied_log) for tier in _TIER_KEYS)
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     return template.format(
-        total=sum(len(tiers.get(tier, [])) for tier in _TIER_KEYS),
+        # _EXCLUSIVE_TIER_KEYS, not _TIER_KEYS -- "internacional" is
+        # cross-cutting (see group_by_tier()'s docstring) and would
+        # double-count listings that also live in a company tier.
+        total=sum(len(tiers.get(tier, [])) for tier in _EXCLUSIVE_TIER_KEYS),
+        international_count=len(tiers.get("internacional", [])),
         banco_count=len(tiers.get("banco", [])),
         fintech_count=len(tiers.get("fintech", [])),
         bigtech_count=len(tiers.get("bigtech", [])),

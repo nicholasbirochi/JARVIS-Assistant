@@ -114,7 +114,7 @@
   }}
   .result-box.visible {{ display: block; }}
   .tier-badge {{ flex: none; font: 700 13px "SF Mono", monospace; padding: 6px 11px; border-radius: 4px; color: #04121c; }}
-  .tier-banco {{ background: #3fd6ae; }} .tier-fintech {{ background: #5fd0f5; }} .tier-bigtech {{ background: #7fa8e0; }} .tier-startup {{ background: #ffb84d; }} .tier-outras {{ background: #8b98a8; }}
+  .tier-banco {{ background: #3fd6ae; }} .tier-fintech {{ background: #5fd0f5; }} .tier-bigtech {{ background: #7fa8e0; }} .tier-startup {{ background: #ffb84d; }} .tier-outras {{ background: #8b98a8; }} .tier-internacional {{ background: var(--violet); }}
   .selection-bar {{
     position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
     gap: 10px; flex-wrap: wrap; padding: 14px 20px; background: var(--surface-2); color: var(--text);
@@ -149,6 +149,7 @@
     </div>
     <div class="stat-strip">
       <div class="stat"><div class="n">{total}</div><div class="l">vagas no total</div></div>
+      <div class="stat"><div class="n">{international_count}</div><div class="l">🌎 remoto/internacional</div></div>
       <div class="stat"><div class="n">{banco_count}</div><div class="l">🏦 bancos</div></div>
       <div class="stat"><div class="n">{fintech_count}</div><div class="l">💳 fintechs</div></div>
       <div class="stat"><div class="n">{bigtech_count}</div><div class="l">💻 bigtechs</div></div>
@@ -159,6 +160,7 @@
 
   <div class="filter-bar" role="group" aria-label="Filtrar por categoria">
     <span class="filter-label">Mostrar:</span>
+    <button type="button" class="filter-chip" data-tier="internacional" aria-pressed="true" onclick="toggleTier(this)">🌎 Remoto/Internacional</button>
     <button type="button" class="filter-chip" data-tier="banco" aria-pressed="true" onclick="toggleTier(this)">🏦 Bancos</button>
     <button type="button" class="filter-chip" data-tier="fintech" aria-pressed="true" onclick="toggleTier(this)">💳 Fintechs</button>
     <button type="button" class="filter-chip" data-tier="bigtech" aria-pressed="true" onclick="toggleTier(this)">💻 Bigtechs</button>
@@ -182,6 +184,7 @@
 (function () {{
   var FILTER_KEY = "jarvis_portal_filtro_v1";
   var SELECT_KEY = "jarvis_portal_selecionadas_v1";
+  var MIGRATION_KEY = "jarvis_portal_migrou_internacional_v1";
 
   function loadSet(key, fallback) {{
     try {{
@@ -194,7 +197,22 @@
     try {{ localStorage.setItem(key, JSON.stringify(Array.from(set))); }} catch (e) {{}}
   }}
 
-  var activeTiers = loadSet(FILTER_KEY, ["banco", "fintech", "bigtech", "startup", "outras"]);
+  var activeTiers = loadSet(FILTER_KEY, ["internacional", "banco", "fintech", "bigtech", "startup", "outras"]);
+  // 2026-09-05: a filter set saved before "internacional" existed could
+  // never contain it -- it wasn't toggled off, it simply didn't exist
+  // yet. Without this one-time migration, a returning visitor's stale
+  // localStorage would silently hide the very section Nicholas just
+  // asked to focus on. Runs once per browser (tracked by its own flag),
+  // so a later, deliberate toggle-off is respected afterwards.
+  try {{
+    if (!localStorage.getItem(MIGRATION_KEY)) {{
+      if (!activeTiers.has("internacional")) {{
+        activeTiers.add("internacional");
+        saveSet(FILTER_KEY, activeTiers);
+      }}
+      localStorage.setItem(MIGRATION_KEY, "1");
+    }}
+  }} catch (e) {{}}
   var selected = loadSet(SELECT_KEY, []);
 
   function applyTierFilter() {{

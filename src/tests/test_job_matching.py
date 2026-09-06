@@ -477,3 +477,63 @@ def test_group_by_tier_ranks_junior_first_within_each_bucket():
     buckets = group_by_tier([unlabeled, junior])
 
     assert [l.external_id for l in buckets["banco"]] == ["2", "1"]
+
+
+def test_group_by_tier_default_omits_the_international_bucket():
+    listing = make_listing("1", "Analista De Dados", snippet="100% remoto")
+    listing.company = "Itaú"
+
+    buckets = group_by_tier([listing])
+
+    assert "internacional" not in buckets
+
+
+def test_group_by_tier_include_international_is_cross_cutting():
+    # 2026-09-05, "quero candidaturas focadas nesse tipo de vagas
+    # também! internacionais remotas!!!!" -- a remote listing at a
+    # named bank must show in BOTH "banco" and "internacional" at once,
+    # not one or the other (see group_by_tier()'s docstring: this is a
+    # focus lens layered on top of the existing tiers, not a
+    # replacement categorization).
+    remote_bank = make_listing("1", "Analista De Dados", snippet="100% remoto")
+    remote_bank.company = "Itaú"
+    onsite_startup = make_listing("2", "Analista De Dados", snippet="Presencial")
+    onsite_startup.company = "Gupy"
+
+    buckets = group_by_tier([remote_bank, onsite_startup], include_international=True)
+
+    assert {l.external_id for l in buckets["internacional"]} == {"1"}
+    assert {l.external_id for l in buckets["banco"]} == {"1"}
+    assert {l.external_id for l in buckets["startup"]} == {"2"}
+
+
+def test_group_by_tier_include_international_does_not_require_a_named_company():
+    # The whole point of "essas 3 opções" (cast the widest net): a
+    # remote listing at a company outside every curated tier list must
+    # still surface here -- it's built from ALL listings, unlike the
+    # named-company buckets.
+    remote_unknown = make_listing("1", "Analista De Dados", snippet="100% remoto")
+    remote_unknown.company = "Empresa Qualquer Ltda"
+
+    buckets = group_by_tier([remote_unknown], include_international=True)
+
+    assert {l.external_id for l in buckets["internacional"]} == {"1"}
+
+
+def test_group_by_tier_include_international_excludes_hybrid_and_onsite():
+    remote = make_listing("1", "Analista De Dados", snippet="100% remoto")
+    hybrid = make_listing("2", "Analista De Dados", snippet="Remoto, modelo híbrido 2x/semana")
+    onsite = make_listing("3", "Analista De Dados", snippet="Presencial")
+
+    buckets = group_by_tier([remote, hybrid, onsite], include_international=True)
+
+    assert {l.external_id for l in buckets["internacional"]} == {"1"}
+
+
+def test_group_by_tier_include_international_ranks_junior_first():
+    unlabeled = make_listing("1", "Analista De Dados", snippet="100% remoto")
+    junior = make_listing("2", "Analista De Dados Júnior", snippet="100% remoto")
+
+    buckets = group_by_tier([unlabeled, junior], include_international=True)
+
+    assert [l.external_id for l in buckets["internacional"]] == ["2", "1"]

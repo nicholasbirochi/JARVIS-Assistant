@@ -699,7 +699,9 @@ def rank_bank_bigtech_first(listings: list[JobListing]) -> list[JobListing]:
     return sorted(listings, key=sort_key)
 
 
-def group_by_tier(listings: list[JobListing], *, include_other: bool = False) -> dict[str, list[JobListing]]:
+def group_by_tier(
+    listings: list[JobListing], *, include_other: bool = False, include_international: bool = False
+) -> dict[str, list[JobListing]]:
     """Buckets listings into "banco"/"fintech"/"bigtech"/"startup" via
     company_tier(). With include_other=False (the original behavior),
     listings whose company doesn't match any known name are dropped
@@ -712,7 +714,35 @@ def group_by_tier(listings: list[JobListing], *, include_other: bool = False) ->
     silently dropping it -- still real, still matches every other
     restriction (skill relevance, level, location/remote), just at a
     company not in the curated lists. Each bucket is ranked junior-first
-    the same way run_job_search() ranks its own lists."""
+    the same way run_job_search() ranks its own lists.
+
+    include_international=True (2026-09-05) adds a sixth bucket,
+    "internacional", built from filter_remote() (is_full_remote()) over
+    ALL listings -- not just the ones that fell into a named company
+    tier. Real request: Nicholas forwarded a job-alert email for an
+    international remote internship and asked to also focus search/
+    applications on "vagas internacionais remotas" as a standing
+    feature, not a one-off manual search. Asked to pin down what
+    "international remote" means given most results found live were
+    ordinary Brazil-domestic remote roles, he picked all three readings
+    offered at once ("essas 3 opções" -- a foreign company open to
+    Brazil-based candidates, any remote role even purely domestic, or a
+    strict work-from-anywhere listing with no country restriction), i.e.
+    cast the widest net. is_full_remote() alone (not ANDed with
+    has_international_signal()) is deliberately the gate here: the
+    broadest of the three readings already subsumes the other two (a
+    foreign-company or work-from-anywhere listing will also read as
+    fully remote), and has_international_signal() rarely appears
+    literally in real listing text -- gating on it too would shrink this
+    back down to almost nothing, the opposite of what "também" (also)
+    asked for. This bucket is CROSS-CUTTING, not exclusive: a listing
+    can land here and in its normal company tier at the same time (e.g.
+    a bank's home-office listing shows in both "banco" and
+    "internacional") -- it's a focus lens layered on top of the existing
+    tiers, not a replacement categorization, so it must stay opt-in
+    (default False) the same way include_other is, or every existing
+    caller/test that sums tier sizes into a single total would silently
+    double-count remote listings."""
     buckets: dict[str, list[JobListing]] = {tier: [] for tier in _TIER_ORDER}
     if include_other:
         buckets["outras"] = []
@@ -722,7 +752,10 @@ def group_by_tier(listings: list[JobListing], *, include_other: bool = False) ->
             buckets[tier].append(listing)
         elif include_other:
             buckets["outras"].append(listing)
-    return {tier: rank_junior_first(items) for tier, items in buckets.items()}
+    result = {tier: rank_junior_first(items) for tier, items in buckets.items()}
+    if include_international:
+        result["internacional"] = rank_junior_first(filter_remote(listings))
+    return result
 
 
 def is_in_target_region(location: str | None, region_terms: list[str] = _TARGET_REGION_TERMS) -> bool:

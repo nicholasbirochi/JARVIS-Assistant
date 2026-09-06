@@ -16,7 +16,9 @@ def _reset(monkeypatch):
     monkeypatch.setattr(server, "_tiers", None)
 
 
-def make_listing(external_id, title, *, site_name="gupy", company="Itaú", location="São Paulo - SP") -> JobListing:
+def make_listing(
+    external_id, title, *, site_name="gupy", company="Itaú", location="São Paulo - SP", snippet=None
+) -> JobListing:
     return JobListing(
         site_name=site_name,
         external_id=external_id,
@@ -24,6 +26,7 @@ def make_listing(external_id, title, *, site_name="gupy", company="Itaú", locat
         company=company,
         location=location,
         url=f"https://{site_name}.example.com/{external_id}",
+        snippet=snippet,
     )
 
 
@@ -122,6 +125,89 @@ def test_serves_the_outras_tier(monkeypatch):
     assert "Empresa Qualquer Ltda" in body
     assert "Outras empresas" in body
     assert 'data-tier="outras"' in body
+
+
+def test_serves_the_international_tier(monkeypatch):
+    # 2026-09-05, "quero candidaturas focadas nesse tipo de vagas
+    # também! internacionais remotas!!!!" -- new, cross-cutting tier
+    # (see job_matching.group_by_tier()'s docstring).
+    monkeypatch.setattr(
+        server,
+        "_tiers",
+        {
+            "internacional": [make_listing("1", "Data Analyst", company="BairesDev", snippet="100% remoto")],
+            "banco": [],
+            "fintech": [],
+            "bigtech": [],
+            "startup": [],
+        },
+    )
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "BairesDev" in body
+    assert "Remoto/Internacional" in body
+    assert 'data-tier="internacional"' in body
+
+
+def test_total_stat_does_not_double_count_a_cross_tiered_listing(monkeypatch):
+    # "internacional" is cross-cutting -- the same listing also sits in
+    # its normal company tier (here "banco"). The "vagas no total" stat
+    # must still read 1, not 2.
+    listing = make_listing("1", "Analista de Dados", company="Itaú", snippet="100% remoto")
+    monkeypatch.setattr(
+        server,
+        "_tiers",
+        {"internacional": [listing], "banco": [listing], "fintech": [], "bigtech": [], "startup": [], "outras": []},
+    )
+
+    page = server.render_page()
+
+    assert '<div class="n">1</div><div class="l">vagas no total</div>' in page
+
+
+def test_row_shows_international_badge_when_listing_has_the_signal(monkeypatch):
+    monkeypatch.setattr(
+        server,
+        "_tiers",
+        {
+            "internacional": [
+                make_listing("1", "Data Analyst", company="BairesDev", snippet="Cliente internacional, salário em USD")
+            ],
+            "banco": [],
+            "fintech": [],
+            "bigtech": [],
+            "startup": [],
+        },
+    )
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "🌎 internacional" in body
+
+
+def test_row_omits_international_badge_without_the_signal(monkeypatch):
+    monkeypatch.setattr(
+        server,
+        "_tiers",
+        {
+            "internacional": [make_listing("1", "Analista de Dados", company="Empresa Nacional", snippet="100% remoto")],
+            "banco": [],
+            "fintech": [],
+            "bigtech": [],
+            "startup": [],
+        },
+    )
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "🌎 internacional" not in body
 
 
 def test_render_page_works_when_outras_key_is_missing(monkeypatch):
@@ -263,7 +349,7 @@ def test_refresh_endpoint_calls_refresh_data_and_returns_counts(monkeypatch):
     status, body = _post(port, "/api/refresh", {})
 
     assert status == 200
-    assert body == {"banco": 1, "fintech": 0, "bigtech": 0, "startup": 0, "outras": 0}
+    assert body == {"internacional": 0, "banco": 1, "fintech": 0, "bigtech": 0, "startup": 0, "outras": 0}
     # The manually-clicked "Atualizar vagas agora" button is exactly the
     # explicit, attended action that earns the extended (LinkedIn-
     # included) adapter set -- see _portal_adapters()'s docstring.
