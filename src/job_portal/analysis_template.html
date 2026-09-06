@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<title>Vagas por empresa — JARVIS (local)</title>
+<title>Análise de candidaturas — JARVIS (local)</title>
 {favicon_link}
 <link rel="stylesheet" href="/portal.css">
 </head>
@@ -10,26 +10,27 @@
 <div class="page">
   <header class="cover">
     <p class="eyebrow"><b>J&middot;A&middot;R&middot;V&middot;I&middot;S</b> &middot; local, roda no seu Mac</p>
-    <h1>Vagas por empresa</h1>
-    <p class="subtitle">Página local (não hospedada) -- os botões aqui rodam de verdade no seu computador, chamando o mesmo código que o JARVIS usa por voz. "Verificar" nunca envia nada. "Enviar candidatura" preenche de verdade usando seu perfil local e, se tudo bater, <strong>envia a candidatura de verdade</strong> -- é uma ação definitiva.</p>
+    <h1>Análise: enviadas vs. pendentes</h1>
+    <p class="subtitle">"Já inscritas" é um registro real e permanente (sobrevive a reinícios do JARVIS -- ver sites/application_log.py); "pendentes" são as vagas relevantes já carregadas nesta busca que ainda não têm um envio registrado.</p>
     <div class="top-actions">
-      <button class="top-btn" id="refresh-btn" onclick="refreshVagas()">Atualizar vagas agora</button>
-      <a class="top-btn ghost" href="/analise">📊 Ver análise (enviadas vs. pendentes)</a>
-      <span id="refresh-status" style="font-size:12px;color:var(--text-dim);"></span>
+      <a class="top-btn ghost" href="/">&larr; Voltar para vagas</a>
     </div>
     <div class="stat-strip">
-      <div class="stat"><div class="n">{total}</div><div class="l">vagas no total</div></div>
-      <div class="stat"><div class="n">{international_count}</div><div class="l">🌎 remoto/internacional</div></div>
-      <div class="stat"><div class="n">{banco_count}</div><div class="l">🏦 bancos</div></div>
-      <div class="stat"><div class="n">{fintech_count}</div><div class="l">💳 fintechs</div></div>
-      <div class="stat"><div class="n">{bigtech_count}</div><div class="l">💻 bigtechs</div></div>
-      <div class="stat"><div class="n">{startup_count}</div><div class="l">🚀 startups</div></div>
-      <div class="stat"><div class="n">{outras_count}</div><div class="l">🏢 outras</div></div>
+      <div class="stat"><div class="n">{loaded_count}</div><div class="l">vagas carregadas</div></div>
+      <div class="stat"><div class="n">{applied_count}</div><div class="l">✅ já inscritas</div></div>
+      <div class="stat"><div class="n">{pending_count}</div><div class="l">⏳ pendentes</div></div>
+      <div class="stat"><div class="n">{conversion_pct}%</div><div class="l">taxa de envio</div></div>
     </div>
   </header>
 
-  <div class="filter-bar" role="group" aria-label="Filtrar por categoria">
-    <span class="filter-label">Mostrar:</span>
+  <section class="applied-section">
+    <h2 class="section-heading"><span class="tier-badge" style="background:var(--success);">✅ Já inscritas</span></h2>
+    <p class="section-sub">Candidaturas realmente enviadas, mais recentes primeiro &middot; {applied_count} vaga(s)</p>
+    {applied_section}
+  </section>
+
+  <div class="filter-bar" role="group" aria-label="Filtrar pendentes por categoria">
+    <span class="filter-label">Pendentes -- mostrar:</span>
     <button type="button" class="filter-chip" data-tier="internacional" aria-pressed="true" onclick="toggleTier(this)">🌎 Remoto/Internacional</button>
     <button type="button" class="filter-chip" data-tier="banco" aria-pressed="true" onclick="toggleTier(this)">🏦 Bancos</button>
     <button type="button" class="filter-chip" data-tier="fintech" aria-pressed="true" onclick="toggleTier(this)">💳 Fintechs</button>
@@ -38,7 +39,7 @@
     <button type="button" class="filter-chip" data-tier="outras" aria-pressed="true" onclick="toggleTier(this)">🏢 Outras</button>
   </div>
 
-  {sections}
+  {pending_sections}
 
   <p class="empty-note" id="all-hidden-note" style="display: none;">Nenhuma categoria selecionada -- clique em um dos filtros acima.</p>
 </div>

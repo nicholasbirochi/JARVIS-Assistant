@@ -54,7 +54,12 @@ from pathlib import Path
 
 from sites.base import JobListing
 
-_TEMPLATE_PATH = Path(__file__).resolve().parent / "page_template.html"
+_PORTAL_DIR = Path(__file__).resolve().parent
+_TEMPLATE_PATH = _PORTAL_DIR / "page_template.html"
+_ANALYSIS_TEMPLATE_PATH = _PORTAL_DIR / "analysis_template.html"
+_FAVICON_LINK_PATH = _PORTAL_DIR / "favicon_link.html"
+_CSS_PATH = _PORTAL_DIR / "portal.css"
+_JS_PATH = _PORTAL_DIR / "portal.js"
 
 _TIER_META = {
     # 2026-09-05, "quero candidaturas focadas nesse tipo de vagas
@@ -404,6 +409,7 @@ def render_page() -> str:
     sections = "".join(_render_section(tier, tiers.get(tier, []), applied_log) for tier in _TIER_KEYS)
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     return template.format(
+        favicon_link=_FAVICON_LINK_PATH.read_text(encoding="utf-8"),
         # _EXCLUSIVE_TIER_KEYS, not _TIER_KEYS -- "internacional" is
         # cross-cutting (see group_by_tier()'s docstring) and would
         # double-count listings that also live in a company tier.
@@ -419,6 +425,102 @@ def render_page() -> str:
     )
 
 
+def _dedupe_all_listings(tiers: dict[str, list[JobListing]]) -> dict[str, JobListing]:
+    """Maps url -> JobListing across every currently-loaded tier bucket,
+    including the cross-cutting "internacional" one -- lets the
+    analysis screen show a real company/title for an applied URL that's
+    still present in this session's in-memory search, with no second
+    network round-trip. setdefault() so the first tier encountered wins
+    when a listing legitimately sits in more than one bucket -- the
+    JobListing itself is identical either way, only the bucket differs."""
+    lookup: dict[str, JobListing] = {}
+    for items in tiers.values():
+        for listing in items:
+            lookup.setdefault(listing.url, listing)
+    return lookup
+
+
+def _render_applied_row(url: str, meta: dict, lookup: dict[str, JobListing]) -> str:
+    listing = lookup.get(url)
+    site_label = _SITE_LABELS.get(meta.get("site_name"), meta.get("site_name") or "?")
+    sent_date = _esc(_format_applied_date(meta.get("submitted_at")))
+    if listing is not None:
+        company = _esc(listing.company) or "empresa não identificada"
+        title_html = f'<a class="row-title" href="{_esc(url)}" target="_blank" rel="noopener">{_esc(listing.title)}</a>'
+    else:
+        # Real, honest limitation: application_log.py only stores
+        # url/site_name/submitted_at (see its own docstring) -- no
+        # title/company snapshot. If this session's search hasn't found
+        # that URL again (or the listing has since closed), all that's
+        # left is the URL itself -- never fabricate a title/company.
+        company = "(vaga não está mais nos resultados carregados nesta sessão)"
+        title_html = f'<a class="row-title" href="{_esc(url)}" target="_blank" rel="noopener">{_esc(url)}</a>'
+    return f"""<li class="row row-applied">
+        <div class="row-body">
+          <div class="badges-line"><span class="site-badge site-{_esc(meta.get('site_name') or '')}">{_esc(site_label)}</span><span class="applied-badge">✅ ENVIADA</span></div>
+          <p class="company-name">{company}</p>
+          {title_html}
+          <div class="row-meta"><span>Enviada em {sent_date}</span></div>
+        </div>
+      </li>"""
+
+
+def render_analysis_page() -> str:
+    """2026-09-06, "faça uma tela de analise mostrando vagas já
+    inscritas e as pendentes! quero enchergar essa analise e essa
+    validação!!!" -- a dedicated screen (GET /analise, linked from the
+    main page's top bar) separating what's ALREADY been sent for real
+    (sites/application_log.py's durable, cross-restart record, newest
+    first) from what's still PENDING (this session's relevant, loaded
+    listings that have no application_log entry yet). Reuses
+    _render_section()/_render_row() for the pending side -- same
+    per-tier grouping, same filter chips/JS, same real apply buttons --
+    so this isn't a second, drifting copy of that rendering logic."""
+    from sites.application_log import load_applications_log
+
+    tiers = _current_tiers()
+    with _tiers_lock:
+        still_searching = _tiers is None
+    applied_log = load_applications_log()
+    lookup = _dedupe_all_listings(tiers)
+
+    # "Já inscritas" -- the whole, real, persistent history, newest
+    # submission first (missing timestamps sort last, never crash).
+    applied_items = sorted(applied_log.items(), key=lambda kv: kv[1].get("submitted_at") or "", reverse=True)
+    applied_rows = "".join(_render_applied_row(url, meta, lookup) for url, meta in applied_items)
+    applied_section = (
+        '<p class="empty-note">Nenhuma candidatura enviada ainda.</p>'
+        if not applied_items
+        else f'<ul class="list">{applied_rows}</ul>'
+    )
+
+    # "Pendentes" -- this session's loaded listings minus anything
+    # already in applied_log, grouped/rendered exactly like the main
+    # page (including the cross-cutting "internacional" section).
+    pending_by_tier = {tier: [l for l in tiers.get(tier, []) if l.url not in applied_log] for tier in _TIER_KEYS}
+    pending_sections = "".join(_render_section(tier, pending_by_tier[tier], applied_log) for tier in _TIER_KEYS)
+    # _EXCLUSIVE_TIER_KEYS for the arithmetic, same reasoning as
+    # render_page()'s "total" -- "internacional" is cross-cutting and
+    # would double-count a listing that's also in its company tier.
+    pending_total = sum(len(pending_by_tier[tier]) for tier in _EXCLUSIVE_TIER_KEYS)
+    loaded_total = sum(len(tiers.get(tier, [])) for tier in _EXCLUSIVE_TIER_KEYS)
+    applied_total = len(applied_log)
+    denominator = applied_total + pending_total
+    conversion_pct = round(100 * applied_total / denominator) if denominator else 0
+
+    template = _ANALYSIS_TEMPLATE_PATH.read_text(encoding="utf-8")
+    return template.format(
+        favicon_link=_FAVICON_LINK_PATH.read_text(encoding="utf-8"),
+        loaded_count=loaded_total,
+        applied_count=applied_total,
+        pending_count=pending_total,
+        conversion_pct=conversion_pct,
+        applied_section=applied_section,
+        pending_sections=pending_sections,
+        polling_script=_POLL_SCRIPT if still_searching else "",
+    )
+
+
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:  # noqa: A002 -- stdlib signature
         pass  # quiet -- runs as a background thread
@@ -426,11 +528,36 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path in ("/", "/index.html"):
             self._serve_page()
+        elif self.path == "/analise":
+            self._serve_analysis_page()
+        elif self.path == "/portal.css":
+            self._serve_static(_CSS_PATH, "text/css; charset=utf-8")
+        elif self.path == "/portal.js":
+            self._serve_static(_JS_PATH, "application/javascript; charset=utf-8")
         elif self.path == "/api/status":
             self._handle_status()
         else:
             self.send_response(404)
             self.end_headers()
+
+    def _serve_static(self, path: Path, content_type: str) -> None:
+        # Read fresh from disk on every request, same as _serve_page()
+        # -- no caching, so CSS/JS edits take effect on the next reload
+        # without restarting the server process.
+        body = path.read_text(encoding="utf-8").encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_analysis_page(self) -> None:
+        body = render_analysis_page().encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _handle_status(self) -> None:
         # Cheap, read-only poll target for the page's own auto-reload

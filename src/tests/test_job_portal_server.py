@@ -272,6 +272,166 @@ def test_not_yet_applied_listing_still_shows_the_apply_button(monkeypatch, tmp_p
     assert "continuarCandidatura(this" in body
 
 
+# --- shared static assets (portal.css / portal.js) ------------------------
+#
+# 2026-09-06: extracted out of page_template.html's inline <style>/<script>
+# so the new /analise screen can share them instead of duplicating ~280
+# lines of CSS/JS across two files (a real drift risk on a UI that's
+# already been tweaked several times this project).
+
+
+def test_main_page_links_to_the_shared_css_and_js_files():
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert '<link rel="stylesheet" href="/portal.css">' in body
+    assert '<script src="/portal.js"></script>' in body
+
+
+def test_main_page_links_to_the_analysis_screen():
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert 'href="/analise"' in body
+
+
+def test_portal_css_route_serves_real_css():
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/portal.css", timeout=5) as resp:
+        assert resp.status == 200
+        assert "text/css" in resp.headers["Content-Type"]
+        body = resp.read().decode("utf-8")
+
+    assert ".stat-strip" in body
+
+
+def test_portal_js_route_serves_real_js():
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/portal.js", timeout=5) as resp:
+        assert resp.status == 200
+        assert "javascript" in resp.headers["Content-Type"]
+        body = resp.read().decode("utf-8")
+
+    assert "window.toggleTier" in body
+
+
+# --- /analise (análise: enviadas vs. pendentes) ----------------------------
+#
+# 2026-09-06, "faça uma tela de analise mostrando vagas já inscritas e as
+# pendentes! quero enchergar essa analise e essa validação!!!"
+
+
+def test_analysis_page_renders_with_no_data():
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/analise", timeout=5) as resp:
+        assert resp.status == 200
+        body = resp.read().decode("utf-8")
+
+    assert "<html" in body.lower()
+    assert "Nenhuma candidatura enviada ainda." in body
+
+
+def test_analysis_page_shows_a_real_applied_job_with_company_and_date(monkeypatch, tmp_path):
+    from sites import application_log
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    listing = make_listing("1", "Analista de Dados Júnior", company="Itaú")
+    monkeypatch.setattr(server, "_tiers", {"banco": [listing], "fintech": [], "bigtech": [], "startup": []})
+    application_log.record_application(listing.url, "gupy")
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/analise", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "Analista de Dados Júnior" in body
+    assert "Itaú" in body
+    assert "✅ ENVIADA" in body
+    assert "Enviada em" in body
+
+
+def test_analysis_page_falls_back_to_the_bare_url_when_the_applied_listing_is_gone(monkeypatch, tmp_path):
+    # Real, honest limitation: application_log.py only stores url/
+    # site_name/submitted_at -- if this session's search hasn't (yet, or
+    # ever again) turned up that same URL, there's no title/company to
+    # show. Must say so plainly, never fabricate one.
+    from sites import application_log
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(server, "_tiers", {"banco": [], "fintech": [], "bigtech": [], "startup": []})
+    application_log.record_application("https://empresa.gupy.io/job/velha", "gupy")
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/analise", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "https://empresa.gupy.io/job/velha" in body
+    assert "não está mais nos resultados carregados" in body
+
+
+def test_analysis_page_lists_a_pending_job_not_yet_applied(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    listing = make_listing("1", "Analista de Dados Júnior", company="Nubank")
+    monkeypatch.setattr(server, "_tiers", {"banco": [], "fintech": [listing], "bigtech": [], "startup": []})
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/analise", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "Nubank" in body
+    assert 'data-tier="fintech"' in body
+
+
+def test_analysis_page_excludes_an_already_applied_job_from_the_pending_lists(monkeypatch, tmp_path):
+    from sites import application_log
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    listing = make_listing("1", "Analista de Dados Júnior", company="Itaú")
+    monkeypatch.setattr(server, "_tiers", {"banco": [listing], "fintech": [], "bigtech": [], "startup": []})
+    application_log.record_application(listing.url, "gupy")
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/analise", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    # Present once (in "já inscritas"), not a second time in "pendentes".
+    assert body.count("Analista de Dados Júnior") == 1
+
+
+def test_analysis_page_kpi_counts_are_correct(monkeypatch, tmp_path):
+    from sites import application_log
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    applied = make_listing("1", "Vaga Enviada", company="Itaú")
+    pending = make_listing("2", "Vaga Pendente", company="Nubank")
+    monkeypatch.setattr(server, "_tiers", {"banco": [applied], "fintech": [pending], "bigtech": [], "startup": []})
+    application_log.record_application(applied.url, "gupy")
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/analise", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert '<div class="n">2</div><div class="l">vagas carregadas</div>' in body
+    assert '<div class="n">1</div><div class="l">✅ já inscritas</div>' in body
+    assert '<div class="n">1</div><div class="l">⏳ pendentes</div>' in body
+    assert '<div class="n">50%</div><div class="l">taxa de envio</div>' in body
+
+
+def test_analysis_page_links_back_to_the_main_page():
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/analise", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert 'href="/"' in body
+
+
 def test_unknown_path_is_404():
     port = server.start(port=0)
 
