@@ -250,6 +250,16 @@ def test_classify_question_field_recognizes_round_4_found_live_in_the_gupy_batch
     assert classify_question_field("Você já atuou em alguma empresa do Grupo?") == "ja_trabalhou_aqui"
 
 
+def test_classify_question_field_recognizes_the_telemont_uniform_questions():
+    # 2026-09-07, found live across 4 real TELEMONT postings in the same
+    # batch-apply run -- a physical-uniform question pair.
+    assert classify_question_field("Em caso de utilização de uniforme, informe sua altura:") == "altura"
+    assert (
+        classify_question_field("Em caso de utilização de uniforme, informe qual a numeração:")
+        == "numeracao_calcado"
+    )
+
+
 def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():
     # Real risk: "Órgão e Estado de emissão do RG" contains "RG" as its
     # own whole word too -- checking bare "rg" first would misclassify

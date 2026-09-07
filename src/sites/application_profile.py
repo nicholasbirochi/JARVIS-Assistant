@@ -116,6 +116,10 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     "cargo_atual": "JARVIS_APPLICATION_CARGO_ATUAL",
     "parentes_na_empresa": "JARVIS_APPLICATION_PARENTES_NA_EMPRESA",
     "semestre_formatura": "JARVIS_APPLICATION_SEMESTRE_FORMATURA",
+    # 2026-09-07, found live across 4 TELEMONT postings in the same
+    # batch-apply run -- a recurring physical-uniform question pair.
+    "altura": "JARVIS_APPLICATION_ALTURA",
+    "numeracao_calcado": "JARVIS_APPLICATION_NUMERACAO_CALCADO",
 }
 
 

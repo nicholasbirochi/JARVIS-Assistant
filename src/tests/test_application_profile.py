@@ -42,6 +42,8 @@ def test_load_application_profile_returns_all_none_when_file_missing(monkeypatch
         "disponibilidade_fds": None,
         "disponibilidade_hibrido": None,
         "escolaridade": None,
+        "altura": None,
+        "numeracao_calcado": None,
     }
 
 
@@ -72,6 +74,8 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
                 "JARVIS_APPLICATION_CARGO_ATUAL=Não estou empregado no momento",
                 "JARVIS_APPLICATION_PARENTES_NA_EMPRESA=Não",
                 "JARVIS_APPLICATION_SEMESTRE_FORMATURA=2º semestre de 2027",
+                "JARVIS_APPLICATION_ALTURA=1,75 m",
+                "JARVIS_APPLICATION_NUMERACAO_CALCADO=42",
             ]
         ),
         encoding="utf-8",
@@ -100,6 +104,8 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
         "cargo_atual": "Não estou empregado no momento",
         "parentes_na_empresa": "Não",
         "semestre_formatura": "2º semestre de 2027",
+        "altura": "1,75 m",
+        "numeracao_calcado": "42",
     }
 
 

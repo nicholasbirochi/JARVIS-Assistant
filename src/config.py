@@ -158,13 +158,21 @@ WHISPER_MODEL_SIZE = "small"
 WHISPER_LANGUAGE = "pt"
 
 SOURCE_RESUME_DOCS = [
-    # 2026-09-07: real drift found live -- Nicholas renamed these two
-    # files on disk at some point, dropping the " ATS" suffix this
-    # constant still expected (confirmed: import_resume.py would raise
-    # SystemExit("Arquivo fonte não encontrado") if run today with the
-    # old names). Updated to match the real, current filenames.
-    "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - Brasil.docx",
-    "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - International.docx",
+    # 2026-09-07: real drift found live, in two stages. First: Nicholas
+    # had renamed the on-disk files, dropping the " ATS" suffix this
+    # constant expected -- fixed by pointing at the renamed files. But
+    # those renamed files turned out to be the STYLED, two-column
+    # résumé (a table with two empty top-level paragraphs -- confirmed
+    # live: docx_extract.py's extract_text() only reads
+    # document.paragraphs, so it silently returned almost nothing from
+    # them), not the plain/linear "ATS" version docx_extract.py's own
+    # docstring describes and expects. Rebuilt proper linear "... ATS"
+    # .docx files (same real content, transcribed from the styled
+    # pair's table cells, table-free) at Nicholas's explicit request
+    # ("coloque os arquivos em ATS também") and pointed this back at
+    # them -- these are the ones docx_extract.py can actually parse.
+    "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - Brasil ATS.docx",
+    "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - International ATS.docx",
 ]
 
 # Incremental document indexer (indexing/) -- only these roots are ever

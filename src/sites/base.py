@@ -303,6 +303,13 @@ _FIELD_TERMS: dict[str, list[str]] = {
     # _FIELD_ENV_KEYS, since Nicholas never needs a real value here (his
     # own parentes_na_empresa is always "Não").
     "parentes_nome_grau": ["nome e grau de parentesco", "grau de parentesco"],
+    # 2026-09-07, real recurring question found live across 4 TELEMONT
+    # postings in the same batch-apply run: a physical-uniform question
+    # pair, always phrased the same way ("Em caso de utilização de
+    # uniforme, informe sua altura/numeração"). Genuinely reusable --
+    # same two questions, same real answers, on every posting that asks.
+    "altura": ["informe sua altura"],
+    "numeracao_calcado": ["informe qual a numeração", "numeração do calçado", "numeracao do calcado"],
     # 2026-08-21, real miss found live (Vivo): "nome completo, sem
     # abreviações" -- resolved from the résumé's own personal_info.
     # full_name, not a separate .env value (same reasoning as

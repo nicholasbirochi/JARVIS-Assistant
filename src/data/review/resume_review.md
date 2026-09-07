@@ -5,7 +5,7 @@
 ```json
 {
   "meta": {
-    "schema_version": "1.0",
+    "schema_version": "2.0",
     "canonical_language": "pt-BR",
     "last_updated": null,
     "source_documents": [
@@ -16,355 +16,316 @@
   "personal_info": {
     "full_name": "Nicholas Birochi",
     "location": {
-      "city": "São Bernardo do Campo",
-      "state": "SP",
+      "city": null,
+      "state": null,
       "country": null
     },
-    "phone": "+55 (11) 95827-5250",
+    "phone": "(11) 95827-5250",
     "email": "nicholas.birochi@gmail.com",
     "links": {
-      "linkedin": "https://www.linkedin.com/in/nicholasbirochi/",
-      "github": "https://github.com/nicholasbirochi/",
-      "portfolio": "https://app.rocketseat.com.br/me/nicholasbirochi/",
+      "linkedin": "linkedin.com/in/nicholasbirochi",
+      "github": "github.com/nicholasbirochi",
+      "portfolio": null,
       "other": []
-    }
+    },
+    "evidence": []
   },
   "summary": {
-    "pt": "Estudante de Engenharia da Computação com experiência em análise de dados e desenvolvimento de projetos em Python, R, SQL e Power BI. Busco uma posição como Analista de Dados Júnior para aplicar e aprimorar minhas habilidades em análise estatística, visualização de dados e machine learning, contribuindo para a geração de insights e soluções baseadas em dados.",
-    "en": "I am a Computer Engineering student with experience in data analysis and projects using Python, R, SQL, and Power BI. Seeking a Junior Data Analyst position to apply and develop skills in statistical analysis, data visualization, and machine learning, contributing to data-driven insights and solutions."
+    "pt": "Estudante de Engenharia da Computação com experiência em análise de dados, automação e IA aplicada, além de projetos em Python, R, SQL, Power BI e Excel. Tenho sólidos conhecimentos em estatística e programação, com habilidade em traduzir análises técnicas em insights.",
+    "en": "Computer Engineering student with experience in data analysis, automation, and applied AI, plus project development in Python, R, SQL, Power BI, and Excel. Strong knowledge of statistics and programming, with ability to translate technical analyses into actionable insights."
   },
-  "skills": [
-    {
-      "category": "Programming",
-      "items": [
-        "Python",
-        "R",
-        "SQL",
-        "C#",
-        "Java"
-      ]
-    },
-    {
-      "category": "BI & Analytics Tools",
-      "items": [
-        "Power BI",
-        "Excel",
-        "PowerApps"
-      ]
-    },
-    {
-      "category": "Data Analysis",
-      "items": [
-        "Statistical Analysis",
-        "Data Modeling",
-        "Data Visualization",
-        "Data Cleaning & Wrangling"
-      ]
-    },
-    {
-      "category": "Libraries (Python/R)",
-      "items": [
-        "Pandas",
-        "NumPy",
-        "Matplotlib",
-        "Seaborn",
-        "scikit-learn",
-        "ggplot2",
-        "dplyr"
-      ]
-    },
-    {
-      "category": "Databases",
-      "items": [
-        "SQL querying for data extraction and manipulation"
-      ]
-    }
-  ],
+  "skills": [],
   "experience": [
     {
-      "id": "default",
+      "id": "volkswagen",
       "title": {
-        "pt": "Estagiário em Análise de Dados",
-        "en": "Data Analysis Intern"
+        "pt": "Estagiário em Análise de Dados (Auditoria Especial)",
+        "en": "Data Analysis Intern (Special Audit)"
       },
       "company": "Volkswagen",
-      "location": "São Paulo, Brazil",
-      "start_date": "Apr 2025",
-      "end_date": "Present",
-      "is_current": true,
+      "location": "Brasil",
+      "start_date": "2025-04",
+      "end_date": "Atual",
+      "is_current": false,
       "bullets_pt": [
-        "Atuação na área de análise de dados com foco em investigação de dados adquiridos pela empresa.",
-        "Utilização de Python, Power BI, SQL, SAP e Excel para processar e analisar grandes volumes de dados.",
-        "Colaboração com equipes multidisciplinares para resolver problemas de dados e implementar soluções práticas."
+        "Desenvolvimento e manutenção de dashboard analítico em produção (Python, Dash/Flask, SQL/SQLite) para indicadores de presença e clima organizacional (GPTW), com arquitetura MVC, cache e exportação automática de relatórios em PDF/JPG.",
+        "Criação de rotinas em Python para detecção automatizada de irregularidades em bases de ponto e acesso, apoiando investigações da Auditoria Especial.",
+        "Extração e tratamento de dados no SAP (módulos de compras e materiais) e construção de dashboards em Power BI para suporte às decisões da auditoria.",
+        "Aplicação prática de Databricks em projeto de monitoramento e análise comportamental de dados corporativos, apoiando a identificação de padrões e possíveis desvios para processos de auditoria e investigação.",
+        "Desenvolvimento de uma ferramenta interna de IA local (sem uso de APIs externas) para apoiar a elaboração de relatórios de auditoria, automatizando parte do trabalho documental inicial.",
+        "Colaboração com equipes para resolver problemas de dados e implementar soluções práticas."
       ],
       "bullets_en": [
-        "Work in data analysis focused on investigating datasets acquired by the company.",
-        "Use Python, Power BI, SQL, SAP, and Excel to process and analyze large data volumes.",
-        "Collaborate with cross-functional teams to troubleshoot data issues and implement practical solutions."
-      ]
+        "Built and maintain a production analytics dashboard (Python, Dash/Flask, SQL/SQLite) for workforce presence and engagement (GPTW) reporting, with an MVC architecture, caching layer, and automated PDF/JPG exports.",
+        "Built Python routines to automatically flag irregularities in timekeeping and access-control data, supporting Special Audit investigations.",
+        "Extracted and processed SAP data (procurement/materials modules) and built Power BI dashboards to support audit decision-making.",
+        "Applied Databricks in a corporate behavioral-monitoring and data-analysis project, supporting pattern identification and anomaly detection for audit and investigation processes.",
+        "Built an internal, fully local AI tool (no external APIs) to help draft audit reports, automating part of the initial documentation work.",
+        "Collaboration with teams to solve data issues and implement practical solutions."
+      ],
+      "evidence": []
     },
     {
-      "id": "default",
+      "id": "pratikaud",
       "title": {
         "pt": "Estagiário em Análise de Dados",
         "en": "Data Analysis Intern"
       },
       "company": "PratikaUD",
-      "location": "São Paulo, Brazil",
-      "start_date": "Jan 2023",
-      "end_date": "Dec 2024",
+      "location": "Brasil",
+      "start_date": "2023-01",
+      "end_date": "2024-12",
       "is_current": false,
       "bullets_pt": [
-        "Automatização e análise de dados utilizando funções avançadas do Excel, como 'PROC', 'ÍNDICE' e tabelas dinâmicas.",
+        "Automatização e análise de dados utilizando funções avançadas do Excel, como PROCV, ÍNDICE e tabelas dinâmicas.",
         "Contribuição para a melhoria da eficiência dos processos de dados, resultando em um aumento de 45% na precisão de relatórios internos."
       ],
       "bullets_en": [
-        "Automated and analyzed data using advanced Excel functions (LOOKUP, INDEX) and PivotTables.",
-        "Contributed to process efficiency improvements, increasing internal report accuracy by 45%."
-      ]
+        "Automation and data analysis using advanced Excel functions such as VLOOKUP, INDEX, and pivot tables.",
+        "Contributed to improved data process efficiency, resulting in a 45% increase in accuracy of internal reports."
+      ],
+      "evidence": []
     }
   ],
   "education": [
     {
       "degree": {
         "pt": "Engenharia da Computação",
-        "en": "B.S., Computer Engineering"
+        "en": "Computer Engineering"
       },
       "institution": "Faculdade Engenheiro Salvador Arena",
-      "location": "São Bernardo do Campo, SP",
-      "status": "in_progress",
-      "start_date": "2023-01-01",
-      "end_date": "2027-12-31"
+      "location": "Brasil",
+      "status": "completed",
+      "start_date": "2022-10",
+      "end_date": "2027-12",
+      "evidence": [
+        {
+          "source_path": "8º semestre – Período noturno – Formação prevista dez/2027",
+          "source_type": "manual",
+          "read_at": "2025-12",
+          "snippet": null,
+          "confidence": 1.0,
+          "review_status": "pending"
+        }
+      ]
     },
     {
       "degree": {
         "pt": "Ensino Médio",
-        "en": "High School Diploma"
+        "en": "High School"
       },
       "institution": "Colégio Ábaco",
-      "location": "São Bernardo do Campo, SP",
+      "location": "Brasil",
       "status": "completed",
-      "start_date": "2019-01-01",
-      "end_date": "2022-12-31"
+      "start_date": "2022-10",
+      "end_date": "2022-12",
+      "evidence": [
+        {
+          "source_path": "Concluído em dez/2022",
+          "source_type": "manual",
+          "read_at": "2022-12",
+          "snippet": null,
+          "confidence": 1.0,
+          "review_status": "pending"
+        }
+      ]
     }
   ],
-  "projects": [
-    {
-      "name": {
-        "pt": "Projetos de Análise de Dados em R",
-        "en": "Data Analysis Projects in R"
-      },
-      "description": {
-        "pt": "Análise e listagem de aprendizados práticos utilizando a linguagem R para manipulação e visualização de dados.",
-        "en": "Practical analyses documenting learnings in data manipulation and visualization."
-      },
-      "tech": []
-    },
-    {
-      "name": {
-        "pt": "Projeto de Simulação de Áudio com Efeito Doppler (C# e JAVA)",
-        "en": "Audio Doppler Effect Simulation (C# & Java)"
-      },
-      "description": {
-        "pt": "Desenvolvimento de uma aplicação para simular o efeito Doppler em áudio, aplicando conceitos de programação orientada a objetos.",
-        "en": "Application simulating the Doppler effect in audio using OOP concepts."
-      },
-      "tech": []
-    },
-    {
-      "name": {
-        "pt": "Projeto de Lançamento Balístico e Sistemas Lineares (C# e JAVA)",
-        "en": "Ballistic Trajectory & Linear Systems (C# & Java)"
-      },
-      "description": {
-        "pt": "Implementação de modelos matemáticos para simulação de lançamento balístico e resolução de sistemas lineares.",
-        "en": "Mathematical modeling for ballistic simulations and solving linear systems."
-      },
-      "tech": []
-    },
-    {
-      "name": {
-        "pt": "Projeto de Criptografia (Matrix - C# e JAVA)",
-        "en": "Cryptography (Matrix-based, C# & Java)"
-      },
-      "description": {
-        "pt": "Criação de um sistema de criptografia baseado em operações de matrizes.",
-        "en": "Encryption system built on matrix operations."
-      },
-      "tech": []
-    },
-    {
-      "name": {
-        "pt": "Projetos Finais em Power BI",
-        "en": "Power BI Final Projects"
-      },
-      "description": {
-        "pt": "Desenvolvimento de dashboards interativos para análise de dados de negócios, focando em clareza e usabilidade.",
-        "en": "Interactive dashboards for business analytics with a focus on clarity and usability."
-      },
-      "tech": []
-    }
-  ],
-  "certifications": [
-    {
-      "name": "Comprehensive Data Analytics & Data Science Program",
-      "hours": 26,
-      "status": "in_progress",
-      "date": "Oct/2025"
-    },
-    {
-      "name": "Clean Code with Python",
-      "hours": 13,
-      "status": "completed",
-      "date": "Sep/2025"
-    },
-    {
-      "name": "R Programming Course",
-      "hours": 7,
-      "status": "completed",
-      "date": "Dec/2024"
-    },
-    {
-      "name": "Advanced Probability & Statistics",
-      "hours": 3,
-      "status": "completed",
-      "date": "Dec/2024"
-    },
-    {
-      "name": "Data Science for Beginners + Real Projects",
-      "hours": 4,
-      "status": "completed",
-      "date": "Aug/2024"
-    },
-    {
-      "name": "Data Analysis in Python & Machine Learning",
-      "hours": 5,
-      "status": "completed",
-      "date": "Aug/2024"
-    },
-    {
-      "name": "Power BI (Elective)",
-      "hours": 40,
-      "status": "completed",
-      "date": null
-    }
-  ],
+  "projects": [],
+  "certifications": [],
   "languages": [
     {
-      "name": "Portuguese",
+      "name": "Português",
       "proficiency": "Native",
-      "test_score": null
+      "test_score": null,
+      "evidence": []
     },
     {
-      "name": "English",
-      "proficiency": "Upper-Intermediate (B2 First - Score 153)",
-      "test_score": null
+      "name": "Inglês",
+      "proficiency": "Upper-Intermediate (B2 First, Score 153)",
+      "test_score": null,
+      "evidence": []
     },
     {
-      "name": "German",
+      "name": "Alemão",
       "proficiency": "Beginner (A1)",
-      "test_score": null
+      "test_score": null,
+      "evidence": []
     }
   ],
   "job_preferences": {
-    "target_roles": [],
-    "notes": null
-  }
+    "target_roles": [
+      "Analista de Dados Júnior"
+    ],
+    "notes": null,
+    "availability": {
+      "status": "unspecified",
+      "notice_period_days": null,
+      "available_from": null,
+      "notes": null
+    }
+  },
+  "conflicts": [
+    {
+      "id": "data_analysis",
+      "field_path": "education",
+      "existing_value": null,
+      "proposed_value": null,
+      "sources": [],
+      "detected_at": "2023-10",
+      "status": "resolved_manual",
+      "resolution_note": null
+    }
+  ],
+  "change_log": [
+    {
+      "timestamp": "2023-10-15",
+      "field_path": "education",
+      "old_value": "8º semestre – Período noturno – Formação prevista dez/2027",
+      "new_value": "8º semestre – Período noturno – Formação prevista dez/2027",
+      "source": "manual_review",
+      "note": null
+    }
+  ]
 }
 ```
 
 ## Fonte: Currículo - DataBase - Brasil ATS.docx
 
 ```
-NICHOLAS BIROCHI
-São Bernardo do Campo, SP | +55 (11) 95827-5250 | nicholas.birochi@gmail.com | www.linkedin.com/in/nicholasbirochi/ | https://github.com/nicholasbirochi/ | https://app.rocketseat.com.br/me/nicholasbirochi/
-OBJETIVO
-Estudante de Engenharia da Computação com experiência em análise de dados e desenvolvimento de projetos em Python, R, SQL e Power BI. Busco uma posição como Analista de Dados Júnior para aplicar e aprimorar minhas habilidades em análise estatística, visualização de dados e machine learning, contribuindo para a geração de insights e soluções baseadas em dados.
-COMPETÊNCIAS TÉCNICAS
-Linguagens de Programação: Python, R, SQL, C#, Java
-Ferramentas de BI e Análise: Power BI, Excel, PowerApps
-Análise de Dados: Análise Estatística, Modelagem de Dados, Visualização de Dados, Limpeza e Tratamento de Dados
-Bibliotecas (Python/R): Pandas, NumPy, Matplotlib, Seaborn, Scikit-learn, ggplot2, dplyr
-Bancos de Dados: Conhecimento em consultas SQL para extração e manipulação de dados.
-EXPERIÊNCIA PROFISSIONAL
-Estagiário em Análise de Dados | Volkswagen | São Paulo, Brasil Abril 2025 – Atual
-Atuação na área de análise de dados com foco em investigação de dados adquiridos pela empresa.
-Utilização de Python, Power BI, SQL, SAP e Excel para processar e analisar grandes volumes de dados.
-Colaboração com equipes multidisciplinares para resolver problemas de dados e implementar soluções práticas.
-Estagiário em Análise de Dados | PratikaUD | São Paulo, Brasil Janeiro 2023 – Dezembro 2024
-Automatização e análise de dados utilizando funções avançadas do Excel, como "PROC", "ÍNDICE" e tabelas dinâmicas.
+Nicholas Birochi — Estudante de Engenharia da Computação
+(11) 95827-5250 | nicholas.birochi@gmail.com | linkedin.com/in/nicholasbirochi | github.com/nicholasbirochi
+Objetivo
+Analista de Dados Júnior.
+Resumo Profissional
+Estudante de Engenharia da Computação com experiência em análise de dados, automação e IA aplicada, além de projetos em Python, R, SQL, Power BI e Excel. Tenho sólidos conhecimentos em estatística e programação, com habilidade em traduzir análises técnicas em insights.
+Experiência Profissional
+Volkswagen — Estagiário em Análise de Dados (Auditoria Especial)
+Abr/2025 – Atual
+Desenvolvimento e manutenção de dashboard analítico em produção (Python, Dash/Flask, SQL/SQLite) para indicadores de presença e clima organizacional (GPTW), com arquitetura MVC, cache e exportação automática de relatórios em PDF/JPG.
+Criação de rotinas em Python para detecção automatizada de irregularidades em bases de ponto e acesso, apoiando investigações da Auditoria Especial.
+Extração e tratamento de dados no SAP (módulos de compras e materiais) e construção de dashboards em Power BI para suporte às decisões da auditoria.
+Aplicação prática de Databricks em projeto de monitoramento e análise comportamental de dados corporativos, apoiando a identificação de padrões e possíveis desvios para processos de auditoria e investigação.
+Desenvolvimento de uma ferramenta interna de IA local (sem uso de APIs externas) para apoiar a elaboração de relatórios de auditoria, automatizando parte do trabalho documental inicial.
+Colaboração com equipes para resolver problemas de dados e implementar soluções práticas.
+PratikaUD — Estagiário em Análise de Dados
+Jan/2023 – Dez/2024
+Automatização e análise de dados utilizando funções avançadas do Excel, como PROCV, ÍNDICE e tabelas dinâmicas.
 Contribuição para a melhoria da eficiência dos processos de dados, resultando em um aumento de 45% na precisão de relatórios internos.
-FORMAÇÃO ACADÊMICA
-Engenharia da Computação Faculdade Engenheiro Salvador Arena | São Bernardo do Campo, SP Previsão de Conclusão: Dezembro 2027
-Ensino Médio Colégio Ábaco | São Bernardo do Campo, SP Concluído em Dezembro 2022
-PROJETOS RELEVANTES
-Projetos de Análise de Dados em R: Análise e listagem de aprendizados práticos utilizando a linguagem R para manipulação e visualização de dados.
-Projeto de Simulação de Áudio com Efeito Doppler (C# e JAVA): Desenvolvimento de uma aplicação para simular o efeito Doppler em áudio, aplicando conceitos de programação orientada a objetos.
-Projeto de Lançamento Balístico e Sistemas Lineares (C# e JAVA): Implementação de modelos matemáticos para simulação de lançamento balístico e resolução de sistemas lineares.
-Projeto de Criptografia (Matrix - C# e JAVA): Criação de um sistema de criptografia baseado em operações de matrizes.
-Projetos Finais em Power BI: Desenvolvimento de dashboards interativos para análise de dados de negócios, focando em clareza e usabilidade.
-CURSOS E CERTIFICAÇÕES
-Formação Plena em Análise e Ciência de Dados (26h, em andamento, conclusão prevista para Out/2025)
+Formação
+Engenharia da Computação — Faculdade Engenheiro Salvador Arena (8º semestre – Período noturno – Formação prevista dez/2027)
+Ensino Médio — Colégio Ábaco (concluído em dez/2022)
+Linguagens de Programação e Ferramentas
+Python, R, SQL, C#, Java, Power BI, SAP, Excel (VBA), PowerApps, Power Automate, n8n, Dash/Flask, Azure (AZ-900), Databricks, Git
+Idiomas
+Inglês (Intermediário-Avançado – B2 First, Score 153)
+Cambridge English Entry Level Certificate 2023 (B2 First – Score 153)
+Access International School – Avançado
+Português (Nativo)
+Alemão: Iniciante (A1)
+Projetos
+Em R, Análise e Ciência de Dados:
+Projeto e lições aprendidas no curso de R
+Classificação de Fraude em Transações Bancárias (Árvore de Decisão)
+Análise de Churn SaaS (TechGrow)
+EDA e Limpeza de Dados (Tech Store / DataClean)
+Projetos finais do curso de Power BI
+Assistente de IA Local com Automação (n8n + Ollama)
+Em C# e Java:
+Projeto de Simulação de Áudio com Efeito Doppler
+Projeto de Lançamento Balístico e Sistemas Lineares
+Projeto de Criptografia (Matrix)
+Cursos e Conquistas
+Formação Plena em Análise e Ciência de Dados (em andamento – módulos concluídos de Machine Learning: regressão, classificação, clusterização, PCA/t-SNE, Random Forest, CatBoost e LightGBM)
 Clean Code com Python (13h, Set/2025)
-Módulos em Python, R, Estatística e Modelagem de Dados
+Módulos em Python, R, estatística e modelagem de dados
 Curso de Linguagem R (7,5h, Dez/2024)
 Aprofundamento em Probabilidade e Estatística (3h, Dez/2024)
 Ciência de Dados para Iniciantes + Projetos Reais (4,5h, Ago/2024)
 Análise de Dados em Python e Machine Learning (5h, Ago/2024)
-Power BI (Eletiva, 40h, concluído)
-Treinamento em Liderança e Gerenciamento de Equipes (Curso de Cabo - Monitoria no Tiro de Guerra 02-078)
-IDIOMAS
-Português: Nativo
-Inglês: Intermediário-Avançado (B2 First - Score 153)
+Power BI (Eletiva, 40h, Faculdade, 2024)
+SAP: Treinamento para Iniciantes, Financial Accounting e módulos MM/PP/FI/CO
+Microsoft Azure Fundamentals (AZ-900)
+Git Completo – Do Básico ao Avançado
+Microsoft Power Apps – Essencial
+Curso de Cabo - Monitoria no Tiro de Guerra 02-078 (Conclusão: Novembro/2024) – Treinamento em liderança e gerenciamento de equipes
+Automação e IA: Power Automate (SharePoint), n8n (Automação e Agentes de IA), e Prompt Engineering
+Segurança da Informação e Cibersegurança – Fundamentos
+2026 VW SAM Region Internal Audit Workshop – Volkswagen do Brasil
+Databricks — aplicado em projeto real de monitoramento e análise comportamental na Volkswagen
+Comunicação
+Liderança em projetos acadêmicos e cursos, como no desenvolvimento de dashboards em Power BI.
+Experiência como monitor no Tiro de Guerra, promovendo colaboração e gestão de equipes.
+Capacidade de traduzir análises técnicas em insights acionáveis para públicos não técnicos.
+Desenvolvimento de uma solução de IA local para apoiar auditores, traduzindo resultados técnicos de forma clara para públicos não técnicos.
 ```
 
 ## Fonte: Currículo - DataBase - International ATS.docx
 
 ```
-NICHOLAS BIROCHI
-São Bernardo do Campo, SP • +55 (11) 95827-5250 • nicholas.birochi@gmail.com • 
-https://www.linkedin.com/in/nicholasbirochi/
- https://github.com/nicholasbirochi/
- https://app.rocketseat.com.br/me/nicholasbirochi/
-OBJECTIVE
-I am a Computer Engineering student with experience in data analysis and projects using Python, R, SQL, and Power BI. Seeking a Junior Data Analyst position to apply and develop skills in statistical analysis, data visualization, and machine learning, contributing to data-driven insights and solutions.
-TECHNICAL SKILLS
-Programming: Python, R, SQL, C#, Java
-BI & Analytics Tools: Power BI, Excel, PowerApps
-Data Analysis: Statistical Analysis, Data Modeling, Data Visualization, Data Cleaning & Wrangling
-Libraries (Python/R): Pandas, NumPy, Matplotlib, Seaborn, scikit-learn, ggplot2, dplyr
-Databases: SQL querying for data extraction and manipulation
-PROFESSIONAL EXPERIENCE
-Data Analysis Intern | Volkswagen | São Paulo, Brazil — Apr 2025 – Present
-Work in data analysis focused on investigating datasets acquired by the company.
-Use Python, Power BI, SQL, SAP, and Excel to process and analyze large data volumes.
-Collaborate with cross-functional teams to troubleshoot data issues and implement practical solutions.
-Data Analysis Intern | PratikaUD | São Paulo, Brazil — Jan 2023 – Dec 2024
-Automated and analyzed data using advanced Excel functions (LOOKUP, INDEX) and PivotTables.
-Contributed to process efficiency improvements, increasing internal report accuracy by 45%.
-EDUCATION
-B.S., Computer Engineering — Faculdade Engenheiro Salvador Arena, São Bernardo do Campo, SP
-Expected Dec 2027
-High School Diploma — Colégio Ábaco, São Bernardo do Campo, SP
-Completed Dec 2022
-RELEVANT PROJECTS
-Data Analysis Projects in R: Practical analyses documenting learnings in data manipulation and visualization.
-Audio Doppler Effect Simulation (C# & Java): Application simulating the Doppler effect in audio using OOP concepts.
-Ballistic Trajectory & Linear Systems (C# & Java): Mathematical modeling for ballistic simulations and solving linear systems.
-Cryptography (Matrix-based, C# & Java): Encryption system built on matrix operations.
-Power BI Final Projects: Interactive dashboards for business analytics with a focus on clarity and usability.
-COURSES & CERTIFICATIONS
-Comprehensive Data Analytics & Data Science Program (26h, in progress; expected Oct/2025)
-Clean Code with Python (13h, Sep/2025)
-Modules in Python, R, Statistics, and Data Modeling
-R Programming Course (7.5h, Dec/2024)
-Advanced Probability & Statistics (3h, Dec/2024)
-Data Science for Beginners + Real Projects (4.5h, Aug/2024)
-Data Analysis in Python & Machine Learning (5h, Aug/2024)
-Power BI (Elective, 40h, completed)
-Leadership & Team Management Training (Corporal Course – Instructor, Tiro de Guerra 02-078)
-LANGUAGES
-Portuguese: Native
-English: Upper-Intermediate (B2 First – Score 153)
+Nicholas Birochi — Computer Engineering Student
+(11) 95827-5250 | nicholas.birochi@gmail.com | linkedin.com/in/nicholasbirochi | github.com/nicholasbirochi
+Objective
+Junior Data Analyst
+Professional Summary
+Computer Engineering student with experience in data analysis, automation, and applied AI, plus project development in Python, R, SQL, Power BI, and Excel. Strong knowledge of statistics and programming, with ability to translate technical analyses into actionable insights.
+Professional Experience
+Volkswagen — Data Analysis Intern (Special Audit)
+Apr/2025 – Present
+Built and maintain a production analytics dashboard (Python, Dash/Flask, SQL/SQLite) for workforce presence and engagement (GPTW) reporting, with an MVC architecture, caching layer, and automated PDF/JPG exports.
+Built Python routines to automatically flag irregularities in timekeeping and access-control data, supporting Special Audit investigations.
+Extracted and processed SAP data (procurement/materials modules) and built Power BI dashboards to support audit decision-making.
+Applied Databricks in a corporate behavioral-monitoring and data-analysis project, supporting pattern identification and anomaly detection for audit and investigation processes.
+Built an internal, fully local AI tool (no external APIs) to help draft audit reports, automating part of the initial documentation work.
+Collaboration with teams to solve data issues and implement practical solutions.
+PratikaUD — Data Analysis Intern
+Jan/2023 – Dec/2024
+Automation and data analysis using advanced Excel functions such as VLOOKUP, INDEX, and pivot tables.
+Contributed to improved data process efficiency, resulting in a 45% increase in accuracy of internal reports.
+Education
+Computer Engineering — Engenheiro Salvador Arena College (8th semester – Evening program – Expected graduation Dec/2027)
+High School — Colégio Ábaco (Completed Dec/2022)
+Programming Languages & Tools
+Python, R, SQL, C#, Java, Power BI, SAP, Excel (VBA), PowerApps, Power Automate, n8n, Dash/Flask, Azure (AZ-900), Databricks, Git
+Languages
+English (Upper-Intermediate – B2 First, Score 153)
+Cambridge English Entry Level Certificate 2023 (B2 First – Score 153)
+Access International School – Advanced
+Portuguese (Native)
 German: Beginner (A1)
+Projects
+In R, Data Analysis and Data Science:
+Project and lessons learned in R course
+Bank Transaction Fraud Classification (Decision Tree)
+SaaS Churn Analysis (TechGrow)
+EDA & Data Cleaning (Tech Store / DataClean)
+Final projects from the Power BI course
+Local AI Automation Assistant (n8n + Ollama)
+In C# and Java:
+Audio Simulation Project with Doppler Effect
+Ballistic Launch and Linear Systems Project
+Cryptography Project (Matrix)
+Courses & Achievements
+Comprehensive Training in Data Analysis and Data Science (ongoing – completed modules include Machine Learning: regression, classification, clustering, PCA/t-SNE, Random Forest, CatBoost, and LightGBM)
+Clean Code with Python (13h, Sep/2025)
+Modules in Python, R, statistics, and data modeling
+R Programming Course (7.5h, Dec/2024)
+Advanced Probability and Statistics (3h, Dec/2024)
+Data Science for Beginners + Real Projects (4.5h, Aug/2024)
+Data Analysis in Python and Machine Learning (5h, Aug/2024)
+Power BI (Elective, 40h, College, 2024)
+SAP: Beginner Training, Financial Accounting, and MM/PP/FI/CO modules
+Microsoft Azure Fundamentals (AZ-900)
+Git Complete – Basics to Advanced
+Microsoft Power Apps – Essentials
+Military Training Course – Monitoring at Tiro de Guerra 02-078 (Completed Nov/2024) – Leadership and team management training
+Automation & AI: Power Automate (SharePoint), n8n (Automation and AI Agents), and Prompt Engineering
+Information Security & Cybersecurity – Fundamentals
+2026 VW SAM Region Internal Audit Workshop – Volkswagen do Brasil
+Databricks — applied in a real behavioral-monitoring and data-analysis project at Volkswagen
+Communication
+Leadership in academic projects and courses, such as developing dashboards in Power BI.
+Experience as a monitor at Tiro de Guerra, promoting collaboration and team management.
+Ability to translate technical analyses into actionable insights for non-technical audiences.
+Built a local AI tool to support auditors, translating technical results clearly for non-technical audiences.
 ```
