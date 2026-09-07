@@ -158,8 +158,13 @@ WHISPER_MODEL_SIZE = "small"
 WHISPER_LANGUAGE = "pt"
 
 SOURCE_RESUME_DOCS = [
-    "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - Brasil ATS.docx",
-    "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - International ATS.docx",
+    # 2026-09-07: real drift found live -- Nicholas renamed these two
+    # files on disk at some point, dropping the " ATS" suffix this
+    # constant still expected (confirmed: import_resume.py would raise
+    # SystemExit("Arquivo fonte não encontrado") if run today with the
+    # old names). Updated to match the real, current filenames.
+    "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - Brasil.docx",
+    "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - International.docx",
 ]
 
 # Incremental document indexer (indexing/) -- only these roots are ever
