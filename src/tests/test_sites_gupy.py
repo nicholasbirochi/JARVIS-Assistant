@@ -520,7 +520,8 @@ class FakeApplicationPage:
                  click_results=None, company_questions=None, company_questions_via_label=None,
                  company_questions_via_legend=None,
                  fill_selectors=None, page_title="Página da Vaga | Analista de Dados",
-                 already_answered_selectors=None):
+                 already_answered_selectors=None, radio_already_answered_questions=None,
+                 radio_answerable=None):
         self.apply_href = apply_href
         self.url = "https://empresa.gupy.io/job/xyz"
         self.step_texts = step_texts
@@ -552,6 +553,18 @@ class FakeApplicationPage:
         # disabled with its saved value already in place). Empty by
         # default -- existing tests never hit this fast path.
         self.already_answered_selectors = already_answered_selectors or set()
+        # 2026-09-07: question texts whose radio/checkbox group already
+        # has a disabled+checked option on Gupy's own side -- simulates
+        # the real Stefanini/Núclea case (see
+        # _question_already_answered()'s docstring). Empty by default.
+        self.radio_already_answered_questions = radio_already_answered_questions or set()
+        # 2026-09-07: {(question_text, value): True} -- a clickable,
+        # not-yet-disabled radio/checkbox option whose label matches
+        # `value` exists for that question (see
+        # _select_radio_or_checkbox_answer()). Unconfigured pairs fail
+        # closed (False), same as every other unrecognized selector.
+        self.radio_answerable = radio_answerable or {}
+        self.radio_clicked: list[tuple[str, str]] = []
 
     def goto(self, url, timeout=None, wait_until=None):
         self.url = url
@@ -582,9 +595,20 @@ class FakeApplicationPage:
             if args:
                 self.last_is_referred = args[0]
             return self.referral_answer_count
-        if "el.disabled && !!el.value" in script:
-            selectors = args[0]
-            return any(sel in self.already_answered_selectors for sel in selectors)
+        if "alreadyText" in script:
+            # _question_already_answered(): combined text-field +
+            # radio/checkbox check (2026-09-07).
+            selectors, question_text = args[0]
+            already_text = any(sel in self.already_answered_selectors for sel in selectors)
+            return already_text or question_text in self.radio_already_answered_questions
+        if "targetValue" in script:
+            # _select_radio_or_checkbox_answer() (2026-09-07): actively
+            # "clicks" a configured, not-yet-disabled option.
+            question_text, value = args[0]
+            if self.radio_answerable.get((question_text, value)):
+                self.radio_clicked.append((question_text, value))
+                return True
+            return False
         for text, result in self.click_results.items():
             if repr(text) in script:
                 if result:
@@ -932,6 +956,79 @@ def test_fill_company_answer_already_saved_check_ignores_the_current_value_misma
     assert page.filled == {}
 
 
+# --- radio/checkbox company questions (2026-09-07, Stefanini/Núclea) -----
+#
+# Real gap found live: a company question rendered as a radio group
+# ("Você é PcD?") or checkbox pair ("Aceita modelo híbrido?") has no id
+# matching any of the text-field schemes above at all -- its real
+# <input> has an EMPTY id, grouped only by a shared name and a wrapping
+# <label> holding the option text. The old id-only check could never
+# see these were already answered, and had no way to actively select
+# one either -- both real, confirmed-live blockers this section covers.
+
+
+def test_fill_company_answer_falls_back_to_selecting_a_radio_option_when_no_text_selector_matches():
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        fill_selectors=set(),  # no text/textarea selector exists for this question
+        radio_answerable={("3. Possui disponibilidade para atuar em modelo híbrido? *", "Sim"): True},
+    )
+
+    ok = GupyAdapter()._fill_company_answer(page, "3. Possui disponibilidade para atuar em modelo híbrido? *", "Sim")
+
+    assert ok is True
+    assert page.radio_clicked == [("3. Possui disponibilidade para atuar em modelo híbrido? *", "Sim")]
+
+
+def test_fill_company_answer_fails_closed_when_no_radio_option_matches_either():
+    page = FakeApplicationPage(step_texts=["algo"], fill_selectors=set(), radio_answerable={})
+
+    ok = GupyAdapter()._fill_company_answer(page, "2. Você é PcD? *", "Não")
+
+    assert ok is False
+    assert page.radio_clicked == []
+
+
+def test_fill_company_answer_treats_an_already_answered_radio_question_as_answered():
+    # Real, confirmed-live case (Stefanini, Núclea): the radio/checkbox
+    # group is already disabled with a saved option checked -- Gupy's
+    # own account-level candidate profile, not something JARVIS filled.
+    # Must succeed without ever attempting to click anything.
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        fill_selectors=set(),
+        radio_already_answered_questions={"3. Possui disponibilidade para atuar em modelo híbrido? *"},
+        radio_answerable={},  # even with no clickable match configured
+    )
+
+    ok = GupyAdapter()._fill_company_answer(page, "3. Possui disponibilidade para atuar em modelo híbrido? *", "Sim")
+
+    assert ok is True
+    assert page.radio_clicked == []  # nothing was clicked -- already answered
+
+
+def test_question_already_answered_true_for_a_disabled_checked_radio_group():
+    page = FakeApplicationPage(
+        step_texts=["algo"],
+        radio_already_answered_questions={"2. Você é PcD? *"},
+    )
+
+    assert GupyAdapter()._question_already_answered(page, "2. Você é PcD? *") is True
+
+
+def test_question_already_answered_false_when_nothing_matches():
+    page = FakeApplicationPage(step_texts=["algo"])
+
+    assert GupyAdapter()._question_already_answered(page, "2. Você é PcD? *") is False
+
+
+def test_select_radio_or_checkbox_answer_returns_false_without_a_configured_match():
+    page = FakeApplicationPage(step_texts=["algo"])
+
+    assert GupyAdapter()._select_radio_or_checkbox_answer(page, "2. Você é PcD? *", "Não") is False
+    assert page.radio_clicked == []
+
+
 # --- continue_application_with_profile() --------------------------------
 
 
@@ -954,6 +1051,7 @@ def _patch_profile(monkeypatch, **fields):
         "cnh": None,
         "disponibilidade_viagem": None,
         "disponibilidade_fds": None,
+        "disponibilidade_hibrido": None,
         "escolaridade": None,
         "disponibilidade_inicio_imediato": None,
         "cargo_atual": None,
@@ -1043,6 +1141,69 @@ def test_continue_application_with_profile_fills_all_known_questions_and_advance
     assert preview.submitted is False
     assert "não pedi pra enviar de verdade" in preview.blocked_reason
     assert preview.questions[-1].answered is True
+
+
+def test_continue_application_with_profile_does_not_block_on_an_unclassified_question_already_answered_on_gupy(monkeypatch):
+    # 2026-09-07, real Stefanini case: a question with no local profile
+    # value (classified but empty, like "cnh" here, or genuinely
+    # unclassified like Stefanini's own referral-institution radio --
+    # both hit the exact same "unanswerable?" check) was ALREADY
+    # disabled with a saved answer on Gupy's own side -- must not block
+    # the whole step just because JARVIS has nothing local to give it.
+    _patch_profile(monkeypatch, salary_junior="R$ 4.500,00")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Você tem CNH?\n2.Qual sua pretensão salarial atual?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Você tem CNH?", "2.Qual sua pretensão salarial atual?"],
+        fill_selectors={'[id="input-2.Qual sua pretensão salarial atual?"]'},
+        radio_already_answered_questions={"1.Você tem CNH?"},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    # finalize=False (default) still stops before the real submit click --
+    # the point here is the STEP itself (saving) wasn't blocked.
+    assert "não pedi pra enviar de verdade" in preview.blocked_reason
+    assert page.filled == {'[id="input-2.Qual sua pretensão salarial atual?"]': "R$ 4.500,00"}
+    # Exact match, not substring -- the referral step's own recorded
+    # ApplicationQuestion.text happens to be the whole fake step blob
+    # (a quirk of this test's minimal step_texts list, reused across
+    # multiple _extract_step_text() calls -- same as every other test
+    # here), which itself contains the substring "CNH".
+    cnh_question = next(q for q in preview.questions if q.text == "1.Você tem CNH?")
+    assert cnh_question.answered is True
+    assert cnh_question.answer == "(já respondida no Gupy)"
+
+
+def test_continue_application_with_profile_fills_a_classified_radio_question_via_click(monkeypatch):
+    # 2026-09-07: a classified question (disponibilidade_hibrido) with a
+    # real local value, rendered as radio/checkbox (no text selector at
+    # all) and NOT already answered on Gupy's side -- must actively
+    # select the matching option, not just detect an existing one.
+    _patch_profile(monkeypatch, disponibilidade_hibrido="Sim")
+    page = FakeApplicationPage(
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa\n1.Possui disponibilidade para atuar em modelo híbrido?\nResponder agora",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=["1.Possui disponibilidade para atuar em modelo híbrido?"],
+        fill_selectors=set(),
+        radio_answerable={("1.Possui disponibilidade para atuar em modelo híbrido?", "Sim"): True},
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().continue_application_with_profile("https://empresa.gupy.io/job/xyz", confirmed=True)
+
+    assert page.radio_clicked == [("1.Possui disponibilidade para atuar em modelo híbrido?", "Sim")]
+    assert preview.questions[-1].answered is True
+    assert "não pedi pra enviar de verdade" in preview.blocked_reason
 
 
 def test_continue_application_with_profile_falls_back_to_label_based_questions(monkeypatch):

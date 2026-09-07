@@ -181,6 +181,25 @@ def _clean_question_id(question_text: str) -> str:
     return text.strip()
 
 
+def _id_selectors_for_question(question_text: str) -> list[str]:
+    """The real, confirmed-live id-selector candidates for a text/
+    textarea company question -- factored out of _fill_company_answer()
+    (2026-09-07) so _question_already_answered() can reuse the exact
+    same candidates without duplicating the three id schemes documented
+    on that method. See its docstring for where each one was found
+    live."""
+    selectors = []
+    for candidate in dict.fromkeys([question_text, _clean_question_id(question_text)]):
+        escaped = candidate.replace('"', '\\"')
+        selectors.append(f'[id="input-{escaped}"]')
+    number_match = re.match(r"^(\d+)\.", question_text)
+    if number_match:
+        n = number_match.group(1)
+        selectors.append(f'[id="additional-question-input-{n}"]')
+        selectors.append(f'[id="additional-question-textarea-{n}"]')
+    return selectors
+
+
 # Maps a conditionally-inapplicable field to the (parent_field,
 # trigger_value) that makes it genuinely have nothing to fill, rather
 # than merely "no local value on file". 2026-08-22, real gap found live
@@ -747,11 +766,38 @@ class GupyAdapter(SiteAdapter):
                 )
             plan = [p for p in plan if not _skip(p)]
 
+            # 2026-09-07, "faça a candidatura automatica funcionar para
+            # todas essas vagas pendentes": a question JARVIS can't
+            # classify at all (or classifies but the local profile has
+            # no value for) might still need NOTHING from us -- Gupy's
+            # own account-level candidate profile frequently pre-answers
+            # screening questions (radio/checkbox AND text) across
+            # companies. Checked here, once per question, BEFORE the
+            # unanswerable gate below, so an already-answered-on-Gupy's-
+            # side question never blocks the whole step just because
+            # JARVIS doesn't recognize its text (a real, confirmed-live
+            # case: Stefanini's referral-institution radio question is
+            # unclassified -- see base.py's "pcd" false-positive fix --
+            # but was already disabled with a saved answer).
+            already_on_gupy = {q_text for q_text, _field in plan if self._question_already_answered(page, q_text)}
+
             unanswerable = [
-                q_text for q_text, field in plan if field is None or not profile.get(field)
+                q_text
+                for q_text, field in plan
+                if q_text not in already_on_gupy and (field is None or not profile.get(field))
             ]
             if unanswerable:
                 for q_text, field in plan:
+                    if q_text in already_on_gupy:
+                        questions.append(
+                            ApplicationQuestion(
+                                text=q_text,
+                                answered=True,
+                                answer="(já respondida no Gupy)",
+                                is_hard_pii=is_hard_pii_question(q_text),
+                            )
+                        )
+                        continue
                     has_value = field is not None and bool(profile.get(field))
                     questions.append(
                         ApplicationQuestion(
@@ -778,6 +824,16 @@ class GupyAdapter(SiteAdapter):
 
             fill_failures: list[str] = []
             for q_text, field in plan:
+                if q_text in already_on_gupy:
+                    questions.append(
+                        ApplicationQuestion(
+                            text=q_text,
+                            answered=True,
+                            answer="(já respondida no Gupy)",
+                            is_hard_pii=is_hard_pii_question(q_text),
+                        )
+                    )
+                    continue
                 value = profile[field]
                 ok = self._fill_company_answer(page, q_text, value)
                 questions.append(
@@ -1072,50 +1128,158 @@ class GupyAdapter(SiteAdapter):
         used to be reported as a filling failure even though the
         question is genuinely, already answered, nothing left to do.
 
-        Checked FIRST: whether any candidate selector's real element is
-        disabled AND already holds *some* non-empty value -- not
-        specifically the value being asked to fill now. A disabled
-        field can't be changed regardless of whether its saved answer
-        still matches the current local profile (confirmed live: two
-        fields on this same listing were disabled with a real,
-        non-empty value that did NOT match the current profile value --
-        still correctly "answered" from Gupy's own point of view, just
-        not something this code can act on either way), so re-checking
-        for an exact match here would just as often report a false
-        failure it has no way to fix. Only whether a value exists is
-        checked inside the browser -- the real saved text is never read
-        into Python, same PII discipline as every other path here. If
-        disabled-with-a-value, this returns True immediately without
-        ever calling fill()."""
-        selectors = []
-        for candidate in dict.fromkeys([question_text, _clean_question_id(question_text)]):
-            escaped = candidate.replace('"', '\\"')
-            selectors.append(f'[id="input-{escaped}"]')
-        number_match = re.match(r"^(\d+)\.", question_text)
-        if number_match:
-            n = number_match.group(1)
-            selectors.append(f'[id="additional-question-input-{n}"]')
-            selectors.append(f'[id="additional-question-textarea-{n}"]')
+        Checked FIRST (via _question_already_answered()): whether any
+        candidate selector's real element is disabled AND already holds
+        *some* non-empty value -- not specifically the value being asked
+        to fill now. A disabled field can't be changed regardless of
+        whether its saved answer still matches the current local profile
+        (confirmed live: two fields on this same listing were disabled
+        with a real, non-empty value that did NOT match the current
+        profile value -- still correctly "answered" from Gupy's own
+        point of view, just not something this code can act on either
+        way), so re-checking for an exact match here would just as often
+        report a false failure it has no way to fix. Only whether a
+        value exists is checked inside the browser -- the real saved
+        text is never read into Python, same PII discipline as every
+        other path here.
 
-        already_answered = page.evaluate(
-            """
-            (selectorsArg) => selectorsArg.some(sel => {
-                const el = document.querySelector(sel);
-                return el && el.disabled && !!el.value;
-            })
-            """,
-            selectors,
-        )
-        if already_answered:
+        2026-09-07, real gap found live (Stefanini, Núclea): a
+        radio/checkbox company question ("Aceita trabalhar em modelo
+        híbrido?", "Você é PcD?") has no id at all matching any of the
+        schemes above -- its real <input> elements have an EMPTY id
+        attribute, grouped only by a shared `name="question-<internal
+        id>"`/`name="checkbox-<internal id>-<n>"`, with the visible
+        option text living in a wrapping <label> (same MUI pattern
+        _answer_referral_labels() already relies on). When every
+        text/textarea selector above fails, this now falls through to
+        _select_radio_or_checkbox_answer() instead of giving up -- see
+        that method's docstring for how a specific option gets chosen
+        (never guessed; only an exact label-text match, same fail-closed
+        discipline as everywhere else in this file)."""
+        if self._question_already_answered(page, question_text):
             return True
 
-        for selector in selectors:
+        for selector in _id_selectors_for_question(question_text):
             try:
                 page.fill(selector, value, timeout=5000)
                 return True
             except Exception:
                 continue
-        return False
+        return self._select_radio_or_checkbox_answer(page, question_text, value)
+
+    def _question_already_answered(self, page, question_text: str) -> bool:
+        """True if Gupy's own account-level candidate profile has
+        already saved a real answer for this SPECIFIC question -- a
+        disabled text/textarea with a non-empty value (the original
+        _fill_company_answer() check, unchanged), OR a disabled
+        radio/checkbox group with an option already checked (2026-09-07:
+        found live that a company question rendered as radio/checkbox
+        has no id matching any of the text-field schemes at all, so the
+        old id-only check could never see it was already answered --
+        every one of Stefanini's and Núclea's radio/checkbox questions
+        was, in fact, already disabled-with-a-saved-answer, but the old
+        code still reported them as unfillable and blocked the whole
+        step).
+
+        Radio/checkbox groups are found by walking the page in document
+        order (not by id, not by a nearest-ancestor guess -- a real,
+        confirmed-live case, Stefanini's own Q5, has its OPTIONS render
+        far enough from its header that a `closest()`-based container
+        guess missed them entirely): every numbered question header
+        (<h3>/<label>/<legend> whose text starts with "N.") starts a new
+        group, and every radio/checkbox <input> encountered before the
+        NEXT header belongs to it -- exactly the order a person reading
+        the rendered page would associate them in.
+
+        Used both to gate _fill_company_answer() (nothing to click if
+        it's already set) and, separately, by
+        continue_application_with_profile() to recognize a question
+        that's already answered on Gupy's side even when JARVIS can't
+        classify it at all (Stefanini's referral-institution radio is a
+        real example -- a bare "pcd" match on its text was a confirmed
+        false positive removed 2026-08-21, so it's unclassified, but the
+        radio itself was already disabled-with-a-checked-option)."""
+        selectors = _id_selectors_for_question(question_text)
+        return page.evaluate(
+            """
+            (args) => {
+                const [selectors, questionText] = args;
+                const alreadyText = selectors.some(sel => {
+                    const el = document.querySelector(sel);
+                    return el && el.disabled && !!el.value;
+                });
+                if (alreadyText) return true;
+
+                const allNodes = Array.from(document.querySelectorAll('h3, label, legend, input'));
+                const isHeader = (el) => ['H3', 'LABEL', 'LEGEND'].includes(el.tagName)
+                    && /^\\d+\\./.test(el.textContent.trim());
+                let collecting = false;
+                for (const el of allNodes) {
+                    if (isHeader(el)) {
+                        collecting = el.textContent.trim() === questionText;
+                        continue;
+                    }
+                    if (collecting && el.tagName === 'INPUT' && (el.type === 'radio' || el.type === 'checkbox')) {
+                        if (el.checked && el.disabled) return true;
+                    }
+                }
+                return false;
+            }
+            """,
+            [selectors, question_text],
+        )
+
+    def _select_radio_or_checkbox_answer(self, page, question_text: str, value: str) -> bool:
+        """Actively clicks a radio/checkbox option under this exact
+        question whose visible label text matches `value` (an exact
+        match after trimming/lowercasing both sides -- never a
+        substring guess). The active-selection counterpart to
+        _question_already_answered(): for a question that's classified,
+        has a real local profile value, but isn't already pre-answered
+        on Gupy's side. Same document-order grouping as that method (see
+        its docstring for why a nearest-ancestor guess isn't used).
+
+        Clicks the option's wrapping <label>, never the <input> directly
+        -- the same confirmed-live technique _answer_referral_labels()
+        already relies on (Gupy/MUI renders the real <input> visually
+        hidden inside the label; a direct click on it doesn't reliably
+        register). Returns False -- never guesses at the closest option
+        -- when no option's label text matches, or when no radio/
+        checkbox group exists at all for this question (a genuinely
+        different, still-unhandled question type)."""
+        return page.evaluate(
+            """
+            (args) => {
+                const [questionText, targetValue] = args;
+                const allNodes = Array.from(document.querySelectorAll('h3, label, legend, input'));
+                const isHeader = (el) => ['H3', 'LABEL', 'LEGEND'].includes(el.tagName)
+                    && /^\\d+\\./.test(el.textContent.trim());
+                let collecting = false;
+                const options = [];
+                for (const el of allNodes) {
+                    if (isHeader(el)) {
+                        collecting = el.textContent.trim() === questionText;
+                        continue;
+                    }
+                    if (collecting && el.tagName === 'INPUT' && (el.type === 'radio' || el.type === 'checkbox')) {
+                        options.push(el);
+                    }
+                }
+                if (!options.length) return false;
+                const norm = (s) => s.trim().toLowerCase();
+                const match = options.find(el => {
+                    if (el.disabled) return false;
+                    const label = el.closest('label');
+                    return label && norm(label.textContent) === norm(targetValue);
+                });
+                if (!match) return false;
+                const label = match.closest('label');
+                (label || match).click();
+                return match.checked;
+            }
+            """,
+            [question_text, value],
+        )
 
     def _get_apply_href(self, page) -> str | None:
         return page.evaluate(
