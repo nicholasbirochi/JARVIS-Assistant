@@ -181,6 +181,25 @@ def _clean_question_id(question_text: str) -> str:
     return text.strip()
 
 
+def _escape_css_attribute_value(value: str) -> str:
+    """Escapes a string for safe use inside a double-quoted CSS
+    attribute-selector value (e.g. `[id="<escaped>"]`) -- backslashes
+    and double-quotes are backslash-escaped, and embedded newlines
+    (which a real question's own DOM id can genuinely contain -- found
+    live 2026-09-07 on several Gupy listings, e.g. Minerva Foods Global/
+    ITAPEVA Recuperação de Créditos/Grupo Nós, where the id is built
+    directly from a line-wrapped <h3>/<label>'s textContent, which
+    keeps the literal newline even though .trim() only strips the
+    OUTER ends) are replaced with the CSS escape sequence for U+000A.
+    A raw, unescaped newline can never appear inside a CSS string
+    token -- without this, document.querySelector() raised a real
+    SyntaxError that used to propagate all the way up and abort the
+    whole application attempt for these companies, instead of just
+    failing to match like every other genuine non-match already does."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return escaped.replace("\n", "\\A ").replace("\r", "").replace("\t", " ")
+
+
 def _id_selectors_for_question(question_text: str) -> list[str]:
     """The real, confirmed-live id-selector candidates for a text/
     textarea company question -- factored out of _fill_company_answer()
@@ -190,7 +209,7 @@ def _id_selectors_for_question(question_text: str) -> list[str]:
     live."""
     selectors = []
     for candidate in dict.fromkeys([question_text, _clean_question_id(question_text)]):
-        escaped = candidate.replace('"', '\\"')
+        escaped = _escape_css_attribute_value(candidate)
         selectors.append(f'[id="input-{escaped}"]')
     number_match = re.match(r"^(\d+)\.", question_text)
     if number_match:

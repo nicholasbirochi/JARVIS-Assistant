@@ -226,6 +226,30 @@ def test_classify_question_field_pcd_no_longer_false_positives_on_mere_mentions(
     )
 
 
+def test_classify_question_field_recognizes_round_4_found_live_in_the_gupy_batch_apply_run():
+    # 2026-09-07: "nome DA SUA mãe"/"nome DO SEU pai" don't contain
+    # "nome da mãe"/"nome do pai" as substrings -- the inserted
+    # "sua"/"seu" broke the old match entirely.
+    assert classify_question_field("Informe o nome da sua mãe:") == "nome_mae"
+    assert classify_question_field("Informe o nome do seu pai:") == "nome_pai"
+    # "cidade e estado de nascimento" -- same naturalidade question,
+    # never mentions the word "naturalidade" at all.
+    assert classify_question_field("Qual é a sua cidade e estado de nascimento?") == "naturalidade"
+    # "familiar ou parente que atualmente trabalha" -- same nepotism-
+    # disclosure question as parentes_na_empresa's other phrasings.
+    assert (
+        classify_question_field(
+            "Você possui algum familiar ou parente que atualmente trabalha em alguma empresa da AI/R Company?"
+        )
+        == "parentes_na_empresa"
+    )
+    # "expectativa salarial" -- same salary question as "pretensão
+    # salarial", never mentions "salário"/"pretensão" as whole words.
+    assert classify_question_field("Qual sua expectativa salarial (para o modelo CLT)?") == "salary_expectation"
+    # "atuou" instead of "trabalhou" -- same ja_trabalhou_aqui question.
+    assert classify_question_field("Você já atuou em alguma empresa do Grupo?") == "ja_trabalhou_aqui"
+
+
 def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():
     # Real risk: "Órgão e Estado de emissão do RG" contains "RG" as its
     # own whole word too -- checking bare "rg" first would misclassify

@@ -13,6 +13,8 @@ from sites.gupy import (
     _card_to_job_listing,
     _clean_question_id,
     _decode_job_id,
+    _escape_css_attribute_value,
+    _id_selectors_for_question,
     _is_authenticated,
     _map_resume_to_gupy_fields,
     _split_full_name,
@@ -832,6 +834,52 @@ def test_clean_question_id_strips_numbering_and_trailing_marker():
 
 def test_clean_question_id_no_op_when_already_clean():
     assert _clean_question_id("Qual sua pretensão salarial?") == "Qual sua pretensão salarial?"
+
+
+# --- _escape_css_attribute_value() / _id_selectors_for_question() --------
+#
+# 2026-09-07, real crash found live in the Gupy batch-apply run (Minerva
+# Foods Global, ITAPEVA Recuperação de Créditos, Grupo Nós): a real
+# question's own DOM id can contain an embedded newline (either a
+# genuinely line-wrapped <h3>/<label>, or _reach_company_questions_step()'s
+# own whole-page-text fallback when no numbered question is found at
+# all) -- document.querySelector() raises a real SyntaxError on a raw,
+# unescaped newline inside a CSS string, which used to propagate all the
+# way up and abort the whole application attempt instead of just failing
+# to match like any other genuine non-match.
+
+
+def test_escape_css_attribute_value_escapes_backslashes_and_quotes():
+    assert _escape_css_attribute_value('a"b') == 'a\\"b'
+    assert _escape_css_attribute_value("a\\b") == "a\\\\b"
+
+
+def test_escape_css_attribute_value_replaces_embedded_newlines():
+    escaped = _escape_css_attribute_value("linha um\nlinha dois")
+    assert "\n" not in escaped
+    assert escaped == "linha um\\A linha dois"
+
+
+def test_id_selectors_for_question_never_contains_a_raw_newline():
+    selectors = _id_selectors_for_question("Perguntas criadas pela empresa X\nSalvar e continuar\nPowered by Gupy")
+    assert all("\n" not in sel for sel in selectors)
+
+
+def test_question_already_answered_does_not_crash_on_a_newline_containing_question(monkeypatch):
+    # Regression test for the exact live crash: FakeApplicationPage's
+    # evaluate() is a Python string-dispatch double, not a real CSS
+    # parser, so this can't reproduce the SyntaxError itself -- it
+    # verifies the surrounding Python code stays crash-free with a
+    # realistic newline-containing question text (the real assurance
+    # that document.querySelector() itself won't choke lives in the two
+    # _escape_css_attribute_value tests above).
+    page = FakeApplicationPage(step_texts=["algo"])
+
+    result = GupyAdapter()._question_already_answered(
+        page, "Perguntas criadas pela empresa X\nSalvar e continuar\nPowered by Gupy"
+    )
+
+    assert result is False
 
 
 def test_fill_company_answer_tries_the_raw_text_selector_first():

@@ -170,9 +170,17 @@ _FIELD_TERMS: dict[str, list[str]] = {
     "rg_orgao_estado": ["órgão e estado de emissão", "orgao e estado de emissao", "órgão emissor", "orgao emissor"],
     "rg": ["rg", "registro geral", "carteira de identidade"],
     "cpf": ["cpf"],
-    "nome_mae": ["nome da mãe", "nome da mae"],
-    "nome_pai": ["nome do pai"],
-    "naturalidade": ["naturalidade"],
+    # 2026-09-07, real gap found live in the Gupy batch-apply run: "nome
+    # DA SUA mãe"/"nome DO SEU pai" (Grupo Nós and others) don't contain
+    # "nome da mãe"/"nome do pai" as substrings at all -- the inserted
+    # "sua"/"seu" broke the match, same class of miss as every other
+    # "different real phrasing" fix in this dict.
+    "nome_mae": ["nome da mãe", "nome da mae", "nome da sua mãe", "nome da sua mae"],
+    "nome_pai": ["nome do pai", "nome do seu pai"],
+    # "cidade e estado de nascimento" (2026-09-07, same batch): a very
+    # common real phrasing for the exact same question that never says
+    # the word "naturalidade" at all.
+    "naturalidade": ["naturalidade", "cidade e estado de nascimento", "cidade de nascimento"],
     "raca_cor": ["raça", "raca", "cor da pele", "etnia"],
     # 2026-08-27, real false-positive found live (Stefanini): the bare
     # "pcd" abbreviation matched a COMPLETELY different question ("Você
@@ -192,6 +200,10 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "pretensão salarial",
         "pretensao salarial",
         "renda",
+        # 2026-09-07, real gap found live in the Gupy batch-apply run:
+        # "expectativa salarial" is the same question, worded
+        # differently -- doesn't contain "salário"/"pretensão" at all.
+        "expectativa salarial",
     ],
     "marital_status": ["estado civil"],
     # 2026-08-21: compiled from the actual, real company-question text
@@ -217,6 +229,18 @@ _FIELD_TERMS: dict[str, list[str]] = {
         # 2026-08-21, real miss found live (Cogna): "do grupo" phrasing
         # is the same question, worded differently.
         "trabalhou em alguma empresa do grupo",
+        # 2026-09-07, real miss found live in the Gupy batch-apply run:
+        # "atuou" instead of "trabalhou" -- same question. NOTE: a
+        # genuinely common real phrasing, "já trabalhou na <nome da
+        # empresa>?", is NOT covered here on purpose -- a bare regex for
+        # "trabalhou n[ao] <anything>" would also match a real, DIFFERENT
+        # question ("já trabalhou no exterior?", asking about
+        # international experience in general, not at this specific
+        # company) with the wrong fixed "Não" answer. Safely
+        # generalizing that one needs the current listing's own company
+        # name as context, which classify_question_field() doesn't have
+        # -- a real, known gap, not fixed here.
+        "atuou em alguma empresa do grupo",
     ],
     "disponibilidade_viagem": ["disponibilidade para viajar", "disponível para viajar", "disponivel para viajar"],
     "disponibilidade_fds": [
@@ -264,6 +288,10 @@ _FIELD_TERMS: dict[str, list[str]] = {
         # is the same nepotism-disclosure question, worded differently.
         "você tem parente",
         "voce tem parente",
+        # 2026-09-07, real miss found live in the Gupy batch-apply run:
+        # "familiar ou parente que atualmente trabalha" -- same
+        # nepotism-disclosure question, yet another phrasing.
+        "familiar ou parente que atualmente trabalha",
     ],
     # 2026-08-22, real gap found live (PagBank): a conditional follow-up
     # to "parentes_na_empresa" above, asking for the actual name/degree
