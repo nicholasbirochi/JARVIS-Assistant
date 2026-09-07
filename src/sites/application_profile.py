@@ -102,6 +102,11 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     # (the résumé's own public link, and a fixed "Não" respectively),
     # not from this confidential-data file.
     "cnh": "JARVIS_APPLICATION_CNH",
+    # 2026-09-07, found live (TELEMONT): a radio-only "categoria" follow-
+    # up needs just the bare letter (e.g. "B"), unlike "cnh" above (a
+    # free-text field holding the full "Sim, categoria B" sentence) --
+    # see base.py's _FIELD_TERMS comment.
+    "cnh_categoria": "JARVIS_APPLICATION_CNH_CATEGORIA",
     "disponibilidade_viagem": "JARVIS_APPLICATION_DISPONIBILIDADE_VIAGEM",
     "disponibilidade_fds": "JARVIS_APPLICATION_DISPONIBILIDADE_FDS",
     # 2026-08-27, round 3 -- found live (Núclea/Stefanini): hybrid/
@@ -118,8 +123,11 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     "semestre_formatura": "JARVIS_APPLICATION_SEMESTRE_FORMATURA",
     # 2026-09-07, found live across 4 TELEMONT postings in the same
     # batch-apply run -- a recurring physical-uniform question pair.
+    # "tamanho_uniforme" holds a bare size letter (PP/P/M/G/GG) -- a
+    # real, live DOM check found this is a radio group, not free text
+    # (corrected from an earlier, wrong "shoe size" guess).
     "altura": "JARVIS_APPLICATION_ALTURA",
-    "numeracao_calcado": "JARVIS_APPLICATION_NUMERACAO_CALCADO",
+    "tamanho_uniforme": "JARVIS_APPLICATION_TAMANHO_UNIFORME",
 }
 
 

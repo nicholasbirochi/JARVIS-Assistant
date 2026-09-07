@@ -252,12 +252,26 @@ def test_classify_question_field_recognizes_round_4_found_live_in_the_gupy_batch
 
 def test_classify_question_field_recognizes_the_telemont_uniform_questions():
     # 2026-09-07, found live across 4 real TELEMONT postings in the same
-    # batch-apply run -- a physical-uniform question pair.
+    # batch-apply run -- a physical-uniform question pair. "numeração"
+    # turned out to be a letter-size radio group (PP/P/M/G/GG), not shoe
+    # size -- confirmed live and renamed from "numeracao_calcado".
     assert classify_question_field("Em caso de utilização de uniforme, informe sua altura:") == "altura"
     assert (
         classify_question_field("Em caso de utilização de uniforme, informe qual a numeração:")
-        == "numeracao_calcado"
+        == "tamanho_uniforme"
     )
+
+
+def test_classify_question_field_recognizes_the_telemont_cnh_categoria_radio():
+    # 2026-09-07, found live (TELEMONT): a SEPARATE radio-only follow-up
+    # asking just for the CNH category letter, distinct from the
+    # ordinary free-text "cnh" question (which holds the full "Sim,
+    # categoria B" sentence -- the wrong shape for a bare-letter radio).
+    assert classify_question_field("Possui CNH? Se SIM, informe a categoria.") == "cnh_categoria"
+    # A plain CNH question elsewhere must still classify as "cnh", not
+    # "cnh_categoria" -- the more specific term only wins when its own
+    # exact phrase is present.
+    assert classify_question_field("Você possui CNH?") == "cnh"
 
 
 def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():

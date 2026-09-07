@@ -38,12 +38,13 @@ def test_load_application_profile_returns_all_none_when_file_missing(monkeypatch
         "parentes_na_empresa": None,
         "semestre_formatura": None,
         "cnh": None,
+        "cnh_categoria": None,
         "disponibilidade_viagem": None,
         "disponibilidade_fds": None,
         "disponibilidade_hibrido": None,
         "escolaridade": None,
         "altura": None,
-        "numeracao_calcado": None,
+        "tamanho_uniforme": None,
     }
 
 
@@ -67,6 +68,7 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
                 "JARVIS_APPLICATION_SALARY_PLENO=R$ 6.500,00",
                 "JARVIS_APPLICATION_MARITAL_STATUS=Solteiro",
                 "JARVIS_APPLICATION_CNH=Sim, categoria B",
+                "JARVIS_APPLICATION_CNH_CATEGORIA=B",
                 "JARVIS_APPLICATION_DISPONIBILIDADE_VIAGEM=Sim",
                 "JARVIS_APPLICATION_DISPONIBILIDADE_FDS=Não",
                 "JARVIS_APPLICATION_DISPONIBILIDADE_HIBRIDO=Sim",
@@ -75,7 +77,7 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
                 "JARVIS_APPLICATION_PARENTES_NA_EMPRESA=Não",
                 "JARVIS_APPLICATION_SEMESTRE_FORMATURA=2º semestre de 2027",
                 "JARVIS_APPLICATION_ALTURA=1,75 m",
-                "JARVIS_APPLICATION_NUMERACAO_CALCADO=42",
+                "JARVIS_APPLICATION_TAMANHO_UNIFORME=G",
             ]
         ),
         encoding="utf-8",
@@ -97,6 +99,7 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
         "salary_pleno": "R$ 6.500,00",
         "marital_status": "Solteiro",
         "cnh": "Sim, categoria B",
+        "cnh_categoria": "B",
         "disponibilidade_viagem": "Sim",
         "disponibilidade_fds": "Não",
         "disponibilidade_hibrido": "Sim",
@@ -105,7 +108,7 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
         "parentes_na_empresa": "Não",
         "semestre_formatura": "2º semestre de 2027",
         "altura": "1,75 m",
-        "numeracao_calcado": "42",
+        "tamanho_uniforme": "G",
     }
 
 

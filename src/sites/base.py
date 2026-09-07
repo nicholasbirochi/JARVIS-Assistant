@@ -218,6 +218,15 @@ _FIELD_TERMS: dict[str, list[str]] = {
     # na empresa?" (always false for an external candidate), not
     # something that needs asking every time.
     "linkedin": ["linkedin"],
+    # 2026-09-07, found live (TELEMONT): "Possui CNH? Se SIM, informe a
+    # categoria." is a SEPARATE radio group with bare-letter options
+    # (A/B/C/D/E), unlike the ordinary free-text "cnh" question
+    # elsewhere -- the full "cnh" profile value ("Sim, categoria B")
+    # doesn't match a bare "B" option, so this needs its own field
+    # holding just the letter. Checked BEFORE "cnh" (dict iteration
+    # order matters here) since this phrasing also contains the bare
+    # substring "cnh" and would otherwise match that first.
+    "cnh_categoria": ["se sim, informe a categoria"],
     "cnh": ["cnh", "carteira nacional de habilitação", "carteira nacional de habilitacao"],
     "ja_trabalhou_aqui": [
         "ex-colaborador",
@@ -309,7 +318,14 @@ _FIELD_TERMS: dict[str, list[str]] = {
     # uniforme, informe sua altura/numeração"). Genuinely reusable --
     # same two questions, same real answers, on every posting that asks.
     "altura": ["informe sua altura"],
-    "numeracao_calcado": ["informe qual a numeração", "numeração do calçado", "numeracao do calcado"],
+    # 2026-09-07, corrected after a real, live submission attempt:
+    # TELEMONT's "numeração" is NOT shoe size (my first, wrong guess) --
+    # it's a radio group of uniform LETTER sizes (PP/P/M/G/GG), confirmed
+    # live by dumping the real DOM. Renamed from "numeracao_calcado" to
+    # reflect that; the exact-match radio-selection path
+    # (_select_radio_or_checkbox_answer()) needs the bare letter value
+    # ("G"), not a shoe-size number.
+    "tamanho_uniforme": ["informe qual a numeração", "numeração do uniforme", "numeracao do uniforme"],
     # 2026-08-21, real miss found live (Vivo): "nome completo, sem
     # abreviações" -- resolved from the résumé's own personal_info.
     # full_name, not a separate .env value (same reasoning as
