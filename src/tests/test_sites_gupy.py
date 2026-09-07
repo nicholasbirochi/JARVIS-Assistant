@@ -1296,6 +1296,81 @@ def test_extract_company_questions_unions_label_and_legend_sources():
     assert result == ["1.Qual sua pretensão salarial atual?", "7.Já trabalhou em alguma empresa do Grupo UOL?"]
 
 
+# --- _reach_company_questions_step() (2026-09-07) -------------------------
+#
+# Real bug found live, independently, on 4 real listings (Minerva Foods
+# Global, ITAPEVA Recuperação de Créditos, Fiberhome Brasil, Banco
+# Fibra): the gate text says "Perguntas criadas pela empresa X" and
+# extraction finds nothing, but the step is GENUINELY empty (no real
+# question at all) -- dumping the real post-click page text showed only
+# the fixed heading + "Salvar e continuar" + "Powered by Gupy". The old
+# fallback treated that boilerplate itself as one giant unanswerable
+# question, blocking every one of these 4 applications over nothing
+# actually missing.
+
+
+def test_reach_company_questions_step_returns_empty_list_for_a_genuinely_empty_step():
+    page = FakeApplicationPage(
+        step_texts=[
+            "Perguntas criadas pela empresa Minerva Foods Global\nResponder agora",
+            "Perguntas criadas pela empresa Minerva Foods Global\nSalvar e continuar\nPowered by Gupy",
+        ],
+        click_results={"Responder agora": True},
+        company_questions=[],
+    )
+
+    result = GupyAdapter()._reach_company_questions_step(page)
+
+    assert result == []
+
+
+def test_reach_company_questions_step_still_falls_back_to_whole_blob_when_real_content_exists():
+    # The ORIGINAL 2026-08-13 reasoning this fallback exists for at all
+    # must still hold: a real question extraction can't parse should
+    # still surface as something (never silently vanish), just not the
+    # bare boilerplate case above.
+    page = FakeApplicationPage(
+        step_texts=[
+            "Perguntas criadas pela empresa X\nResponder agora",
+            "Perguntas criadas pela empresa X\nAlgum texto de pergunta real aqui\nSalvar e continuar\nPowered by Gupy",
+        ],
+        click_results={"Responder agora": True},
+        company_questions=[],
+    )
+
+    result = GupyAdapter()._reach_company_questions_step(page)
+
+    assert result == ["Perguntas criadas pela empresa X\nAlgum texto de pergunta real aqui\nSalvar e continuar\nPowered by Gupy"]
+
+
+def test_preview_application_reports_no_questions_for_a_genuinely_empty_step(monkeypatch):
+    # Regression test for the OTHER half of this bug: preview_application()'s
+    # own "company_questions is not None" check used to treat an empty-
+    # but-not-None list as "this job has company questions", producing a
+    # misleading blocked_reason with zero actual questions listed.
+    page = FakeApplicationPage(
+        apply_href="/candidates/jobs/123/apply",
+        step_texts=[
+            "Alguém te indicou?\nSim\nNão",
+            "Perguntas criadas pela empresa Minerva Foods Global\nResponder agora",
+            "Perguntas criadas pela empresa Minerva Foods Global\nSalvar e continuar\nPowered by Gupy",
+        ],
+        referral_answer_count=1,
+        click_results={"Continuar": True, "Salvar e continuar": True, "Responder agora": True},
+        company_questions=[],
+    )
+    _patch_open_context(monkeypatch, page)
+
+    preview = GupyAdapter().preview_application("https://empresa.gupy.io/job/xyz")
+
+    assert "Nenhuma pergunta própria da empresa apareceu" in preview.blocked_reason
+    # Just the referral step's own (already-answered) question -- never
+    # a fake, unanswered company question manufactured from the empty
+    # step's boilerplate text.
+    assert len(preview.questions) == 1
+    assert preview.questions[0].answered is True
+
+
 def test_continue_application_with_profile_blocks_before_saving_when_a_legend_question_cant_be_filled(monkeypatch):
     # The real, observed failure mode this fix prevents: because the
     # multi-option question used to be invisible to extraction, the

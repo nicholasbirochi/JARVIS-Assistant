@@ -604,7 +604,14 @@ class GupyAdapter(SiteAdapter):
                 return early_exit
 
             company_questions = self._reach_company_questions_step(page)
-            if company_questions is not None:
+            # Truthy check, not "is not None": _reach_company_questions_step()
+            # can now return a real (not None) empty list for a step that
+            # exists but genuinely has zero questions in it (2026-09-07,
+            # found live) -- that must fall through to the same "nothing
+            # to report" branch below as a step that never appeared at all,
+            # not report a misleading "this job has company questions"
+            # reason with an empty question list.
+            if company_questions:
                 for q_text in company_questions:
                     questions.append(
                         ApplicationQuestion(text=q_text, answered=False, is_hard_pii=is_hard_pii_question(q_text))
@@ -1082,7 +1089,24 @@ class GupyAdapter(SiteAdapter):
         question texts (falling back to the whole block's text if the
         real per-question selector found nothing, so nothing is silently
         lost). Returns None if there's no company-questions step at all
-        right now."""
+        right now.
+
+        2026-09-07, real bug found live (Minerva Foods Global, ITAPEVA
+        Recuperação de Créditos, Fiberhome Brasil, Banco Fibra -- all
+        four independently, same shape): this step's own gate text can
+        say "Perguntas criadas pela empresa X" and STILL have zero real
+        questions -- confirmed live by dumping the full post-click page
+        text, which was exactly the heading + "Salvar e continuar" +
+        "Powered by Gupy" and nothing else. The old fallback treated
+        that boilerplate itself as if it were one giant unanswerable
+        question, blocking the whole application over nothing missing
+        at all. Now checked: if extraction found nothing AND the
+        remaining text has nothing left after stripping the three fixed
+        boilerplate pieces, this is a genuinely empty step -- returns
+        [] (not None -- the step still existed and was reached; there
+        was just nothing in it), which flows through the normal
+        "unanswerable" check as an empty plan and advances straight to
+        "Salvar e continuar", same as if the step had no gate at all."""
         step_text = self._extract_step_text(page)
         if "Perguntas criadas pela empresa" not in step_text and "Responder agora" not in step_text:
             return None
@@ -1090,7 +1114,11 @@ class GupyAdapter(SiteAdapter):
         page.wait_for_timeout(1500)
         company_questions = self._extract_company_questions(page)
         if not company_questions:
-            company_questions = [self._extract_step_text(page)]
+            remaining_text = self._extract_step_text(page)
+            stripped = re.sub(r"Perguntas criadas pela empresa.*", "", remaining_text)
+            stripped = stripped.replace("Salvar e continuar", "").replace("Powered by Gupy", "").strip()
+            if stripped:
+                company_questions = [remaining_text]
         return company_questions
 
     def _resolve_profile_field(self, field: str | None, level: str) -> str | None:
