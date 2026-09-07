@@ -34,6 +34,27 @@ def test_record_application_creates_the_data_dir_if_missing(monkeypatch, tmp_pat
     assert application_log.applications_log_path().exists()
 
 
+def test_record_application_defaults_source_to_jarvis(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+
+    application_log.record_application("https://empresa.gupy.io/job/abc", "gupy")
+
+    log = application_log.load_applications_log()
+    assert log["https://empresa.gupy.io/job/abc"]["source"] == "jarvis"
+
+
+def test_record_application_accepts_a_manual_source(monkeypatch, tmp_path):
+    # 2026-09-07, "me candidatei a todas as vagas de banco e as
+    # Fintechs!" -- Nicholas applying by hand, outside any automated
+    # flow, is just as real a submission and must be recordable too.
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+
+    application_log.record_application("https://empresa.gupy.io/job/abc", "gupy", source="manual")
+
+    log = application_log.load_applications_log()
+    assert log["https://empresa.gupy.io/job/abc"]["source"] == "manual"
+
+
 def test_record_application_overwrites_a_prior_entry_for_the_same_url(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
 

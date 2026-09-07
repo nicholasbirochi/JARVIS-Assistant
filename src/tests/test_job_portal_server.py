@@ -259,6 +259,41 @@ def test_already_applied_listing_shows_badge_and_no_apply_button(monkeypatch, tm
     assert "Enviada em" in body
 
 
+def test_manually_applied_listing_shows_a_distinct_manual_badge(monkeypatch, tmp_path):
+    # 2026-09-07, "me candidatei a todas as vagas de banco e as
+    # Fintechs!" -- Nicholas applying by hand is just as real, but the
+    # badge says so distinctly since only source="jarvis" was actually
+    # driven and confirmed by code.
+    from sites import application_log
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    listing = make_listing("1", "Analista de Dados Júnior")
+    application_log.record_application(listing.url, "gupy", source="manual")
+    monkeypatch.setattr(server, "_tiers", {"banco": [listing], "fintech": [], "bigtech": [], "startup": []})
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "CANDIDATURA ENVIADA (manual)" in body
+
+
+def test_jarvis_applied_listing_does_not_show_the_manual_suffix(monkeypatch, tmp_path):
+    from sites import application_log
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    listing = make_listing("1", "Analista de Dados Júnior")
+    application_log.record_application(listing.url, "gupy")
+    monkeypatch.setattr(server, "_tiers", {"banco": [listing], "fintech": [], "bigtech": [], "startup": []})
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "CANDIDATURA ENVIADA" in body
+    assert "CANDIDATURA ENVIADA (manual)" not in body
+
+
 def test_not_yet_applied_listing_still_shows_the_apply_button(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     listing = make_listing("1", "Analista de Dados Júnior")
@@ -327,7 +362,13 @@ def test_portal_js_route_serves_real_js():
 # pendentes! quero enchergar essa analise e essa validação!!!"
 
 
-def test_analysis_page_renders_with_no_data():
+def test_analysis_page_renders_with_no_data(monkeypatch, tmp_path):
+    # Isolated DATA_DIR -- without this, a real applications_sent.json
+    # already sitting in the project's actual data dir (real submissions
+    # tracked across real sessions) would make this "empty state" test
+    # fail, exactly as happened live 2026-09-07 once the first 28 real
+    # entries existed.
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     port = server.start(port=0)
 
     with urllib.request.urlopen(f"http://127.0.0.1:{port}/analise", timeout=5) as resp:
@@ -354,6 +395,21 @@ def test_analysis_page_shows_a_real_applied_job_with_company_and_date(monkeypatc
     assert "Itaú" in body
     assert "✅ ENVIADA" in body
     assert "Enviada em" in body
+
+
+def test_analysis_page_shows_manual_badge_for_manually_applied_jobs(monkeypatch, tmp_path):
+    from sites import application_log
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    listing = make_listing("1", "Analista de Dados Júnior", company="Itaú")
+    monkeypatch.setattr(server, "_tiers", {"banco": [listing], "fintech": [], "bigtech": [], "startup": []})
+    application_log.record_application(listing.url, "gupy", source="manual")
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/analise", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "✅ ENVIADA (manual)" in body
 
 
 def test_analysis_page_falls_back_to_the_bare_url_when_the_applied_listing_is_gone(monkeypatch, tmp_path):

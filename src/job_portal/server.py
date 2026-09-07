@@ -311,7 +311,13 @@ def _render_row(listing: JobListing, applied_log: dict[str, dict]) -> str:
     if has_international_signal(listing.title, listing.snippet):
         badges.append('<span class="site-badge" style="background:var(--violet-soft);color:var(--violet);">🌎 internacional</span>')
     if applied:
-        badges.append('<span class="applied-badge">✅ CANDIDATURA ENVIADA</span>')
+        # source="manual" (2026-09-07, "me candidatei a todas as vagas
+        # de banco e as Fintechs!" -- Nicholas applying by hand, outside
+        # any automated flow) is labeled distinctly, not hidden inside
+        # the same badge -- both are equally real submissions, but only
+        # the "jarvis" ones were actually driven and confirmed by code.
+        badge_text = "✅ CANDIDATURA ENVIADA (manual)" if applied.get("source") == "manual" else "✅ CANDIDATURA ENVIADA"
+        badges.append(f'<span class="applied-badge">{badge_text}</span>')
 
     is_gupy = listing.site_name == "gupy"
     if applied:
@@ -455,9 +461,10 @@ def _render_applied_row(url: str, meta: dict, lookup: dict[str, JobListing]) -> 
         # left is the URL itself -- never fabricate a title/company.
         company = "(vaga não está mais nos resultados carregados nesta sessão)"
         title_html = f'<a class="row-title" href="{_esc(url)}" target="_blank" rel="noopener">{_esc(url)}</a>'
+    badge_text = "✅ ENVIADA (manual)" if meta.get("source") == "manual" else "✅ ENVIADA"
     return f"""<li class="row row-applied">
         <div class="row-body">
-          <div class="badges-line"><span class="site-badge site-{_esc(meta.get('site_name') or '')}">{_esc(site_label)}</span><span class="applied-badge">✅ ENVIADA</span></div>
+          <div class="badges-line"><span class="site-badge site-{_esc(meta.get('site_name') or '')}">{_esc(site_label)}</span><span class="applied-badge">{badge_text}</span></div>
           <p class="company-name">{company}</p>
           {title_html}
           <div class="row-meta"><span>Enviada em {sent_date}</span></div>
