@@ -236,7 +236,24 @@ def test_non_gupy_listing_does_not_offer_continue_button(monkeypatch):
     # check for the actual per-row action button (its onclick handler),
     # not just the phrase anywhere on the page.
     assert "continuarCandidatura(this" not in body
-    assert "só existe pro Gupy por enquanto" in body
+    assert "Candidatura automática só existe pro Gupy e pra InfoJobs por enquanto" in body
+
+
+def test_infojobs_listing_offers_the_same_apply_buttons_as_gupy(monkeypatch):
+    # 2026-09-07: InfoJobs joined Gupy as a second site with real apply
+    # automation (assistant/tools.py's _adapter_for_apply_url()).
+    monkeypatch.setattr(
+        server,
+        "_tiers",
+        {"banco": [], "fintech": [], "bigtech": [], "startup": [make_listing("1", "X", site_name="infojobs")]},
+    )
+    port = server.start(port=0)
+
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        body = resp.read().decode("utf-8")
+
+    assert "continuarCandidatura(this" in body
+    assert "verificarVaga(this" in body
 
 
 def test_already_applied_listing_shows_badge_and_no_apply_button(monkeypatch, tmp_path):

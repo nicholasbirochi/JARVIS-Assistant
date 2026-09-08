@@ -250,15 +250,39 @@ def evaluate_investments() -> str:
     return summarize_finances(snapshot)
 
 
+def _adapter_for_apply_url(url: str):
+    """Which SiteAdapter (if any) has real apply-flow automation for this
+    URL -- checked by domain, not guessed. 2026-09-07: Gupy (first,
+    multi-step, per-company questions) and InfoJobs (second, single-
+    click, no questions of its own) both have it now; every other site
+    in the portal (Catho, LinkedIn, RemoteOK, Amazon Jobs,
+    WeWorkRemotely, BTG, iFood) still needs a manual application --
+    Catho specifically because Nicholas's own account there needs a
+    one-time manual CV completion first (a real, confirmed-live gate,
+    "Você precisa preencher o seu CV para se candidatar" -- not
+    something this code can do on his behalf), the rest because no
+    apply-flow has been built for them at all."""
+    if "gupy.io" in url:
+        from sites.gupy import GupyAdapter
+
+        return GupyAdapter()
+    if "infojobs.com.br" in url:
+        from sites.infojobs import InfoJobsAdapter
+
+        return InfoJobsAdapter()
+    return None
+
+
 def check_job_application(url: str) -> str:
     """Verifica até onde dá pra avançar com segurança numa candidatura de
-    uma vaga específica (hoje só funciona para links do Gupy) -- NUNCA
-    envia a candidatura de verdade. Só passa pelos passos já verificados
-    ao vivo como seguros (a etapa inicial e as duas perguntas padrão da
-    Gupy sobre indicação/vínculo, sempre respondidas "Não", o que é
-    verdade para qualquer candidatura externa) e para assim que aparece
-    qualquer pergunta própria da empresa -- nunca inventa uma resposta,
-    mesmo que a pergunta pareça simples.
+    uma vaga específica (hoje funciona para links do Gupy e da InfoJobs
+    -- ver _adapter_for_apply_url()) -- NUNCA envia a candidatura de
+    verdade. No Gupy, passa pelos passos já verificados ao vivo como
+    seguros (a etapa inicial e as duas perguntas padrão sobre indicação/
+    vínculo, sempre respondidas "Não") e para assim que aparece qualquer
+    pergunta própria da empresa sem valor local -- nunca inventa uma
+    resposta. Na InfoJobs, só confirma se existe um botão de candidatura
+    real e clicável (aquele site não tem perguntas próprias por vaga).
 
     Use quando o Nicholas pedir para verificar ou tentar se candidatar
     numa vaga específica pelo link. Deixe claro na resposta que isso NÃO
@@ -268,16 +292,15 @@ def check_job_application(url: str) -> str:
     Args:
         url: Link da vaga (ex.: um dos retornados por find_matching_jobs).
     """
-    if "gupy.io" not in url:
+    adapter = _adapter_for_apply_url(url)
+    if adapter is None:
         return (
-            "Só sei verificar candidaturas em vagas do Gupy por enquanto -- essa vaga não "
-            "parece ser do Gupy. Abra o link e se candidate manualmente."
+            "Só sei verificar candidaturas em vagas do Gupy ou da InfoJobs por enquanto -- "
+            "essa vaga não é de nenhum dos dois. Abra o link e se candidate manualmente."
         )
 
-    from sites.gupy import GupyAdapter
-
     try:
-        preview = GupyAdapter().preview_application(url)
+        preview = adapter.preview_application(url)
     except Exception as exc:
         return f"Não consegui verificar essa vaga: {exc}"
 
@@ -285,25 +308,28 @@ def check_job_application(url: str) -> str:
 
 
 def continue_job_application(url: str, *, finalize: bool = False) -> str:
-    """Avança de verdade numa candidatura (vagas do Gupy) usando os dados
-    do arquivo local de perfil de candidatura (RG, CPF, pretensão
-    salarial, estado civil) -- só preenche uma pergunta da empresa se
-    TODAS as perguntas daquela etapa tiverem valor real no arquivo local;
-    se faltar uma só, não preenche nada (tudo ou nada, pra não deixar o
-    formulário pela metade).
+    """Avança de verdade numa candidatura (Gupy ou InfoJobs -- ver
+    _adapter_for_apply_url()). No Gupy, usa os dados do arquivo local de
+    perfil de candidatura (RG, CPF, pretensão salarial, estado civil) --
+    só preenche uma pergunta da empresa se TODAS as perguntas daquela
+    etapa tiverem valor real no arquivo local; se faltar uma só, não
+    preenche nada (tudo ou nada). Na InfoJobs não há nada pra preencher
+    (nenhuma pergunta própria por vaga) -- finalize=True ali clica
+    diretamente no único botão real de candidatura.
 
     finalize=False (padrão, usado por voz/texto): NUNCA clica no envio
-    final -- sempre para depois de preencher, mesmo quando consegue
-    preencher tudo, já que aqui não existe uma confirmação explícita e
-    imediata do Nicholas por vaga antes de disparar.
+    final -- sempre para antes de enviar de verdade, já que aqui não
+    existe uma confirmação explícita e imediata do Nicholas por vaga
+    antes de disparar.
 
     finalize=True (só usado pelo botão "Continuar candidatura" do portal
     local -- 2026-08-25, a pedido explícito do Nicholas, depois do
     diálogo de confirmação em page_template.html já avisar que isso
     envia de verdade): clica no envio final também, se chegar até lá.
-    submitted só vem True se a tela seguinte realmente confirmar
-    ("Candidatura finalizada") -- um clique que não confirma isso é
-    reportado como falha, nunca como sucesso assumido.
+    submitted só vem True se a tela seguinte realmente confirmar o envio
+    ("Candidatura finalizada" no Gupy, "Você se candidatou" na
+    InfoJobs) -- um clique que não confirma isso é reportado como
+    falha, nunca como sucesso assumido.
 
     Use quando o Nicholas pedir explicitamente para continuar/avançar
     numa candidatura específica usando os dados que ele já configurou.
@@ -317,16 +343,15 @@ def continue_job_application(url: str, *, finalize: bool = False) -> str:
             preencher tudo. Nunca passe True aqui a partir de uma
             chamada por voz/texto -- é exclusivo do botão do portal.
     """
-    if "gupy.io" not in url:
+    adapter = _adapter_for_apply_url(url)
+    if adapter is None:
         return (
-            "Só sei avançar candidaturas em vagas do Gupy por enquanto -- essa vaga não "
-            "parece ser do Gupy."
+            "Só sei avançar candidaturas em vagas do Gupy ou da InfoJobs por enquanto -- "
+            "essa vaga não é de nenhum dos dois."
         )
 
-    from sites.gupy import GupyAdapter
-
     try:
-        preview = GupyAdapter().continue_application_with_profile(url, confirmed=True, finalize=finalize)
+        preview = adapter.continue_application_with_profile(url, confirmed=True, finalize=finalize)
     except Exception as exc:
         return f"Não consegui avançar essa candidatura: {exc}"
 

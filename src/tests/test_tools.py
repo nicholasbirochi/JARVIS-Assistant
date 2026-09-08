@@ -309,3 +309,59 @@ def test_continue_job_application_does_not_record_when_not_submitted(monkeypatch
     tools.continue_job_application("https://empresa.gupy.io/job/xyz", finalize=True)
 
     assert application_log.load_applications_log() == {}
+
+
+# --- InfoJobs dispatch (2026-09-07) ----------------------------------
+#
+# check_job_application()/continue_job_application() now route by URL
+# domain to whichever adapter has real apply automation -- Gupy first,
+# InfoJobs added 2026-09-07 (single-click apply, no per-company
+# questions). Every other site (Catho included -- blocked on Nicholas's
+# own account needing a one-time manual CV completion there) still has
+# no apply-flow automation at all.
+
+
+def test_continue_job_application_routes_infojobs_urls_to_infojobs_adapter(monkeypatch):
+    from sites import infojobs
+
+    calls = []
+
+    class _FakeAdapter:
+        def continue_application_with_profile(self, url, confirmed, *, finalize=False):
+            calls.append((url, confirmed, finalize))
+            return _fake_preview(submitted=False, site_name="infojobs")
+
+    monkeypatch.setattr(infojobs, "InfoJobsAdapter", _FakeAdapter)
+
+    tools.continue_job_application("https://www.infojobs.com.br/vaga-de-x__1.aspx", finalize=True)
+
+    assert calls == [("https://www.infojobs.com.br/vaga-de-x__1.aspx", True, True)]
+
+
+def test_check_job_application_routes_infojobs_urls_to_infojobs_adapter(monkeypatch):
+    from sites import infojobs
+
+    calls = []
+
+    class _FakeAdapter:
+        def preview_application(self, url):
+            calls.append(url)
+            return _fake_preview(submitted=False, site_name="infojobs")
+
+    monkeypatch.setattr(infojobs, "InfoJobsAdapter", _FakeAdapter)
+
+    tools.check_job_application("https://www.infojobs.com.br/vaga-de-x__1.aspx")
+
+    assert calls == ["https://www.infojobs.com.br/vaga-de-x__1.aspx"]
+
+
+def test_check_job_application_refuses_urls_from_unsupported_sites():
+    result = tools.check_job_application("https://www.catho.com.br/vagas/analista-de-dados/123")
+
+    assert "Gupy" in result and "InfoJobs" in result
+
+
+def test_continue_job_application_refuses_urls_from_unsupported_sites():
+    result = tools.continue_job_application("https://www.linkedin.com/jobs/view/123/")
+
+    assert "Gupy" in result and "InfoJobs" in result

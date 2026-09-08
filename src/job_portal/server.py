@@ -319,20 +319,26 @@ def _render_row(listing: JobListing, applied_log: dict[str, dict]) -> str:
         badge_text = "✅ CANDIDATURA ENVIADA (manual)" if applied.get("source") == "manual" else "✅ CANDIDATURA ENVIADA"
         badges.append(f'<span class="applied-badge">{badge_text}</span>')
 
-    is_gupy = listing.site_name == "gupy"
+    # 2026-09-07: InfoJobs joined Gupy as a second site with real apply
+    # automation (see assistant/tools.py's _adapter_for_apply_url()) --
+    # every other site (Catho included -- blocked on Nicholas's own
+    # account needing a one-time manual CV completion there, not
+    # something this code can do for him) still has no apply-flow
+    # automation at all and keeps the plain "verifique manualmente" note.
+    has_apply_automation = listing.site_name in ("gupy", "infojobs")
     if applied:
         # Já enviada de verdade (ver sites/application_log.py) -- sem
         # botões de ação pra não arriscar reenviar por engano; a data
         # vem do próprio registro, nunca adivinhada.
         sent_date = _esc(_format_applied_date(applied.get("submitted_at")))
         apply_actions = f'<span class="applied-note">Enviada em {sent_date}.</span>'
-    elif is_gupy:
+    elif has_apply_automation:
         apply_actions = (
             f'<button class="action-btn" type="button" onclick="verificarVaga(this, \'{_esc(listing.url)}\')">Verificar</button>'
             f'<button class="action-btn warn" type="button" onclick="continuarCandidatura(this, \'{_esc(listing.url)}\')">Enviar candidatura</button>'
         )
     else:
-        apply_actions = '<span style="font-size:12px;color:var(--text-faint);">Verificação automática só existe pro Gupy por enquanto.</span>'
+        apply_actions = '<span style="font-size:12px;color:var(--text-faint);">Candidatura automática só existe pro Gupy e pra InfoJobs por enquanto -- candidate-se manualmente.</span>'
 
     return f"""<li class="row{' row-junior' if junior else ''}{' row-applied' if applied else ''}">
         <label class="row-check">
