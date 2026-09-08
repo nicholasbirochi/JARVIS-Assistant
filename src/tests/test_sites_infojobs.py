@@ -625,3 +625,186 @@ def test_search_jobs_builds_the_real_query_url_and_converts_valid_cards(monkeypa
     assert len(listings) == 1
     assert listings[0].external_id == "1"
     assert page.goto_calls == ["https://www.infojobs.com.br/empregos.aspx?palabra=Analista+de+Dados&provincia=64"]
+
+
+# --- preview_application() / continue_application_with_profile() ---------
+#
+# 2026-09-07: real, live-confirmed apply flow (during a safety
+# investigation whose network-blocking technique failed and let a real
+# click go through by accident, actually submitting a real application
+# to a real listing -- see the module docstring addition on
+# continue_application_with_profile()): unlike Gupy, InfoJobs' apply is
+# a SINGLE click with no per-company questions and no confirmation step
+# of its own -- straight to a real "Você se candidatou à vaga X" text.
+# A listing page also renders several responsive duplicates of the same
+# "Candidatar-me" button, most invisible depending on viewport.
+
+
+class FakeJobApplyButton:
+    def __init__(self, *, visible: bool):
+        self.visible = visible
+        self.clicked = False
+
+    def is_visible(self):
+        return self.visible
+
+    def click(self):
+        self.clicked = True
+
+
+class FakeJobApplyLocator:
+    def __init__(self, buttons: list[FakeJobApplyButton]):
+        self.buttons = buttons
+
+    def count(self):
+        return len(self.buttons)
+
+    def nth(self, index):
+        return self.buttons[index]
+
+
+class FakeJobApplyPage:
+    """Stand-in for a Playwright Page during the job-application
+    preview/submit flow -- distinct from FakeApplyPage above (that one
+    is for the unrelated profile-field apply_changes() flow)."""
+
+    def __init__(self, *, buttons: list[FakeJobApplyButton] | None = None, body_text: str = ""):
+        self.buttons = buttons if buttons is not None else [FakeJobApplyButton(visible=True)]
+        self.body_text = body_text
+        self.goto_calls: list[str] = []
+
+    def goto(self, url, timeout=None, wait_until=None):
+        self.goto_calls.append(url)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def wait_for_load_state(self, state, timeout=None):
+        pass
+
+    def get_by_text(self, pattern):
+        return FakeJobApplyLocator(self.buttons)
+
+    def evaluate(self, script):
+        return self.body_text
+
+
+def _patch_infojobs_open_context(monkeypatch, page):
+    monkeypatch.setattr(
+        session, "open_context", lambda site_name, *, headless: (FakeApplyPlaywright(), FakeApplyContext(page))
+    )
+
+
+def test_preview_application_reports_ready_when_a_visible_button_exists(monkeypatch):
+    page = FakeJobApplyPage(buttons=[FakeJobApplyButton(visible=True)])
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().preview_application("https://www.infojobs.com.br/vaga-de-x__1.aspx")
+
+    assert preview.can_submit is True
+    assert preview.blocked_reason is None
+
+
+def test_preview_application_finds_the_first_visible_button_among_duplicates(monkeypatch):
+    # Real, confirmed-live case: a listing renders several responsive
+    # duplicates of "Candidatar-me", most display:none -- only a
+    # visible one counts as "ready".
+    page = FakeJobApplyPage(
+        buttons=[
+            FakeJobApplyButton(visible=False),
+            FakeJobApplyButton(visible=False),
+            FakeJobApplyButton(visible=True),
+        ]
+    )
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().preview_application("https://www.infojobs.com.br/vaga-de-x__1.aspx")
+
+    assert preview.can_submit is True
+
+
+def test_preview_application_reports_already_applied_when_no_button_is_visible(monkeypatch):
+    page = FakeJobApplyPage(
+        buttons=[FakeJobApplyButton(visible=False)],
+        body_text="Você se candidatou à vaga Analista De Dados",
+    )
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().preview_application("https://www.infojobs.com.br/vaga-de-x__1.aspx")
+
+    assert preview.can_submit is False
+    assert "já se candidatou" in preview.blocked_reason
+
+
+def test_preview_application_reports_listing_gone_when_no_button_and_no_applied_text(monkeypatch):
+    page = FakeJobApplyPage(buttons=[], body_text="Vaga não encontrada")
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().preview_application("https://www.infojobs.com.br/vaga-de-x__1.aspx")
+
+    assert preview.can_submit is False
+    assert "removida ou encerrada" in preview.blocked_reason
+
+
+def test_continue_application_with_profile_refuses_without_confirmation():
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=False
+    )
+
+    assert preview.can_submit is False
+    assert "confirmed=True" in preview.blocked_reason
+
+
+def test_continue_application_with_profile_without_finalize_only_previews(monkeypatch):
+    page = FakeJobApplyPage(buttons=[FakeJobApplyButton(visible=True)])
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=True, finalize=False
+    )
+
+    assert preview.can_submit is True
+    assert all(not b.clicked for b in page.buttons)  # never clicked -- finalize=False
+
+
+def test_continue_application_with_profile_finalize_true_clicks_and_confirms(monkeypatch):
+    button = FakeJobApplyButton(visible=True)
+    page = FakeJobApplyPage(buttons=[button], body_text="Você se candidatou à vaga Analista De Dados")
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=True, finalize=True
+    )
+
+    assert button.clicked is True
+    assert preview.submitted is True
+    assert "Candidatura enviada e confirmada de verdade" in preview.summary_text
+
+
+def test_continue_application_with_profile_finalize_true_without_real_confirmation_is_not_success(monkeypatch):
+    # Real fail-closed discipline, same as gupy.py: a click that doesn't
+    # produce the real confirmation text is reported as unconfirmed,
+    # never assumed successful.
+    button = FakeJobApplyButton(visible=True)
+    page = FakeJobApplyPage(buttons=[button], body_text="Algo deu errado, tente novamente")
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=True, finalize=True
+    )
+
+    assert button.clicked is True
+    assert preview.submitted is False
+    assert preview.can_submit is False
+
+
+def test_continue_application_with_profile_finalize_true_reports_missing_button(monkeypatch):
+    page = FakeJobApplyPage(buttons=[])
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=True, finalize=True
+    )
+
+    assert preview.submitted is False
+    assert preview.can_submit is False

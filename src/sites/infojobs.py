@@ -103,6 +103,7 @@ from typing import Any
 from resume.schema import Resume
 from sites import session
 from sites.base import (
+    ApplicationPreview,
     ChangePreview,
     JobListing,
     SessionStatus,
@@ -452,6 +453,137 @@ class InfoJobsAdapter(SiteAdapter):
             if listing is not None:
                 listings.append(listing)
         return listings
+
+    def preview_application(self, job_url: str) -> ApplicationPreview:
+        """Read-only: navigates to the real listing and checks whether a
+        real, clickable "Candidatar-me" button exists -- NEVER clicks it.
+
+        Real, live-confirmed 2026-09-07 (during a safety investigation
+        whose network-blocking technique failed and let a real click go
+        through by accident -- see this method's sibling
+        continue_application_with_profile() for what that confirmed):
+        InfoJobs' apply flow is a SINGLE click with no per-company
+        questions and no confirmation/review step of its own -- the
+        real page goes straight from the listing to a real "Você se
+        candidatou à vaga X" confirmation text, no intermediate screen
+        to inspect. Unlike Gupy, there is nothing here for a preview to
+        list out question-by-question; it can only report whether the
+        button is there and clickable (a real, currently-open, not-yet-
+        applied-to listing) or not (already applied, listing closed/
+        removed)."""
+        from config import SITES_HEADLESS
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            page = context.new_page()
+            page.goto(job_url, timeout=30_000, wait_until="domcontentloaded")
+            page.wait_for_timeout(2000)
+            button = self._find_visible_apply_button(page)
+            if button is not None:
+                reason = (
+                    "Vaga pronta pra candidatura. A InfoJobs não tem perguntas próprias por vaga "
+                    "(diferente do Gupy) -- um único clique envia seu currículo já cadastrado lá, "
+                    "sem chance de revisão depois do clique."
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name, job_url=job_url, can_submit=True, blocked_reason=None,
+                    summary_text=reason,
+                )
+            already_applied = "Você se candidatou" in page.evaluate("() => document.body.innerText")
+            reason = (
+                "Você já se candidatou a essa vaga antes."
+                if already_applied
+                else 'Não encontrei o botão "Candidatar-me" nessa página -- a vaga pode ter sido removida ou encerrada.'
+            )
+            return ApplicationPreview(
+                site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason,
+                summary_text=reason,
+            )
+        finally:
+            context.close()
+            p.stop()
+
+    def continue_application_with_profile(
+        self, job_url: str, *, confirmed: bool = False, finalize: bool = False
+    ) -> ApplicationPreview:
+        """Real, mutating (only when finalize=True) -- same "confirmed=True
+        required, finalize=True only from the portal's own already-
+        confirmed button" contract as gupy.py's method of the same name,
+        for the exact same reason (a human-in-the-loop check before this
+        ever fires for real, not a second code-level gate).
+
+        finalize=False can't do anything meaningful here and deliberately
+        doesn't try -- there is no per-question "fill" step to perform for
+        InfoJobs (see preview_application()'s docstring), so this just
+        re-confirms readiness, identically to preview_application()."""
+        if not confirmed:
+            return ApplicationPreview(
+                site_name=self.site_name, job_url=job_url, can_submit=False,
+                blocked_reason="Recusado: continue_application_with_profile exige confirmed=True.",
+            )
+        if not finalize:
+            return self.preview_application(job_url)
+
+        from config import SITES_HEADLESS
+
+        p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
+        try:
+            page = context.new_page()
+            page.goto(job_url, timeout=30_000, wait_until="domcontentloaded")
+            page.wait_for_timeout(2000)
+            button = self._find_visible_apply_button(page)
+            if button is None:
+                reason = (
+                    'Não encontrei o botão "Candidatar-me" nessa página -- a vaga pode já ter sido '
+                    "enviada ou removida."
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason,
+                    summary_text=reason,
+                )
+            button.click()
+            page.wait_for_timeout(2000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=15_000)
+            except Exception:
+                pass
+            confirmation_text = page.evaluate("() => document.body.innerText")
+            if "Você se candidatou" in confirmation_text:
+                reason = 'Candidatura enviada e confirmada de verdade -- a página mostrou "Você se candidatou" após o clique.'
+                return ApplicationPreview(
+                    site_name=self.site_name, job_url=job_url, can_submit=True, blocked_reason=None,
+                    submitted=True, summary_text=reason,
+                )
+            reason = "Cliquei no botão de candidatura mas a página não confirmou o envio -- confira manualmente."
+            return ApplicationPreview(
+                site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason,
+                summary_text=reason,
+            )
+        finally:
+            context.close()
+            p.stop()
+
+    def _find_visible_apply_button(self, page):
+        """Finds the real, VISIBLE "Candidatar-me"/"CANDIDATAR-ME" link.
+
+        Real, live-confirmed 2026-09-07: a listing page renders several
+        responsive duplicates of this same button (desktop/mobile/
+        sidebar layouts) -- picking the wrong one can silently no-op.
+        The regex has NO `^...$` anchors on purpose: a real, live check
+        found the actual DOM text is padded with real newlines/indent
+        whitespace ("\\n            Candidatar-me\\n        "), which an
+        anchored exact-match regex never matches -- get_by_text() doesn't
+        trim it as one might expect. An unanchored, case-insensitive
+        substring match is both correct here and safe (nothing else on
+        this page contains the substring "candidatar-me"). Returns None
+        if none is visible (the real "already applied"/"listing closed"
+        case, not guessed)."""
+        candidates = page.get_by_text(re.compile(r"candidatar-me", re.IGNORECASE))
+        for i in range(candidates.count()):
+            candidate = candidates.nth(i)
+            if candidate.is_visible():
+                return candidate
+        return None
 
     def _extract_listing_cards(self, page) -> list[dict]:
         """Raw card data, straight off the DOM -- kept as a thin, separate
