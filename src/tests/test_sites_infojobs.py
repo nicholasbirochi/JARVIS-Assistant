@@ -829,6 +829,7 @@ def _patch_infojobs_profile(monkeypatch, **fields):
         "cnh": None, "cnh_categoria": None, "disponibilidade_viagem": None, "disponibilidade_fds": None,
         "disponibilidade_hibrido": None, "escolaridade": None, "cargo_atual": None,
         "parentes_na_empresa": None, "semestre_formatura": None, "altura": None, "tamanho_uniforme": None,
+        "excel_nivel": None, "sql_nivel": None, "powerbi_nivel": None,
     }
     full.update(fields)
     monkeypatch.setattr(application_profile, "load_application_profile", lambda: full)
@@ -944,15 +945,19 @@ def test_continue_application_with_profile_fills_an_open_killer_question(monkeyp
 
 
 def test_continue_application_with_profile_blocks_when_a_killer_question_is_unclassified(monkeypatch):
-    # Real case found live: "Possui experiência com Power BI/SQL/Power
-    # Automate?" -- a per-listing technical question this project must
-    # never fabricate an answer to, same discipline as gupy.py.
+    # Real case found live: a genuinely per-listing, open-ended technical
+    # question with no matching field at all -- this project must never
+    # fabricate an answer to it, same discipline as gupy.py. (Note:
+    # 2026-09-14 added a real "powerbi_nivel"/"sql_nivel" field for the
+    # generic "possui conhecimento em Power BI/SQL?" phrasing -- this
+    # test deliberately uses a question that still isn't one of those,
+    # to keep exercising the true "no field at all" path.)
     _patch_infojobs_profile(monkeypatch)
     page = FakeKillerQuestionsPage(
         body_texts=["Para concluir a candidatura responda as seguintes perguntas:"],
         killer_questions=[
             {
-                "text": "Possui experiência avançada com Power BI e desenvolvimento de dashboards?",
+                "text": "Comente brevemente suas experiências na área.",
                 "type": "closed",
                 "options": [{"id": "Answer_1", "label": "Sim"}, {"id": "Answer_2", "label": "Não"}],
             }
@@ -967,7 +972,65 @@ def test_continue_application_with_profile_blocks_when_a_killer_question_is_uncl
     assert preview.submitted is False
     assert preview.can_submit is False
     assert page.clicked_selectors == []  # never clicked CONCLUIR CANDIDATURA
-    assert "Power BI" in preview.summary_text
+    assert "experiências na área" in preview.summary_text
+
+
+def test_continue_application_with_profile_fills_a_generic_tool_level_killer_question(monkeypatch):
+    # 2026-09-14: "excel_nivel"/"sql_nivel"/"powerbi_nivel" are new,
+    # genuinely-self-rated facts (not derivable from the résumé's plain
+    # skills list) -- found live across a batch of blocked listings
+    # ("Qual seu nível de conhecimento em Excel?", "Você tem
+    # conhecimentos em SQL?", "Possui conhecimento avançado em Power
+    # Bi...?").
+    _patch_infojobs_profile(monkeypatch, excel_nivel="Avançado")
+    page = FakeKillerQuestionsPage(
+        body_texts=["Para concluir a candidatura responda as seguintes perguntas:", "Você se candidatou à vaga X"],
+        killer_questions=[
+            {"text": "Qual seu nível de conhecimento em Excel?", "type": "open", "name": "Item1[0].OpenAnswer"}
+        ],
+    )
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=True, finalize=True
+    )
+
+    assert page.filled == {'[name="Item1[0].OpenAnswer"]': "Avançado"}
+    assert preview.submitted is True
+
+
+def test_continue_application_with_profile_fills_linkedin_from_the_resume(monkeypatch):
+    # 2026-09-14: this adapter previously had NO résumé-backed field
+    # resolution at all -- a real gap, since gupy.py could already
+    # answer the exact same question from data/resume.json.
+    from resume import store as resume_store
+    from resume.schema import Links
+
+    resume = Resume(
+        personal_info=PersonalInfo(
+            full_name="Nicholas Birochi",
+            phone="+55 (11) 95827-5250",
+            links=Links(linkedin="https://www.linkedin.com/in/nicholasbirochi/"),
+        ),
+        summary=Bilingual(pt="Resumo."),
+    )
+    monkeypatch.setattr(resume_store, "load", lambda: resume)
+
+    _patch_infojobs_profile(monkeypatch)
+    page = FakeKillerQuestionsPage(
+        body_texts=["Para concluir a candidatura responda as seguintes perguntas:", "Você se candidatou à vaga X"],
+        killer_questions=[
+            {"text": "Compartilhe o link do seu LinkedIn:", "type": "open", "name": "Item1[0].OpenAnswer"}
+        ],
+    )
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=True, finalize=True
+    )
+
+    assert page.filled == {'[name="Item1[0].OpenAnswer"]': "https://www.linkedin.com/in/nicholasbirochi/"}
+    assert preview.submitted is True
 
 
 def test_continue_application_with_profile_blocks_all_or_nothing_across_killer_questions(monkeypatch):

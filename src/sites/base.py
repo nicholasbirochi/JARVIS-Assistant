@@ -360,7 +360,52 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "semestre e o ano previstos para a conclusao do curso",
         "previsão de formatura",
         "previsao de formatura",
+        # 2026-09-14, real miss found live (InfoJobs, "Estágio Estatística
+        # -- Planning/Pricing"): same question (current semester + expected
+        # graduation date), worded without "previsão de formatura" at all.
+        "semestre atual e a previsão de conclusão",
+        "semestre atual e a previsao de conclusao",
     ],
+    # 2026-09-14, compiled from a batch of real, live-blocked InfoJobs
+    # listings after Nicholas had a separate Claude instance (with access
+    # to his OneDrive résumé) look them up -- every one of these is
+    # already public/on-record data (résumé, not the confidential .env
+    # profile), resolved from data/resume.json by
+    # apply_resume_backed_profile_fields() below, same reasoning as
+    # "linkedin"/"nome_completo" above.
+    "telefone": ["número de whatsapp", "numero de whatsapp", "whatsapp"],
+    "curso_nome": ["nome do seu curso superior atual", "nome do seu curso", "nome do curso superior atual"],
+    "ingles_nivel": [
+        "nível de conhecimento em inglês",
+        "nivel de conhecimento em ingles",
+        "seu nível de inglês",
+        "seu nivel de ingles",
+        "nível de inglês",
+        "nivel de ingles",
+        "conhecimento em inglês",
+        "conhecimento em ingles",
+        "inglês em nível",
+        "ingles em nivel",
+    ],
+    "portfolio_link": ["link do seu portfólio", "link do seu portfolio", "portfólio ou projetos de referência"],
+    # Self-rated tool proficiency -- genuinely new facts (not derivable
+    # from the résumé's plain skills list, which names tools but not a
+    # self-assessed level), so these DO need a real .env value -- see
+    # application_profile.py. Bare tool-name terms are intentionally
+    # broad: every real listing seen so far phrases the question as
+    # either "qual seu nível de X" or "possui conhecimento em X", and a
+    # short, honest level answer ("Avançado") is a reasonable response
+    # to either phrasing.
+    "excel_nivel": ["excel"],
+    "sql_nivel": ["sql"],
+    "powerbi_nivel": ["power bi", "powerbi"],
+    # 2026-09-14, real miss found live (InfoJobs, "Bolsista Graduando --
+    # BI"): a bare "Possui Graduação Completa?" -- deliberately placed
+    # AFTER "escolaridade" above so that field's own, more specific
+    # "graduação completa ou em andamento" phrasing (a different,
+    # longer-form question) keeps winning first when it's the one that
+    # actually appears; this only catches the standalone question.
+    "graduacao_completa": ["graduação completa", "graduacao completa"],
 }
 # RG/CPF and the other identity-verification fields (issuing authority,
 # parents' names, birthplace) -- the exact class of data this project
@@ -379,6 +424,68 @@ _UNFILLABLE_HARD_STOP_TERMS = ["data de nascimento"]
 def _matches_any_term(question_text: str, terms: list[str]) -> bool:
     haystack = question_text.lower()
     return any(re.search(rf"\b{re.escape(term)}\b", haystack) for term in terms)
+
+
+def apply_resume_backed_profile_fields(profile: dict[str, str | None], resume: Resume) -> None:
+    """Fills profile fields sourced from the résumé's own public data
+    (data/resume.json) rather than the confidential .env file -- mutates
+    `profile` in place, only ever filling a field that's still None
+    (never overwrites a real .env value Nicholas set explicitly).
+    Shared between gupy.py and infojobs.py (both call this with their
+    own already-loaded `profile`/`resume`) so a résumé fact resolves the
+    same way regardless of which site is asking for it -- infojobs.py
+    had none of this at all before 2026-09-14, a real gap (linkedin/
+    nome_completo/disponibilidade_inicio_imediato questions on InfoJobs
+    were blocking unnecessarily for want of a lookup gupy.py already had).
+
+    - "linkedin"/"nome_completo" -- not secrets, already public on his
+      résumé/LinkedIn profile (2026-08-21).
+    - "disponibilidade_inicio_imediato" -- only resolved for the
+      explicit "immediate" status; any other value is a real, different
+      answer this shouldn't guess at (2026-08-21).
+    - "telefone"/"curso_nome"/"ingles_nivel"/"portfolio_link"/
+      "graduacao_completa" -- added 2026-09-14, real gaps found live
+      across a batch of blocked InfoJobs listings ("Informe seu número
+      de WhatsApp", "Qual o nome do seu curso...", "Qual o nível do seu
+      conhecimento em Inglês?", "Link do seu portfólio", "Possui
+      Graduação Completa?") -- all already on the résumé (Nicholas had a
+      separate Claude instance, with access to his OneDrive résumé,
+      confirm these), just never wired up to answer a company's own
+      screening question before."""
+    if not profile.get("linkedin"):
+        resume_linkedin = resume.personal_info.links.linkedin
+        if resume_linkedin:
+            profile["linkedin"] = resume_linkedin
+    if not profile.get("nome_completo"):
+        profile["nome_completo"] = resume.personal_info.full_name
+    if profile.get("disponibilidade_inicio_imediato") is None:
+        if resume.job_preferences.availability.status == "immediate":
+            profile["disponibilidade_inicio_imediato"] = "Sim"
+    if not profile.get("telefone") and resume.personal_info.phone:
+        profile["telefone"] = resume.personal_info.phone
+    if not profile.get("curso_nome") and resume.education:
+        edu = resume.education[0]
+        parts = [edu.degree.pt, f"({edu.institution})"]
+        if profile.get("semestre_formatura"):
+            parts.append(f"-- {profile['semestre_formatura']}")
+        profile["curso_nome"] = " ".join(parts)
+    if not profile.get("ingles_nivel"):
+        for lang in resume.languages:
+            if lang.name in ("English", "Inglês", "Ingles") and lang.proficiency:
+                profile["ingles_nivel"] = lang.proficiency.replace("Upper-Intermediate", "Intermediário-avançado")
+                break
+    if not profile.get("portfolio_link"):
+        links = resume.personal_info.links
+        resolved_link = links.portfolio or links.github
+        if resolved_link:
+            profile["portfolio_link"] = resolved_link
+    if not profile.get("graduacao_completa") and resume.education:
+        status = resume.education[0].status
+        if status == "in_progress":
+            note = profile.get("semestre_formatura")
+            profile["graduacao_completa"] = f"Não -- {note}" if note else "Não, ainda cursando"
+        elif status == "completed":
+            profile["graduacao_completa"] = "Sim"
 
 
 def classify_question_field(question_text: str) -> str | None:

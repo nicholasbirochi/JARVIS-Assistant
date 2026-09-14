@@ -112,6 +112,7 @@ from sites.base import (
     SiteProfileSnapshot,
     UpdatePlan,
     UpdateResult,
+    apply_resume_backed_profile_fields,
     classify_question_field,
     detect_level,
     is_hard_pii_question,
@@ -550,6 +551,28 @@ class InfoJobsAdapter(SiteAdapter):
         from sites.application_profile import load_application_profile
 
         profile = load_application_profile()
+        # 2026-09-14: this adapter had NO résumé-backed field resolution
+        # at all before -- a real gap (a listing asking for LinkedIn/
+        # full name/WhatsApp/course name/English level/portfolio link/
+        # graduation status was blocking here even though gupy.py could
+        # already answer the same questions from data/resume.json). See
+        # base.py's apply_resume_backed_profile_fields() for the
+        # field-by-field reasoning; this mirrors gupy.py's own call.
+        _resume_backed_fields = (
+            "linkedin",
+            "nome_completo",
+            "disponibilidade_inicio_imediato",
+            "telefone",
+            "curso_nome",
+            "ingles_nivel",
+            "portfolio_link",
+            "graduacao_completa",
+        )
+        if any(profile.get(f) is None for f in _resume_backed_fields):
+            from resume import store as resume_store
+
+            resume = resume_store.load()
+            apply_resume_backed_profile_fields(profile, resume)
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:

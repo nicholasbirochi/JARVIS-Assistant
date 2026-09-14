@@ -46,6 +46,9 @@ def test_load_application_profile_returns_all_none_when_file_missing(monkeypatch
         "escolaridade": None,
         "altura": None,
         "tamanho_uniforme": None,
+        "excel_nivel": None,
+        "sql_nivel": None,
+        "powerbi_nivel": None,
     }
 
 
@@ -80,6 +83,9 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
                 "JARVIS_APPLICATION_SEMESTRE_FORMATURA=2º semestre de 2027",
                 "JARVIS_APPLICATION_ALTURA=1,75 m",
                 "JARVIS_APPLICATION_TAMANHO_UNIFORME=G",
+                "JARVIS_APPLICATION_EXCEL_NIVEL=Avançado",
+                "JARVIS_APPLICATION_SQL_NIVEL=Intermediário-avançado",
+                "JARVIS_APPLICATION_POWERBI_NIVEL=Intermediário-avançado",
             ]
         ),
         encoding="utf-8",
@@ -112,6 +118,9 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
         "semestre_formatura": "2º semestre de 2027",
         "altura": "1,75 m",
         "tamanho_uniforme": "G",
+        "excel_nivel": "Avançado",
+        "sql_nivel": "Intermediário-avançado",
+        "powerbi_nivel": "Intermediário-avançado",
     }
 
 

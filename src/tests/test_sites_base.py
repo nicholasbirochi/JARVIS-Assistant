@@ -7,6 +7,7 @@ from sites.base import (
     SiteProfileSnapshot,
     UpdatePlan,
     UpdateResult,
+    apply_resume_backed_profile_fields,
     classify_question_field,
     detect_level,
     find_referral_contact,
@@ -110,8 +111,13 @@ def test_classify_question_field_none_for_birth_date_and_unrelated_questions():
     # real, classified field the same day, which would have silently
     # flipped this assertion. Using a genuinely subjective/unclassified
     # question instead so a future field addition can't do that again.)
+    # (2026-09-14: same thing happened again -- "Como você avalia seu
+    # nível de inglês?" became classified as "ingles_nivel" the same day
+    # this comment first warned about it. Switched to a question about a
+    # completely different, still-genuinely-unclassified subjective
+    # trait so this canary keeps doing its job.)
     assert classify_question_field("Qual sua data de nascimento?") is None
-    assert classify_question_field("Como você avalia seu nível de inglês?") is None
+    assert classify_question_field("Como você avalia sua capacidade de trabalhar em equipe?") is None
 
 
 def test_is_hard_pii_question_true_for_birth_date_with_no_fillable_field():
@@ -296,6 +302,125 @@ def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():
     # authority value.
     assert classify_question_field("Órgão e Estado de emissão do RG") == "rg_orgao_estado"
     assert classify_question_field("Qual é o seu RG?") == "rg"
+
+
+def test_classify_question_field_recognizes_the_2026_09_14_infojobs_batch_fields():
+    # 2026-09-14: compiled after Nicholas had a separate Claude instance
+    # (with access to his OneDrive résumé) answer a batch of real,
+    # live-blocked InfoJobs questions -- all of these were genuine
+    # classification gaps (the question appeared for real, but had no
+    # field to resolve it to at all).
+    assert classify_question_field("Informe seu numero de whatsapp") == "telefone"
+    assert classify_question_field("Nosso primeiro contato será via whatsapp.") == "telefone"
+    assert classify_question_field("Qual o nome do seu curso superior atual?") == "curso_nome"
+    assert classify_question_field("Qual o nível do seu conhecimento em Inglês?") == "ingles_nivel"
+    assert classify_question_field("Você possui inglês em nível intermediário ou superior?") == "ingles_nivel"
+    assert classify_question_field("Link do seu portfólio ou projetos de referência") == "portfolio_link"
+    assert classify_question_field("Qual seu nível de conhecimento em Excel?") == "excel_nivel"
+    assert classify_question_field("Possui Excel avançado?") == "excel_nivel"
+    assert classify_question_field("Você tem conhecimentos em SQL?") == "sql_nivel"
+    assert classify_question_field("Possui conhecimento avançado em Power Bi e Power Automate?") == "powerbi_nivel"
+    assert classify_question_field("Possui Graduação Completa?") == "graduacao_completa"
+    # The longer-form escolaridade phrasing must keep winning over the
+    # new, more generic "graduação completa" term when it's the one
+    # that's actually present (dict order matters here).
+    assert (
+        classify_question_field("Possui graduação completa ou em andamento?") == "escolaridade"
+    )
+    # Same real miss as the semestre_formatura comment above -- worded
+    # without "previsão de formatura" at all.
+    assert (
+        classify_question_field("Qual o seu semestre atual e a previsão de conclusão acadêmica (mês/ano)?")
+        == "semestre_formatura"
+    )
+
+
+def test_apply_resume_backed_profile_fields_fills_only_missing_fields_from_the_resume():
+    from resume.schema import (
+        Availability,
+        Bilingual,
+        Education,
+        JobPreferences,
+        LanguageSkill,
+        Links,
+        PersonalInfo,
+        Resume,
+    )
+
+    resume = Resume(
+        personal_info=PersonalInfo(
+            full_name="Nicholas Birochi",
+            phone="+55 (11) 95827-5250",
+            links=Links(
+                linkedin="https://www.linkedin.com/in/nicholasbirochi/",
+                github="https://github.com/nicholasbirochi/",
+                portfolio="https://app.rocketseat.com.br/me/nicholasbirochi/",
+            ),
+        ),
+        summary=Bilingual(pt="Resumo."),
+        education=[
+            Education(
+                degree=Bilingual(pt="Engenharia da Computação"),
+                institution="Faculdade Engenheiro Salvador Arena",
+                status="in_progress",
+            )
+        ],
+        languages=[LanguageSkill(name="English", proficiency="Upper-Intermediate (B2 First - Score 153)")],
+        job_preferences=JobPreferences(availability=Availability(status="immediate")),
+    )
+
+    profile: dict[str, str | None] = {
+        "linkedin": None,
+        "nome_completo": None,
+        "disponibilidade_inicio_imediato": None,
+        "telefone": None,
+        "curso_nome": None,
+        "ingles_nivel": None,
+        "portfolio_link": None,
+        "graduacao_completa": None,
+        "semestre_formatura": "8º semestre, formatura prevista para dezembro de 2027",
+    }
+    apply_resume_backed_profile_fields(profile, resume)
+
+    assert profile["linkedin"] == "https://www.linkedin.com/in/nicholasbirochi/"
+    assert profile["nome_completo"] == "Nicholas Birochi"
+    assert profile["disponibilidade_inicio_imediato"] == "Sim"
+    assert profile["telefone"] == "+55 (11) 95827-5250"
+    assert profile["curso_nome"] == (
+        "Engenharia da Computação (Faculdade Engenheiro Salvador Arena) -- "
+        "8º semestre, formatura prevista para dezembro de 2027"
+    )
+    assert profile["ingles_nivel"] == "Intermediário-avançado (B2 First - Score 153)"
+    assert profile["portfolio_link"] == "https://app.rocketseat.com.br/me/nicholasbirochi/"
+    assert profile["graduacao_completa"] == "Não -- 8º semestre, formatura prevista para dezembro de 2027"
+
+
+def test_apply_resume_backed_profile_fields_never_overwrites_a_real_env_value():
+    # A field Nicholas already set explicitly in application_profile.env
+    # must never be silently replaced by a résumé-derived guess.
+    from resume.schema import Bilingual, Links, PersonalInfo, Resume
+
+    resume = Resume(
+        personal_info=PersonalInfo(
+            full_name="Nicholas Birochi",
+            links=Links(linkedin="https://www.linkedin.com/in/nicholasbirochi/"),
+        ),
+        summary=Bilingual(pt="Resumo."),
+    )
+    profile: dict[str, str | None] = {"linkedin": "https://www.linkedin.com/in/ja-preenchido/"}
+    apply_resume_backed_profile_fields(profile, resume)
+
+    assert profile["linkedin"] == "https://www.linkedin.com/in/ja-preenchido/"
+
+
+def test_apply_resume_backed_profile_fields_leaves_graduacao_completa_unset_without_education():
+    from resume.schema import Bilingual, PersonalInfo, Resume
+
+    resume = Resume(personal_info=PersonalInfo(full_name="Nicholas Birochi"), summary=Bilingual(pt="Resumo."))
+    profile: dict[str, str | None] = {"graduacao_completa": None}
+    apply_resume_backed_profile_fields(profile, resume)
+
+    assert profile["graduacao_completa"] is None
 
 
 def test_new_identity_fields_are_hard_pii():

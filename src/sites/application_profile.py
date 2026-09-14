@@ -133,6 +133,15 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     # (corrected from an earlier, wrong "shoe size" guess).
     "altura": "JARVIS_APPLICATION_ALTURA",
     "tamanho_uniforme": "JARVIS_APPLICATION_TAMANHO_UNIFORME",
+    # 2026-09-14: self-rated tool proficiency -- genuinely new facts, not
+    # derivable from the résumé's skills list (which names tools but not
+    # a self-assessed level), unlike "telefone"/"curso_nome"/
+    # "ingles_nivel"/"portfolio_link"/"graduacao_completa" (see base.py's
+    # apply_resume_backed_profile_fields(), which pulls those straight
+    # from data/resume.json instead -- no .env entry needed for them).
+    "excel_nivel": "JARVIS_APPLICATION_EXCEL_NIVEL",
+    "sql_nivel": "JARVIS_APPLICATION_SQL_NIVEL",
+    "powerbi_nivel": "JARVIS_APPLICATION_POWERBI_NIVEL",
 }
 
 

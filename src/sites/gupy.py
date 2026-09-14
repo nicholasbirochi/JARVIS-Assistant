@@ -156,6 +156,7 @@ from sites.base import (
     SiteProfileSnapshot,
     UpdatePlan,
     UpdateResult,
+    apply_resume_backed_profile_fields,
     classify_question_field,
     detect_level,
     find_referral_contact,
@@ -716,32 +717,28 @@ class GupyAdapter(SiteAdapter):
         #   for any external candidate applying cold, same reasoning as
         #   the standard referral question's own "você trabalha na
         #   empresa?" -- never worth asking Nicholas to confirm per job.
-        # - "linkedin"/"nome_completo" come from the résumé's own public
-        #   fields (not secrets -- already on his résumé/LinkedIn
-        #   profile), so a listing asking for either doesn't need a
-        #   SEPARATE local .env entry duplicating data that already
-        #   lives in data/resume.json.
-        # - "disponibilidade_inicio_imediato" comes from the résumé's
-        #   own job_preferences.availability.status -- only resolved
-        #   when it's the real, explicit "immediate" value; any other
-        #   status ("notice_period"/"date"/"unspecified") is a real,
-        #   different answer this code shouldn't guess at, so it's left
-        #   unset (unanswerable) rather than assumed.
+        # - Everything else that comes from the résumé rather than the
+        #   .env file (linkedin, nome_completo, disponibilidade_inicio_
+        #   imediato, telefone, curso_nome, ingles_nivel, portfolio_link,
+        #   graduacao_completa) is resolved by base.py's shared
+        #   apply_resume_backed_profile_fields() -- see that function's
+        #   docstring for the full field-by-field reasoning.
         profile["ja_trabalhou_aqui"] = "Não"
-        _resume_backed_fields = ("linkedin", "nome_completo", "disponibilidade_inicio_imediato")
+        _resume_backed_fields = (
+            "linkedin",
+            "nome_completo",
+            "disponibilidade_inicio_imediato",
+            "telefone",
+            "curso_nome",
+            "ingles_nivel",
+            "portfolio_link",
+            "graduacao_completa",
+        )
         if any(profile.get(f) is None for f in _resume_backed_fields):
             from resume import store as resume_store
 
             resume = resume_store.load()
-            if not profile.get("linkedin"):
-                resume_linkedin = resume.personal_info.links.linkedin
-                if resume_linkedin:
-                    profile["linkedin"] = resume_linkedin
-            if not profile.get("nome_completo"):
-                profile["nome_completo"] = resume.personal_info.full_name
-            if profile.get("disponibilidade_inicio_imediato") is None:
-                if resume.job_preferences.availability.status == "immediate":
-                    profile["disponibilidade_inicio_imediato"] = "Sim"
+            apply_resume_backed_profile_fields(profile, resume)
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
