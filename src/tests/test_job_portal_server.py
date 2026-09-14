@@ -618,6 +618,14 @@ def test_portal_adapters_always_includes_weworkremotely():
     assert "weworkremotely" in server._portal_adapters(include_linkedin=True)
 
 
+def test_portal_adapters_always_includes_remote_company_boards():
+    # 2026-09-14, "quero vagas da Super.com também e de empresas como
+    # essa" -- same class of source as RemoteOK/WeWorkRemotely (real,
+    # public, unauthenticated JSON APIs), no opt-in needed.
+    assert "remote_company_boards" in server._portal_adapters()
+    assert "remote_company_boards" in server._portal_adapters(include_linkedin=True)
+
+
 def test_render_page_never_raises_with_no_data():
     # Direct unit-level check, no HTTP -- render_page() must degrade
     # gracefully to the empty state rather than raising when _tiers is

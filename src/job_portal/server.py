@@ -92,6 +92,7 @@ _SITE_LABELS = {
     "indeed": "Indeed",
     "remoteok": "RemoteOK",
     "weworkremotely": "We Work Remotely",
+    "remote_company_boards": "Board direto da empresa (Ashby/Greenhouse)",
 }
 
 _server: ThreadingHTTPServer | None = None
@@ -116,7 +117,10 @@ def _portal_adapters(*, include_linkedin: bool = False) -> dict[str, object]:
     set, no opt-in needed -- unlike LinkedIn/Indeed they're real,
     public, documented feeds (JSON API / RSS) with no anti-bot layer and
     no login-adjacent risk to weigh, safe to run unattended the same as
-    InfoJobs/Catho/Gupy.
+    InfoJobs/Catho/Gupy. sites/remote_company_boards.py (2026-09-14,
+    "quero vagas da Super.com também e de empresas como essa") is the
+    same class of source -- real, public, unauthenticated JSON APIs
+    (Ashby/Greenhouse) -- so it's in the base set too, no opt-in needed.
 
     Indeed (sites/indeed.py) is deliberately NOT included here at
     all, opt-in or not -- confirmed live 2026-08-11 that a handful of
@@ -131,6 +135,7 @@ def _portal_adapters(*, include_linkedin: bool = False) -> dict[str, object]:
     from sites.gupy import GupyAdapter
     from sites.ifood_careers import IFoodCareersAdapter
     from sites.infojobs import InfoJobsAdapter
+    from sites.remote_company_boards import RemoteCompanyBoardsAdapter
     from sites.remoteok import RemoteOkAdapter
     from sites.weworkremotely import WeWorkRemotelyAdapter
 
@@ -143,6 +148,7 @@ def _portal_adapters(*, include_linkedin: bool = False) -> dict[str, object]:
         "btg_careers": BTGCareersAdapter(),
         "remoteok": RemoteOkAdapter(),
         "weworkremotely": WeWorkRemotelyAdapter(),
+        "remote_company_boards": RemoteCompanyBoardsAdapter(),
     }
     if include_linkedin:
         from sites.linkedin import LinkedInAdapter
