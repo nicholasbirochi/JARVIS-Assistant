@@ -354,7 +354,19 @@ _FIELD_TERMS: dict[str, list[str]] = {
     # abreviações" -- resolved from the résumé's own personal_info.
     # full_name, not a separate .env value (same reasoning as
     # "linkedin" -- it's not confidential, it's already on the résumé).
-    "nome_completo": ["nome completo, sem abreviações", "nome completo sem abreviações", "nome completo, sem abreviacoes"],
+    # 2026-09-14: also added the bare "nome completo" (found live,
+    # InfoJobs, a Killer Questions field asking only that with no
+    # qualifier at all) -- deliberately NOT extended to a generic
+    # "\bnome\b" term, which would risk answering a genuinely different
+    # question (e.g. a reference's or supervisor's name) with Nicholas's
+    # own; "nome completo" specifically, in a candidate screening form,
+    # has been consistently about the applicant in every real case seen.
+    "nome_completo": [
+        "nome completo, sem abreviações",
+        "nome completo sem abreviações",
+        "nome completo, sem abreviacoes",
+        "nome completo",
+    ],
     "semestre_formatura": [
         "semestre e o ano previstos para a conclusão do curso",
         "semestre e o ano previstos para a conclusao do curso",

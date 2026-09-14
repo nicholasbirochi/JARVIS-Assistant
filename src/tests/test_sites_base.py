@@ -321,6 +321,10 @@ def test_classify_question_field_recognizes_the_2026_09_14_infojobs_batch_fields
     assert classify_question_field("Você tem conhecimentos em SQL?") == "sql_nivel"
     assert classify_question_field("Possui conhecimento avançado em Power Bi e Power Automate?") == "powerbi_nivel"
     assert classify_question_field("Possui Graduação Completa?") == "graduacao_completa"
+    # Same batch: a bare "Nome completo" with no "sem abreviações"
+    # qualifier at all -- distinct from the existing, more specific
+    # phrasing test at test_classify_question_field_recognizes_round_3_found_live_at_vivo.
+    assert classify_question_field("Nome completo") == "nome_completo"
     # The longer-form escolaridade phrasing must keep winning over the
     # new, more generic "graduação completa" term when it's the one
     # that's actually present (dict order matters here).
