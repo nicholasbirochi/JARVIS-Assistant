@@ -187,6 +187,42 @@ def derive_search_terms(resume: Resume) -> list[str]:
     return list(_DEFAULT_DATA_ANALYST_TERMS)
 
 
+
+# Real false-positive gap found live (flagged during the 2026-09-14
+# InfoJobs batch, fixed now): is_relevant_match()'s "take the keyword's
+# LAST word" rule only makes sense for a role-title-shaped keyword
+# joined by a Portuguese preposition ("Analista DE Dados" -> "dados" is
+# the specific topic after the genitive "de"). It silently breaks for a
+# plain tool/skill name written as two words with NO preposition -- its
+# last word is often itself a generic, unrelated word: "Excel Avançado"
+# -> "avançado" (matches "nível avançado" on almost any unrelated
+# posting), "Data Warehouse" -> "warehouse", "Machine Learning" ->
+# "learning", "Data Analyst"/"Data Engineer" -> "analyst"/"engineer"
+# (matches ANY engineering discipline), "Business Intelligence" ->
+# "intelligence". These require the FULL phrase instead.
+_FULL_PHRASE_OVERRIDE_KEYWORDS = {
+    "excel avançado",
+    "data warehouse",
+    "machine learning",
+    "data analyst",
+    "data engineer",
+    "business intelligence",
+}
+# Separately: a keyword that's ALREADY a single, specific-looking word
+# can still be too broad when it turns up only in a listing's SNIPPET
+# (often boilerplate company-description text) rather than its actual
+# title. Confirmed live: "Estatística" (a real, legitimate target term
+# -- it correctly surfaces genuine matches like "Estágio Estatística --
+# Planning/Pricing") also matched "Entrevistador De Campo" at IBOPE (a
+# market-research company whose generic company blurb mentions
+# "pesquisa estatística") and "Analista De Manutenção Ferroviário",
+# neither of which has anything to do with Nicholas's actual target
+# role. Requiring these specific terms to appear in the TITLE itself
+# (not just anywhere in title+snippet) keeps the real matches and drops
+# the incidental ones.
+_TITLE_ONLY_CORE_TERMS = {"estatística"}
+
+
 def is_relevant_match(title: str, snippet: str | None, keywords: list[str]) -> bool:
     """True if the listing text actually mentions one of the search
     keywords' core topic (not just an incidental word overlap like
@@ -199,7 +235,10 @@ def is_relevant_match(title: str, snippet: str | None, keywords: list[str]) -> b
     that have nothing to do with data. Matched on a whole-word boundary,
     not a bare substring -- a short acronym like "BI" (from "Power BI")
     would otherwise false-positive inside ordinary words like
-    "recebimento" (confirmed live, a real false match before this fix)."""
+    "recebimento" (confirmed live, a real false match before this fix).
+    See _FULL_PHRASE_OVERRIDE_KEYWORDS/_TITLE_ONLY_CORE_TERMS above for
+    the two real exceptions to the plain last-word rule."""
+    title_lower = title.lower()
     haystack = f"{title} {snippet or ''}".lower()
 
     if any(term in haystack for term in _SENIOR_EXCLUSION_TERMS):
@@ -209,8 +248,14 @@ def is_relevant_match(title: str, snippet: str | None, keywords: list[str]) -> b
         return False
 
     for keyword in keywords:
+        keyword_lower = keyword.strip().lower()
+        if keyword_lower in _FULL_PHRASE_OVERRIDE_KEYWORDS:
+            if re.search(rf"\b{re.escape(keyword_lower)}\b", haystack):
+                return True
+            continue
         core_term = keyword.strip().split()[-1].lower()
-        if re.search(rf"\b{re.escape(core_term)}\b", haystack):
+        search_space = title_lower if core_term in _TITLE_ONLY_CORE_TERMS else haystack
+        if re.search(rf"\b{re.escape(core_term)}\b", search_space):
             return True
     return False
 

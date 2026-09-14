@@ -118,6 +118,40 @@ def test_is_relevant_match_short_acronym_keyword_does_not_false_positive_on_subs
     assert is_relevant_match("Analista De Power BI", "Dashboards e relatórios", ["Power BI"])
 
 
+def test_is_relevant_match_estatistica_only_counts_in_the_title_not_incidental_snippet_text():
+    # Real false positives found live: "Estatística" is a genuine,
+    # legitimate target term (real analytics-adjacent postings do put it
+    # in the title), but matching it anywhere in title+snippet also
+    # pulled in "Entrevistador De Campo" (IBOPE, a market-research
+    # company whose generic company blurb mentions "pesquisa
+    # estatística") and "Analista De Manutenção Ferroviário" -- neither
+    # has anything to do with Nicholas's actual target role.
+    assert is_relevant_match("Estágio Estatística -- Área Planning/Pricing", None, ["Estatística"])
+    assert not is_relevant_match(
+        "Entrevistador De Campo", "Empresa líder em pesquisa estatística de mercado", ["Estatística"]
+    )
+    assert not is_relevant_match(
+        "Analista De Manutenção Ferroviário", "Conhecimento em estatística de manutenção", ["Estatística"]
+    )
+
+
+def test_is_relevant_match_full_phrase_override_keywords_do_not_false_positive_on_their_generic_last_word():
+    # Real gap found live: the general "take the keyword's last word"
+    # rule only makes sense for a role-title-shaped keyword joined by a
+    # Portuguese preposition ("Analista DE Dados" -> "dados"). A plain
+    # two-word skill name with no preposition can have a generic last
+    # word instead -- "Excel Avançado" -> "avançado" would otherwise
+    # match almost any unrelated posting that mentions ANY "nível
+    # avançado", and "Data Engineer" -> "engineer" would match any
+    # engineering discipline at all.
+    assert not is_relevant_match(
+        "Analista Jurídico Pleno", "Requer inglês avançado e Excel avançado", ["Excel Avançado"]
+    )
+    assert is_relevant_match("Analista de Dados -- Excel Avançado", None, ["Excel Avançado"])
+    assert not is_relevant_match("Engenheiro Civil", "Vaga para engineer com CREA ativo", ["Data Engineer"])
+    assert is_relevant_match("Data Engineer Júnior", "ETL e pipelines", ["Data Engineer"])
+
+
 def make_listing(external_id: str, title: str, snippet: str | None = None, site_name: str = "infojobs") -> JobListing:
     return JobListing(
         site_name=site_name,
