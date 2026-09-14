@@ -274,6 +274,21 @@ def test_classify_question_field_recognizes_the_telemont_cnh_categoria_radio():
     assert classify_question_field("Você possui CNH?") == "cnh"
 
 
+def test_classify_question_field_distinguishes_current_from_desired_salary():
+    # 2026-09-07, real classification bug found live (InfoJobs, "Monitor
+    # De Qualidade Jr E Pl" and others): "Qual foi seu último salário?"
+    # asks for a CURRENT/PAST fact, not the desired figure -- the old
+    # code answered it with the DESIRED salary (salary_junior etc.), a
+    # real, factually wrong answer sent to a real employer.
+    assert classify_question_field("Qual foi seu último salário?") == "salary_current"
+    assert classify_question_field("Qual sua última remuneração?") == "salary_current"
+    assert classify_question_field("Qual sua remuneração atual?") == "salary_current"
+    # The ordinary desired-salary phrasing must still classify as
+    # "salary_expectation", not get swallowed by the new, more specific
+    # field.
+    assert classify_question_field("Qual sua pretensão salarial?") == "salary_expectation"
+
+
 def test_classify_question_field_distinguishes_rg_orgao_estado_from_bare_rg():
     # Real risk: "Órgão e Estado de emissão do RG" contains "RG" as its
     # own whole word too -- checking bare "rg" first would misclassify

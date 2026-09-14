@@ -808,3 +808,189 @@ def test_continue_application_with_profile_finalize_true_reports_missing_button(
 
     assert preview.submitted is False
     assert preview.can_submit is False
+
+
+# --- InfoJobs' "Killer Questions" step (2026-09-07) -----------------------
+#
+# Real gap found live (batch-apply run): NOT every listing is a bare
+# single click -- many render a second step, InfoJobs' own real
+# "Killer Questions" (#KillerQuestionsForm), asking company-specific
+# screening questions (open text or closed/radio) before a second
+# "CONCLUIR CANDIDATURA" click actually submits anything.
+
+
+def _patch_infojobs_profile(monkeypatch, **fields):
+    from sites import application_profile
+
+    full = {
+        "rg": None, "rg_orgao_estado": None, "cpf": None, "nome_mae": None, "nome_pai": None,
+        "naturalidade": None, "raca_cor": None, "pcd": None, "salary_estagio": None,
+        "salary_junior": None, "salary_pleno": None, "salary_current": None, "marital_status": None,
+        "cnh": None, "cnh_categoria": None, "disponibilidade_viagem": None, "disponibilidade_fds": None,
+        "disponibilidade_hibrido": None, "escolaridade": None, "cargo_atual": None,
+        "parentes_na_empresa": None, "semestre_formatura": None, "altura": None, "tamanho_uniforme": None,
+    }
+    full.update(fields)
+    monkeypatch.setattr(application_profile, "load_application_profile", lambda: full)
+
+
+class FakeKillerQuestionsPage:
+    """Stand-in for the killer-questions flow specifically -- distinct
+    from FakeJobApplyPage (that one's evaluate() always returns the same
+    body_text, which can't simulate the two DIFFERENT document.body.innerText
+    checks this flow makes: once right after the main apply click, once
+    again after CONCLUIR CANDIDATURA)."""
+
+    def __init__(
+        self, *, buttons=None, body_texts, killer_questions=None, page_title="Vaga | Estágio",
+        conclude_button_missing=False, fill_fails_for=None, click_fails_for=None,
+    ):
+        self.buttons = buttons if buttons is not None else [FakeJobApplyButton(visible=True)]
+        self.body_texts = body_texts
+        self._body_idx = 0
+        self.page_title = page_title
+        self.killer_questions = killer_questions or []
+        self.conclude_button_missing = conclude_button_missing
+        self.fill_fails_for = fill_fails_for or set()
+        self.click_fails_for = click_fails_for or set()
+        self.goto_calls: list[str] = []
+        self.filled: dict[str, str] = {}
+        self.clicked_selectors: list[str] = []
+
+    def goto(self, url, timeout=None, wait_until=None):
+        self.goto_calls.append(url)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def wait_for_load_state(self, state, timeout=None):
+        pass
+
+    def get_by_text(self, pattern):
+        return FakeJobApplyLocator(self.buttons)
+
+    def evaluate(self, script):
+        if "document.title" in script:
+            return self.page_title
+        if "KillerQuestionsForm" in script:
+            return self.killer_questions
+        if "document.body.innerText" in script:
+            text = self.body_texts[min(self._body_idx, len(self.body_texts) - 1)]
+            self._body_idx += 1
+            return text
+        return ""
+
+    def fill(self, selector, value, timeout=None):
+        if selector in self.fill_fails_for:
+            raise Exception(f"no element matching {selector!r}")
+        self.filled[selector] = value
+
+    def click(self, selector, timeout=None):
+        if selector in self.click_fails_for:
+            raise Exception(f"no element matching {selector!r}")
+        if selector == "#btnKillerQuestionsAccept" and self.conclude_button_missing:
+            raise Exception("no element matching #btnKillerQuestionsAccept")
+        self.clicked_selectors.append(selector)
+
+
+def test_continue_application_with_profile_fills_a_closed_killer_question_via_whole_word_match(monkeypatch):
+    # Real case found live: "Qual sua previsão de formatura?" offers
+    # bare year options ("2027"/"2028"/"2029"/"Outro"), while the
+    # profile's semestre_formatura holds a full sentence -- must match
+    # via the option label appearing as a whole word inside it.
+    _patch_infojobs_profile(monkeypatch, semestre_formatura="8º semestre, formatura prevista para dezembro de 2027")
+    page = FakeKillerQuestionsPage(
+        body_texts=["Para concluir a candidatura responda as seguintes perguntas:", "Você se candidatou à vaga X"],
+        killer_questions=[
+            {
+                "text": "Qual sua previsão de formatura?",
+                "type": "closed",
+                "options": [
+                    {"id": "Answer_1", "label": "2027"},
+                    {"id": "Answer_2", "label": "2028"},
+                    {"id": "Answer_3", "label": "2029"},
+                    {"id": "Answer_4", "label": "Outro"},
+                ],
+            }
+        ],
+    )
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=True, finalize=True
+    )
+
+    assert 'label[for="Answer_1"]' in page.clicked_selectors
+    assert "#btnKillerQuestionsAccept" in page.clicked_selectors
+    assert preview.submitted is True
+
+
+def test_continue_application_with_profile_fills_an_open_killer_question(monkeypatch):
+    _patch_infojobs_profile(monkeypatch, salary_current="R$ 2.106,00")
+    page = FakeKillerQuestionsPage(
+        body_texts=["Para concluir a candidatura responda as seguintes perguntas:", "Você se candidatou à vaga X"],
+        killer_questions=[
+            {"text": "Qual foi seu último salário?", "type": "open", "name": "Item1[0].OpenAnswer"}
+        ],
+    )
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=True, finalize=True
+    )
+
+    assert page.filled == {'[name="Item1[0].OpenAnswer"]': "R$ 2.106,00"}
+    assert preview.submitted is True
+
+
+def test_continue_application_with_profile_blocks_when_a_killer_question_is_unclassified(monkeypatch):
+    # Real case found live: "Possui experiência com Power BI/SQL/Power
+    # Automate?" -- a per-listing technical question this project must
+    # never fabricate an answer to, same discipline as gupy.py.
+    _patch_infojobs_profile(monkeypatch)
+    page = FakeKillerQuestionsPage(
+        body_texts=["Para concluir a candidatura responda as seguintes perguntas:"],
+        killer_questions=[
+            {
+                "text": "Possui experiência avançada com Power BI e desenvolvimento de dashboards?",
+                "type": "closed",
+                "options": [{"id": "Answer_1", "label": "Sim"}, {"id": "Answer_2", "label": "Não"}],
+            }
+        ],
+    )
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=True, finalize=True
+    )
+
+    assert preview.submitted is False
+    assert preview.can_submit is False
+    assert page.clicked_selectors == []  # never clicked CONCLUIR CANDIDATURA
+    assert "Power BI" in preview.summary_text
+
+
+def test_continue_application_with_profile_blocks_all_or_nothing_across_killer_questions(monkeypatch):
+    # tudo ou nada: one classified+known question sits alongside one
+    # unclassified one -- neither gets filled.
+    _patch_infojobs_profile(monkeypatch, semestre_formatura="formatura prevista para dezembro de 2027")
+    page = FakeKillerQuestionsPage(
+        body_texts=["Para concluir a candidatura responda as seguintes perguntas:"],
+        killer_questions=[
+            {
+                "text": "Qual sua previsão de formatura?",
+                "type": "closed",
+                "options": [{"id": "Answer_1", "label": "2027"}],
+            },
+            {"text": "Já atuou na área de call center?", "type": "open", "name": "Item1[1].OpenAnswer"},
+        ],
+    )
+    _patch_infojobs_open_context(monkeypatch, page)
+
+    preview = InfoJobsAdapter().continue_application_with_profile(
+        "https://www.infojobs.com.br/vaga-de-x__1.aspx", confirmed=True, finalize=True
+    )
+
+    assert preview.submitted is False
+    assert page.filled == {}
+    assert page.clicked_selectors == []

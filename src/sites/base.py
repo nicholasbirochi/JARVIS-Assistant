@@ -192,6 +192,30 @@ _FIELD_TERMS: dict[str, list[str]] = {
     # far), so the bare abbreviation added false-positive risk without
     # ever being needed to catch a real one -- removed.
     "pcd": ["pessoa com deficiência", "pessoa com deficiencia"],
+    # 2026-09-07, real classification bug found live on InfoJobs (Monitor
+    # De Qualidade Jr E Pl and others): "Qual foi seu último salário?" /
+    # "Qual sua última remuneração?" ask for a CURRENT/PAST fact, not the
+    # desired figure -- but the bare "remuneração"/"salário" terms below
+    # were classifying it as "salary_expectation" and answering with the
+    # DESIRED salary (salary_junior etc.), a real, factually wrong answer
+    # sent to a real employer. This is exactly the gap the module's own
+    # 2026-08-12 design note (a real Itaú listing asking "remuneração
+    # ATUAL") already flagged as a risk -- it just hadn't been hit by a
+    # question phrased this plainly until now. Checked BEFORE
+    # "salary_expectation" (dict order) since these phrases also contain
+    # the bare substrings "remuneração"/"salário".
+    "salary_current": [
+        "último salário",
+        "ultimo salario",
+        "última remuneração",
+        "ultima remuneracao",
+        "remuneração atual",
+        "remuneracao atual",
+        "salário atual",
+        "salario atual",
+        "remuneração anterior",
+        "remuneracao anterior",
+    ],
     "salary_expectation": [
         "remuneração",
         "remuneracao",

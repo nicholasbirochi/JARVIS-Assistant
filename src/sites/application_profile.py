@@ -95,6 +95,11 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     "salary_estagio": "JARVIS_APPLICATION_SALARY_ESTAGIO",
     "salary_junior": "JARVIS_APPLICATION_SALARY_JUNIOR",
     "salary_pleno": "JARVIS_APPLICATION_SALARY_PLENO",
+    # 2026-09-07: distinct from the three above -- a question about
+    # CURRENT/PAST salary ("último salário") is a different fact than
+    # desired salary, see base.py's _FIELD_TERMS comment for the real
+    # classification bug this fixes.
+    "salary_current": "JARVIS_APPLICATION_SALARY_CURRENT",
     "marital_status": "JARVIS_APPLICATION_MARITAL_STATUS",
     # 2026-08-21: the recurring, generic company questions -- see
     # base.py's _FIELD_TERMS comment. "linkedin" and "ja_trabalhou_aqui"

@@ -104,6 +104,7 @@ from resume.schema import Resume
 from sites import session
 from sites.base import (
     ApplicationPreview,
+    ApplicationQuestion,
     ChangePreview,
     JobListing,
     SessionStatus,
@@ -111,6 +112,9 @@ from sites.base import (
     SiteProfileSnapshot,
     UpdatePlan,
     UpdateResult,
+    classify_question_field,
+    detect_level,
+    is_hard_pii_question,
 )
 
 SITE_NAME = "infojobs"
@@ -513,9 +517,27 @@ class InfoJobsAdapter(SiteAdapter):
         ever fires for real, not a second code-level gate).
 
         finalize=False can't do anything meaningful here and deliberately
-        doesn't try -- there is no per-question "fill" step to perform for
-        InfoJobs (see preview_application()'s docstring), so this just
-        re-confirms readiness, identically to preview_application()."""
+        doesn't try -- there is no per-question "fill" step to perform
+        before the real apply click even happens (see
+        preview_application()'s docstring), so this just re-confirms
+        readiness, identically to preview_application().
+
+        2026-09-07, real gap found live (batch-apply run): NOT every
+        InfoJobs listing is a bare single click -- many render a SECOND
+        step after the first click, InfoJobs' own "Killer Questions"
+        (real internal name, confirmed live in the DOM: #KillerQuestionsForm,
+        data-idkillerquestiontype), asking real company-specific screening
+        questions (open text or closed/radio) before a second
+        "CONCLUIR CANDIDATURA" button actually submits anything. The
+        original version of this method only knew about the single-click
+        case, so it correctly (if uninformatively) reported "clicked but
+        no confirmation" for every listing that has this second step --
+        nothing was ever submitted for those, but it also never explained
+        why. Now handled with the exact same "tudo ou nada" discipline as
+        gupy.py's own company questions: classify each real question via
+        base.py's classify_question_field(), fill only if EVERY question
+        on the step has a real local profile value, block with the real
+        question list otherwise -- never fabricate an answer."""
         if not confirmed:
             return ApplicationPreview(
                 site_name=self.site_name, job_url=job_url, can_submit=False,
@@ -525,6 +547,9 @@ class InfoJobsAdapter(SiteAdapter):
             return self.preview_application(job_url)
 
         from config import SITES_HEADLESS
+        from sites.application_profile import load_application_profile
+
+        profile = load_application_profile()
 
         p, context = session.open_context(self.site_name, headless=SITES_HEADLESS)
         try:
@@ -541,27 +566,215 @@ class InfoJobsAdapter(SiteAdapter):
                     site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason,
                     summary_text=reason,
                 )
+            page_title = page.evaluate("() => document.title")
+            level = detect_level(page_title)
             button.click()
             page.wait_for_timeout(2000)
             try:
                 page.wait_for_load_state("networkidle", timeout=15_000)
             except Exception:
                 pass
-            confirmation_text = page.evaluate("() => document.body.innerText")
-            if "Você se candidatou" in confirmation_text:
+
+            body_text = page.evaluate("() => document.body.innerText")
+            if "Você se candidatou" in body_text:
                 reason = 'Candidatura enviada e confirmada de verdade -- a página mostrou "Você se candidatou" após o clique.'
                 return ApplicationPreview(
                     site_name=self.site_name, job_url=job_url, can_submit=True, blocked_reason=None,
                     submitted=True, summary_text=reason,
                 )
-            reason = "Cliquei no botão de candidatura mas a página não confirmou o envio -- confira manualmente."
+
+            if "Para concluir a candidatura" not in body_text:
+                reason = "Cliquei no botão de candidatura mas a página não confirmou o envio -- confira manualmente."
+                return ApplicationPreview(
+                    site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason,
+                    summary_text=reason,
+                )
+
+            questions_dom = self._extract_killer_questions(page)
+            questions: list[ApplicationQuestion] = []
+            plan = [
+                (q, self._resolve_profile_field(classify_question_field(q["text"]), level))
+                for q in questions_dom
+            ]
+            unanswerable = [q["text"] for q, field in plan if field is None or not profile.get(field)]
+            if unanswerable:
+                for q, field in plan:
+                    has_value = field is not None and bool(profile.get(field))
+                    questions.append(
+                        ApplicationQuestion(
+                            text=q["text"],
+                            answered=has_value,
+                            answer="(preenchido do arquivo local)" if has_value else None,
+                            is_hard_pii=is_hard_pii_question(q["text"]),
+                        )
+                    )
+                reason = (
+                    "Cliquei em candidatar-me, mas essa vaga tem uma etapa extra de perguntas próprias "
+                    "(a InfoJobs chama de \"Killer Questions\") -- pelo menos uma não tem valor no seu "
+                    "arquivo local ou é um tipo o JARVIS não sabe preencher. Nada foi enviado -- tudo ou "
+                    "nada, pra não deixar a candidatura pela metade."
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason,
+                    questions=questions, summary_text=self._render_killer_question_summary(reason, questions),
+                )
+
+            fill_failures: list[str] = []
+            for q, field in plan:
+                value = profile[field]
+                ok = self._fill_killer_question(page, q, value)
+                questions.append(
+                    ApplicationQuestion(
+                        text=q["text"],
+                        answered=ok,
+                        answer="(preenchido do arquivo local)" if ok else None,
+                        is_hard_pii=is_hard_pii_question(q["text"]),
+                    )
+                )
+                if not ok:
+                    fill_failures.append(q["text"])
+
+            if fill_failures:
+                reason = (
+                    "Encontrei o campo pra algumas perguntas mas não pra outras -- a página pode ter "
+                    "mudado desde a última verificação ao vivo. Confira manualmente."
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason,
+                    questions=questions, summary_text=self._render_killer_question_summary(reason, questions),
+                )
+
+            clicked = self._click_conclude_button(page)
+            if not clicked:
+                reason = 'Preenchi as perguntas mas não achei o botão "CONCLUIR CANDIDATURA".'
+                return ApplicationPreview(
+                    site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason,
+                    questions=questions, summary_text=self._render_killer_question_summary(reason, questions),
+                )
+            page.wait_for_timeout(2000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=15_000)
+            except Exception:
+                pass
+            final_text = page.evaluate("() => document.body.innerText")
+            if "Você se candidatou" in final_text:
+                reason = (
+                    'Candidatura enviada e confirmada de verdade -- preenchi a etapa de perguntas da '
+                    'empresa e a página mostrou "Você se candidatou" depois de concluir.'
+                )
+                return ApplicationPreview(
+                    site_name=self.site_name, job_url=job_url, can_submit=True, blocked_reason=None,
+                    submitted=True, questions=questions,
+                    summary_text=self._render_killer_question_summary(reason, questions),
+                )
+            reason = 'Preenchi e cliquei em "CONCLUIR CANDIDATURA" mas a página não confirmou o envio -- confira manualmente.'
             return ApplicationPreview(
                 site_name=self.site_name, job_url=job_url, can_submit=False, blocked_reason=reason,
-                summary_text=reason,
+                questions=questions, summary_text=self._render_killer_question_summary(reason, questions),
             )
         finally:
             context.close()
             p.stop()
+
+    def _resolve_profile_field(self, field: str | None, level: str) -> str | None:
+        """Same reasoning as gupy.py's method of the same name: a salary
+        question classifies as the generic "salary_expectation", but
+        application_profile.py stores three separate figures by role
+        level -- "pretensão salarial" honestly differs by seniority.
+        Every other field passes through unchanged."""
+        if field == "salary_expectation":
+            return f"salary_{level}"
+        return field
+
+    def _extract_killer_questions(self, page) -> list[dict]:
+        """Real, confirmed-live DOM (2026-09-07): InfoJobs' own "Killer
+        Questions" step is a clean `<form id="KillerQuestionsForm">` --
+        each question is a `<div class="t4 ... font-weight-bold">TEXT</div>`
+        immediately followed by its answer container, holding EITHER a
+        `<textarea name="...OpenAnswer">` (open text,
+        data-idkillerquestiontype="1") or a group of
+        `<input type="radio">` + `<label for="...">` pairs (closed/
+        multiple-choice, data-idkillerquestiontype="2"). Returns
+        [{"text", "type": "open"|"closed", "name": ...} |
+         {"text", "type": "closed", "options": [{"id", "label"}]}]."""
+        return page.evaluate(
+            """
+            () => {
+                const form = document.querySelector('#KillerQuestionsForm');
+                if (!form) return [];
+                const questionDivs = Array.from(form.querySelectorAll('.t4.font-weight-bold'));
+                return questionDivs.map(qDiv => {
+                    const text = qDiv.textContent.trim();
+                    const answerDiv = qDiv.nextElementSibling;
+                    const textarea = answerDiv ? answerDiv.querySelector('textarea') : null;
+                    if (textarea) {
+                        return { text, type: 'open', name: textarea.getAttribute('name') };
+                    }
+                    const radios = answerDiv ? Array.from(answerDiv.querySelectorAll('input[type="radio"]')) : [];
+                    const options = radios.map(r => {
+                        const label = answerDiv.querySelector(`label[for="${r.id}"]`);
+                        return { id: r.id, label: label ? label.textContent.trim() : r.value };
+                    });
+                    return { text, type: 'closed', options };
+                });
+            }
+            """
+        )
+
+    def _fill_killer_question(self, page, question: dict, value: str) -> bool:
+        """Fills one already-classified, already-has-a-value question.
+        Open (textarea) questions use page.fill() on the real `name`
+        attribute. Closed (radio) questions match the option whose
+        label EXACTLY equals the profile value first (e.g. "Sim"), then
+        fall back to a whole-word match of the option's own (usually
+        short) label somewhere inside the longer profile value -- real
+        case this covers: "Qual sua previsão de formatura?" offers bare
+        year options ("2027"), while the profile's semestre_formatura
+        holds a full sentence ("8º semestre, formatura prevista para
+        dezembro de 2027"). Never a substring/partial match otherwise --
+        same fail-closed discipline as every other radio-matcher in this
+        project."""
+        if question["type"] == "open":
+            try:
+                page.fill(f'[name="{question["name"]}"]', value, timeout=5000)
+                return True
+            except Exception:
+                return False
+
+        options = question.get("options", [])
+        norm_value = value.strip().lower()
+        match = next((o for o in options if o["label"].strip().lower() == norm_value), None)
+        if match is None:
+            match = next(
+                (o for o in options if re.search(rf"\b{re.escape(o['label'].strip())}\b", value, re.IGNORECASE)),
+                None,
+            )
+        if match is None:
+            return False
+        try:
+            page.click(f'label[for="{match["id"]}"]', timeout=5000)
+            return True
+        except Exception:
+            return False
+
+    def _click_conclude_button(self, page) -> bool:
+        try:
+            page.click("#btnKillerQuestionsAccept", timeout=5000)
+            return True
+        except Exception:
+            return False
+
+    def _render_killer_question_summary(self, reason: str, questions: list[ApplicationQuestion]) -> str:
+        lines = [f"Candidatura em {self.site_name}: BLOQUEADA -- {reason}"]
+        for q in questions:
+            if q.answered:
+                status = f"respondida automaticamente ({q.answer})"
+            elif q.is_hard_pii:
+                status = "NÃO respondida -- documento oficial, o JARVIS nunca pede isso"
+            else:
+                status = "NÃO respondida -- precisa de você"
+            lines.append(f"- {status}: {q.text[:200]}")
+        return "\n".join(lines)
 
     def _find_visible_apply_button(self, page):
         """Finds the real, VISIBLE "Candidatar-me"/"CANDIDATAR-ME" link.
