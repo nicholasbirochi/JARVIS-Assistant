@@ -514,6 +514,11 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "atuou com automacao ou digitalizacao",
         "projeto de automação ou digitalização",
         "projeto de automacao ou digitalizacao",
+        # 2026-09-14, real miss found live (InfoJobs, "Analista de
+        # Automação de Dados"): same story, worded as "experiência com
+        # automação de processos" instead.
+        "experiência com automação de processos",
+        "experiencia com automacao de processos",
     ],
     "experiencia_setores_diversos": [
         "empresas de tecnologia, consultorias, recursos humanos, varejo, finanças",
@@ -543,6 +548,11 @@ _FIELD_TERMS: dict[str, list[str]] = {
     "como_constroi_dashboards": [
         "como você constrói seus relatórios",
         "como voce constroi seus relatorios",
+        # 2026-09-14, real miss found live (InfoJobs, "Analista
+        # Estratégia Comercial"): same real fact (his own dashboard-
+        # building work), worded as a bare "possui vivência" instead.
+        "vivência com construção de dashboards",
+        "vivencia com construcao de dashboards",
     ],
     "resultado_real_dados": [
         "resultado real que você gerou com dados",

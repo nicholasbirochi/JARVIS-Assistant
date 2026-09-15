@@ -573,6 +573,11 @@ def test_classify_question_field_recognizes_round_2_of_the_chatgpt_drafted_batch
     # interest question must not accidentally reuse Ânima-specific
     # answer content.
     assert classify_question_field("Possui vínculo comercial com algum cliente ou fornecedor da empresa?") is None
+    assert (
+        classify_question_field("Comente sua experiência com automação de processos e dados?")
+        == "projeto_automacao_digitalizacao"
+    )
+    assert classify_question_field("Possui vivência com construção de dashboards?") == "como_constroi_dashboards"
 
 
 def test_new_identity_fields_are_hard_pii():
