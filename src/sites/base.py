@@ -340,6 +340,12 @@ _FIELD_TERMS: dict[str, list[str]] = {
         # "familiar ou parente que atualmente trabalha" -- same
         # nepotism-disclosure question, yet another phrasing.
         "familiar ou parente que atualmente trabalha",
+        # 2026-09-14, real miss found live (InfoJobs, Ânima Educação):
+        # a parenthetical list of relationship degrees inserted between
+        # "parentesco" and "com algum colaborador" breaks the two
+        # existing contiguous-phrase terms above -- this fragment alone
+        # survives that insertion.
+        "com algum colaborador atual da",
     ],
     # 2026-08-22, real gap found live (PagBank): a conditional follow-up
     # to "parentes_na_empresa" above, asking for the actual name/degree
@@ -427,6 +433,11 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "conhecimento em ingles",
         "inglês em nível",
         "ingles em nivel",
+        # 2026-09-14, real miss found live (InfoJobs, "Analista de Dados
+        # -- Dashboards"): a bare "Inglês avançado?" with no "nível de"
+        # framing at all.
+        "inglês avançado",
+        "ingles avancado",
     ],
     "portfolio_link": ["link do seu portfólio", "link do seu portfolio", "portfólio ou projetos de referência"],
     # Self-rated tool proficiency -- genuinely new facts (not derivable
@@ -439,7 +450,10 @@ _FIELD_TERMS: dict[str, list[str]] = {
     # to either phrasing.
     "excel_nivel": ["excel"],
     "sql_nivel": ["sql"],
-    "powerbi_nivel": ["power bi", "powerbi"],
+    # 2026-09-14: "Power B.I" (a dot between B and I, real phrasing found
+    # live at SUSEP's listing) doesn't contain the bare "power bi"
+    # substring -- added as its own term rather than relying on it.
+    "powerbi_nivel": ["power bi", "powerbi", "power b.i"],
     # 2026-09-14, real miss found live (InfoJobs, "Bolsista Graduando --
     # BI"): a bare "Possui Graduação Completa?" -- deliberately placed
     # AFTER "escolaridade" above so that field's own, more specific
@@ -487,7 +501,37 @@ _FIELD_TERMS: dict[str, list[str]] = {
     "susep_conhecimento": ["trâmites da susep", "tramites da susep"],
     "txt_csv_conhecimento": ["arquivos txt, csv", "txt ou csv"],
     "kpis_comerciais_experiencia": ["kpis comerciais"],
-    "indicadores_experiencia": ["experiência com indicadores e análises gerenciais", "experiencia com indicadores e analises gerenciais"],
+    "indicadores_experiencia": [
+        "experiência com indicadores e análises gerenciais",
+        "experiencia com indicadores e analises gerenciais",
+        # 2026-09-14, real miss found live (InfoJobs, "Digitalização de
+        # Processos"): same underlying fact, worded as a from-scratch
+        # question instead.
+        "estruturou indicadores",
+    ],
+    "projeto_automacao_digitalizacao": [
+        "atuou com automação ou digitalização",
+        "atuou com automacao ou digitalizacao",
+        "projeto de automação ou digitalização",
+        "projeto de automacao ou digitalizacao",
+    ],
+    "experiencia_setores_diversos": [
+        "empresas de tecnologia, consultorias, recursos humanos, varejo, finanças",
+        "empresas de tecnologia, consultorias, recursos humanos, varejo, financas",
+    ],
+    # General, reusable fact -- unlike the two Ânima-specific fields
+    # below, being a Politically Exposed Person (or not) doesn't depend
+    # on which company is asking.
+    "pep_status": ["pessoa politicamente exposta"],
+    # 2026-09-14, real compliance/conflict-of-interest block found live
+    # at TWO real Ânima Educação listings (UAM Mooca, Soluções) --
+    # deliberately scoped to Ânima's own exact phrasing (requires "Ânima
+    # Educação" in the matched text), unlike parentes_na_empresa/
+    # pep_status above which are genuinely company-agnostic facts. Real
+    # answers Nicholas gave for these two specific listings, not a
+    # general-purpose "conflict of interest" field for any company.
+    "anima_vinculo_comercial": ["parceira da ânima", "parceira da anima"],
+    "anima_clt_historico": ["colaborador(a) clt da ânima educação", "colaborador(a) clt da anima educacao"],
     # 2026-09-14: the same underlying fact ("open to a fixed-term/
     # temporary contract") asked two different real ways.
     "disponibilidade_temporario": ["contrato temporário", "contrato temporario", "vaga temporária", "vaga temporaria"],

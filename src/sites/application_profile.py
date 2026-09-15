@@ -159,6 +159,14 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     "txt_csv_conhecimento": "JARVIS_APPLICATION_TXT_CSV_CONHECIMENTO",
     "kpis_comerciais_experiencia": "JARVIS_APPLICATION_KPIS_COMERCIAIS_EXPERIENCIA",
     "indicadores_experiencia": "JARVIS_APPLICATION_INDICADORES_EXPERIENCIA",
+    "projeto_automacao_digitalizacao": "JARVIS_APPLICATION_PROJETO_AUTOMACAO_DIGITALIZACAO",
+    "experiencia_setores_diversos": "JARVIS_APPLICATION_EXPERIENCIA_SETORES_DIVERSOS",
+    # General, reusable across any company (see base.py's comment).
+    "pep_status": "JARVIS_APPLICATION_PEP_STATUS",
+    # Ânima Educação-specific -- see base.py's comment for why these two
+    # aren't generalized the way pep_status/parentes_na_empresa are.
+    "anima_vinculo_comercial": "JARVIS_APPLICATION_ANIMA_VINCULO_COMERCIAL",
+    "anima_clt_historico": "JARVIS_APPLICATION_ANIMA_CLT_HISTORICO",
     "disponibilidade_temporario": "JARVIS_APPLICATION_DISPONIBILIDADE_TEMPORARIO",
     "ferramentas_analise_dominadas": "JARVIS_APPLICATION_FERRAMENTAS_ANALISE_DOMINADAS",
     "ferramentas_visualizacao_dominadas": "JARVIS_APPLICATION_FERRAMENTAS_VISUALIZACAO_DOMINADAS",

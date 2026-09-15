@@ -522,6 +522,59 @@ def test_classify_question_field_recognizes_the_2026_09_14_chatgpt_drafted_batch
     assert classify_question_field("Comente brevemente suas experiência na área.") == "conte_sua_experiencia"
 
 
+def test_classify_question_field_recognizes_round_2_of_the_chatgpt_drafted_batch():
+    # 2026-09-14, found offline-checking which of the 25 remaining
+    # blocked InfoJobs listings the first batch actually unblocked --
+    # several real phrasing variants slipped through the first pass.
+    assert (
+        classify_question_field("Já estruturou indicadores desde a coleta até o dashboard?")
+        == "indicadores_experiencia"
+    )
+    assert (
+        classify_question_field("Já atuou com automação ou digitalização de processos? Descreva.")
+        == "projeto_automacao_digitalizacao"
+    )
+    assert classify_question_field("Inglês avançado ?") == "ingles_nivel"
+    # "Power B.I" (a literal dot between B and I) doesn't contain the
+    # bare "power bi" substring.
+    assert classify_question_field("Possui vivência com análise e validação de dados em Power B.I?") == "powerbi_nivel"
+    assert (
+        classify_question_field(
+            "Você possui experiência profissional com análise de dados em empresas de tecnologia, "
+            "consultorias, recursos humanos, varejo, finanças ou segmentos similares?"
+        )
+        == "experiencia_setores_diversos"
+    )
+    assert (
+        classify_question_field("Você ou algum familiar próximo é considerado Pessoa Politicamente Exposta (PEP)?")
+        == "pep_status"
+    )
+    # A parenthetical relationship-degree list breaks the two existing
+    # parentes_na_empresa phrasings -- this fragment survives it.
+    assert (
+        classify_question_field(
+            "Você possui parentesco (cônjuge, pais, filhos, irmãos) com algum colaborador atual da Ânima Educação?"
+        )
+        == "parentes_na_empresa"
+    )
+    assert (
+        classify_question_field(
+            "Você possui vínculo comercial com empresa que seja fornecedora, cliente, concorrente ou "
+            "parceira da Ânima Educação?"
+        )
+        == "anima_vinculo_comercial"
+    )
+    assert (
+        classify_question_field("Você já foi colaborador(a) CLT da Ânima Educação nos últimos 5 anos?")
+        == "anima_clt_historico"
+    )
+    # The two Ânima-specific fields must stay scoped to Ânima's own real
+    # phrasing -- a differently-worded, unrelated company's conflict-of-
+    # interest question must not accidentally reuse Ânima-specific
+    # answer content.
+    assert classify_question_field("Possui vínculo comercial com algum cliente ou fornecedor da empresa?") is None
+
+
 def test_new_identity_fields_are_hard_pii():
     assert is_hard_pii_question("Órgão e Estado de emissão do RG")
     assert is_hard_pii_question("Nome da mãe")
