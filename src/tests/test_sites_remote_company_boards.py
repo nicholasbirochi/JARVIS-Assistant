@@ -71,9 +71,25 @@ def test_fetch_ashby_jobs_converts_a_real_shaped_job(monkeypatch):
     assert listing.external_id == "super.com:533f2314-39b0-48c6-a6c2-226242a7d608"
     assert listing.title == "Senior Data Scientist"
     assert listing.company == "Super.com"
-    assert listing.location == "Canada"
+    # Real gap fixed 2026-09-14: Ashby's own `isRemote` boolean is folded
+    # into the location text (honest, not fabricated -- Ashby's own
+    # signal) since job_matching.is_remote() only recognizes the literal
+    # word "remote", and Ashby's bare `location` ("Canada") never
+    # contains it on its own.
+    assert listing.location == "Remote (Canada)"
     assert listing.url == REAL_ASHBY_JOB["jobUrl"]
     assert "based anywhere in Canada" in listing.snippet
+
+
+def test_fetch_ashby_jobs_location_stays_bare_when_not_remote(monkeypatch):
+    import sites.remote_company_boards as mod
+
+    job = {**REAL_ASHBY_JOB, "isRemote": False}
+    monkeypatch.setattr(mod.urllib.request, "urlopen", _urlopen_returning({"jobs": [job]}))
+
+    listings = _fetch_ashby_jobs("Super.com", "super.com")
+
+    assert listings[0].location == "Canada"
 
 
 def test_fetch_greenhouse_jobs_converts_a_real_shaped_job_and_strips_html(monkeypatch):

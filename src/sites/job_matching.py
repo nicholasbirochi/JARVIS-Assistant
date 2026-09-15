@@ -299,6 +299,17 @@ _REMOTE_TERMS = [
     "trabalhe de casa",
     "work from home",
     "remote",
+    # 2026-09-14, real gap found live testing sites/remote_company_boards.py
+    # (Super.com/Zapier/GitLab/Canonical): international companies'
+    # career-board location text overwhelmingly says "Home based -
+    # Worldwide"/"Home Based - Americas" rather than the bare word
+    # "remote" -- every single one of 23 real, relevance-matched
+    # listings from that source came back is_remote()==False before this
+    # was added, meaning none of them would have ever reached the
+    # portal's "local"/"remote" split at all (see job_search.py's
+    # run_job_search(), which drops anything that's neither).
+    "home based",
+    "home-based",
 ]
 _INTERNATIONAL_TERMS = [
     "us$",

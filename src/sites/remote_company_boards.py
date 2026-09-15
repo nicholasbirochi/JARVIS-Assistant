@@ -130,6 +130,20 @@ def _fetch_ashby_jobs(company_name: str, board_token: str) -> list[JobListing]:
         if not job_id or not title or not job_url:
             continue
         location = job.get("location") or None
+        # Real gap found live 2026-09-14: job_matching.is_remote() looks
+        # for the word "remote" (or a few PT-BR equivalents) in the
+        # combined title+snippet+location text -- Ashby's own `location`
+        # field is usually just a bare country ("Canada"), which never
+        # contains it, even though Ashby ALSO returns a real, explicit
+        # `isRemote` boolean for the exact same listing. Honest, not
+        # fabricated -- this is Ashby's own signal, not a guess -- same
+        # "fold the site's real remote flag into the location text"
+        # pattern remoteok.py already uses for its own inconsistent
+        # location field.
+        if job.get("isRemote") and location:
+            location = f"Remote ({location})"
+        elif job.get("isRemote"):
+            location = "Remote"
         snippet = (job.get("descriptionPlain") or "")[:600].strip() or None
         listings.append(
             JobListing(
