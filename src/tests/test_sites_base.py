@@ -394,7 +394,7 @@ def test_apply_resume_backed_profile_fields_fills_only_missing_fields_from_the_r
         "Engenharia da Computação (Faculdade Engenheiro Salvador Arena) -- "
         "8º semestre, formatura prevista para dezembro de 2027"
     )
-    assert profile["ingles_nivel"] == "Intermediário-avançado (B2 First - Score 153)"
+    assert profile["ingles_nivel"] == "Sim. Intermediário-avançado (B2 First - Score 153)"
     assert profile["portfolio_link"] == "https://app.rocketseat.com.br/me/nicholasbirochi/"
     assert profile["graduacao_completa"] == "Não -- 8º semestre, formatura prevista para dezembro de 2027"
 

@@ -671,7 +671,15 @@ def apply_resume_backed_profile_fields(profile: dict[str, str | None], resume: R
     if not profile.get("ingles_nivel"):
         for lang in resume.languages:
             if lang.name in ("English", "Inglês", "Ingles") and lang.proficiency:
-                profile["ingles_nivel"] = lang.proficiency.replace("Upper-Intermediate", "Intermediário-avançado")
+                # 2026-09-14, real gap found live (InfoJobs batch): a
+                # bare level string ("Intermediário-avançado...") never
+                # matches a closed Sim/Não radio's whole-word fallback --
+                # only questions phrased as an open "qual seu nível"
+                # worked. "Sim. " prefix (same fix applied to excel_
+                # nivel/sql_nivel/powerbi_nivel) makes it answer either
+                # shape correctly.
+                level = lang.proficiency.replace("Upper-Intermediate", "Intermediário-avançado")
+                profile["ingles_nivel"] = f"Sim. {level}"
                 break
     if not profile.get("portfolio_link"):
         links = resume.personal_info.links
