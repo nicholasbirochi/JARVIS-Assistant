@@ -312,7 +312,22 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "início imediato",
         "inicio imediato",
     ],
-    "cargo_atual": ["qual é o seu cargo atual", "qual e o seu cargo atual", "cargo atual"],
+    # 2026-09-14, real miss found live (InfoJobs, "Analista de Dados --
+    # 11885861" and others): "Está trabalhando no momento?"/"Está
+    # trabalhando atualmente?" ask the exact same underlying fact as
+    # "cargo atual" (a boolean-shaped phrasing of it), and the existing
+    # descriptive value ("Estagiário em Análise de Dados na Volkswagen
+    # do Brasil...") is itself an informative, honest answer to either
+    # phrasing -- reused rather than duplicated into a separate field.
+    "cargo_atual": [
+        "qual é o seu cargo atual",
+        "qual e o seu cargo atual",
+        "cargo atual",
+        "está trabalhando no momento",
+        "esta trabalhando no momento",
+        "está trabalhando atualmente",
+        "esta trabalhando atualmente",
+    ],
     "parentes_na_empresa": [
         "possui parentes que trabalham",
         "tem parentesco com algum colaborador",
@@ -386,7 +401,21 @@ _FIELD_TERMS: dict[str, list[str]] = {
     # apply_resume_backed_profile_fields() below, same reasoning as
     # "linkedin"/"nome_completo" above.
     "telefone": ["número de whatsapp", "numero de whatsapp", "whatsapp"],
-    "curso_nome": ["nome do seu curso superior atual", "nome do seu curso", "nome do curso superior atual"],
+    "curso_nome": [
+        "nome do seu curso superior atual",
+        "nome do seu curso",
+        "nome do curso superior atual",
+        # 2026-09-14, real misses found live (InfoJobs, several
+        # listings): "qual a sua formação acadêmica" and "titulação
+        # (nome do curso, ...)" ask for the same résumé-composed fact
+        # (course + institution + status) worded two more ways, neither
+        # containing "seu curso" at all.
+        "sua formação acadêmica",
+        "sua formacao academica",
+        "nome do curso",
+        "titulação",
+        "titulacao",
+    ],
     "ingles_nivel": [
         "nível de conhecimento em inglês",
         "nivel de conhecimento em ingles",
@@ -417,7 +446,111 @@ _FIELD_TERMS: dict[str, list[str]] = {
     # "graduação completa ou em andamento" phrasing (a different,
     # longer-form question) keeps winning first when it's the one that
     # actually appears; this only catches the standalone question.
-    "graduacao_completa": ["graduação completa", "graduacao completa"],
+    "graduacao_completa": [
+        "graduação completa",
+        "graduacao completa",
+        # 2026-09-14, real miss found live (InfoJobs, "Assistente de
+        # Dados -- Revenue Management"): the same in-progress/completed
+        # fact, phrased as an open either/or question instead of yes/no.
+        "cursando ensino superior ou já é formado",
+        "cursando ensino superior ou ja e formado",
+    ],
+    # 2026-09-14: compiled after Nicholas had a separate assistant (with
+    # web access to his public LinkedIn, cross-checked against his
+    # résumé) draft real, honest answers -- including several honest
+    # NEGATIVES ("0 anos de experiência com Marketing Mix Modeling", "não
+    # tenho DBT listado") -- for a batch of real, live-blocked InfoJobs
+    # listings' own screening questions. Every value below is real
+    # content he reviewed and relayed, not fabricated by JARVIS -- same
+    # basis as every other .env-backed field here. Deliberately narrow,
+    # single-purpose fields (not a generic "answer bank") so a field
+    # only ever fires for the specific real phrasing it was found under.
+    "disponibilidade_estagio_09_16": ["das 09h00 às 16h00", "09h às 16h", "09h00 as 16h00"],
+    "estatistica_matematica_financeira": ["estatística e matemática financeira", "estatistica e matematica financeira"],
+    "call_center_experiencia": ["call center"],
+    "power_query_dax": ["power query"],
+    "power_automate_nivel": ["power automate"],
+    "google_sheets_nivel": ["google planilhas avançado", "google planilhas avancado"],
+    # 2026-09-14: covers both "experiência prévia com IA" style questions
+    # AND "como você utiliza ferramentas de IA" style ones -- Nicholas's
+    # real answer (a real internal local-AI tool he built for the
+    # Auditoria Especial team, see [[project]] context) genuinely
+    # answers either framing.
+    "ia_experiencia": [
+        "experiência prévia com inteligência artificial",
+        "experiencia previa com inteligencia artificial",
+        "experiência prévia com ia",
+        "experiencia previa com ia",
+        "utiliza ferramentas de ia",
+        "utiliza ferramentas de inteligência artificial",
+    ],
+    "susep_conhecimento": ["trâmites da susep", "tramites da susep"],
+    "txt_csv_conhecimento": ["arquivos txt, csv", "txt ou csv"],
+    "kpis_comerciais_experiencia": ["kpis comerciais"],
+    "indicadores_experiencia": ["experiência com indicadores e análises gerenciais", "experiencia com indicadores e analises gerenciais"],
+    # 2026-09-14: the same underlying fact ("open to a fixed-term/
+    # temporary contract") asked two different real ways.
+    "disponibilidade_temporario": ["contrato temporário", "contrato temporario", "vaga temporária", "vaga temporaria"],
+    "ferramentas_analise_dominadas": ["ferramentas de análise você domina", "ferramentas de analise voce domina"],
+    "ferramentas_visualizacao_dominadas": [
+        "ferramentas de visualização você domina",
+        "ferramentas de visualizacao voce domina",
+    ],
+    "como_constroi_dashboards": [
+        "como você constrói seus relatórios",
+        "como voce constroi seus relatorios",
+    ],
+    "resultado_real_dados": [
+        "resultado real que você gerou com dados",
+        "resultado real que voce gerou com dados",
+    ],
+    "diferencial_analista": ["seu diferencial como analista de dados"],
+    "atividades_vaga_experiencia": ["experiência com as atividades da vaga", "experiencia com as atividades da vaga"],
+    "etl_ferramentas_experiencia": ["ferramentas etl"],
+    "python_dbt_conhecimento": ["ou dbt"],
+    "contas_pagar_receber": ["contas a pagar", "contas a receber"],
+    "dre_relatorios_financeiros": ["dre e relatórios financeiros", "dre e relatorios financeiros"],
+    "tecnologia_area_financeira": [
+        "tecnologia aplicada à área financeira",
+        "tecnologia aplicada a area financeira",
+    ],
+    "analise_dados_financeiros": [
+        "análise de dados financeiros",
+        "analise de dados financeiros",
+    ],
+    "mmm_experiencia": ["marketing mix modeling"],
+    "inteligencia_mercado_experiencia": ["inteligência de mercado", "inteligencia de mercado"],
+    "market_share_indicadores": ["market share"],
+    "relatorios_executivos_experiencia": ["apresentações executivas", "apresentacoes executivas"],
+    "crm_experiencia": ["utilizou crm", "crm em sua rotina"],
+    "looker_apps_script": ["google apps script"],
+    "python_dados_nivel": [
+        "python ou outras linguagens de programação aplicadas",
+        "python ou outras linguagens de programacao aplicadas",
+    ],
+    "melhoria_continua_exemplo": ["melhoria contínua que você implementou", "melhoria continua que voce implementou"],
+    # 2026-09-14: the same "does your degree area fit" question, seen in
+    # two real phrasings across two different listings.
+    "graduacao_area_tecnica": [
+        "engenharia, economia, administração, ciências exatas",
+        "engenharia, economia, administracao, ciencias exatas",
+        "áreas de exatas, computação e correlatas",
+        "areas de exatas, computacao e correlatas",
+    ],
+    "mestrado_concluido": ["concluiu seu mestrado", "concluiu o mestrado"],
+    # Deliberately LAST in this dict: a generic "tell me about your
+    # experience" catch-all, real content but real risk of shadowing a
+    # more specific field if checked too early -- classify_question_field
+    # returns the FIRST match by dict order, so every field above (which
+    # covers the exact same real listings' OWN more specific questions)
+    # must keep winning first; this only ever fires when nothing more
+    # specific matched.
+    "conte_sua_experiencia": [
+        "nos conte a respeito da sua experiência",
+        "nos conte a respeito da sua experiencia",
+        "comente brevemente suas experiência",
+        "comente brevemente suas experiencia",
+    ],
 }
 # RG/CPF and the other identity-verification fields (issuing authority,
 # parents' names, birthplace) -- the exact class of data this project

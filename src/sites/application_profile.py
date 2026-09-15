@@ -142,6 +142,47 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     "excel_nivel": "JARVIS_APPLICATION_EXCEL_NIVEL",
     "sql_nivel": "JARVIS_APPLICATION_SQL_NIVEL",
     "powerbi_nivel": "JARVIS_APPLICATION_POWERBI_NIVEL",
+    # 2026-09-14: real, honest answers (including real negatives) drafted
+    # by a separate assistant Nicholas consulted (web access to his
+    # public LinkedIn, cross-checked against his résumé) for a batch of
+    # real, live-blocked InfoJobs screening questions -- see base.py's
+    # _FIELD_TERMS comment for the full list and reasoning. Narrow,
+    # single-purpose fields on purpose, not a generic answer bank.
+    "disponibilidade_estagio_09_16": "JARVIS_APPLICATION_DISPONIBILIDADE_ESTAGIO_09_16",
+    "estatistica_matematica_financeira": "JARVIS_APPLICATION_ESTATISTICA_MATEMATICA_FINANCEIRA",
+    "call_center_experiencia": "JARVIS_APPLICATION_CALL_CENTER_EXPERIENCIA",
+    "power_query_dax": "JARVIS_APPLICATION_POWER_QUERY_DAX",
+    "power_automate_nivel": "JARVIS_APPLICATION_POWER_AUTOMATE_NIVEL",
+    "google_sheets_nivel": "JARVIS_APPLICATION_GOOGLE_SHEETS_NIVEL",
+    "ia_experiencia": "JARVIS_APPLICATION_IA_EXPERIENCIA",
+    "susep_conhecimento": "JARVIS_APPLICATION_SUSEP_CONHECIMENTO",
+    "txt_csv_conhecimento": "JARVIS_APPLICATION_TXT_CSV_CONHECIMENTO",
+    "kpis_comerciais_experiencia": "JARVIS_APPLICATION_KPIS_COMERCIAIS_EXPERIENCIA",
+    "indicadores_experiencia": "JARVIS_APPLICATION_INDICADORES_EXPERIENCIA",
+    "disponibilidade_temporario": "JARVIS_APPLICATION_DISPONIBILIDADE_TEMPORARIO",
+    "ferramentas_analise_dominadas": "JARVIS_APPLICATION_FERRAMENTAS_ANALISE_DOMINADAS",
+    "ferramentas_visualizacao_dominadas": "JARVIS_APPLICATION_FERRAMENTAS_VISUALIZACAO_DOMINADAS",
+    "como_constroi_dashboards": "JARVIS_APPLICATION_COMO_CONSTROI_DASHBOARDS",
+    "resultado_real_dados": "JARVIS_APPLICATION_RESULTADO_REAL_DADOS",
+    "diferencial_analista": "JARVIS_APPLICATION_DIFERENCIAL_ANALISTA",
+    "atividades_vaga_experiencia": "JARVIS_APPLICATION_ATIVIDADES_VAGA_EXPERIENCIA",
+    "etl_ferramentas_experiencia": "JARVIS_APPLICATION_ETL_FERRAMENTAS_EXPERIENCIA",
+    "python_dbt_conhecimento": "JARVIS_APPLICATION_PYTHON_DBT_CONHECIMENTO",
+    "contas_pagar_receber": "JARVIS_APPLICATION_CONTAS_PAGAR_RECEBER",
+    "dre_relatorios_financeiros": "JARVIS_APPLICATION_DRE_RELATORIOS_FINANCEIROS",
+    "tecnologia_area_financeira": "JARVIS_APPLICATION_TECNOLOGIA_AREA_FINANCEIRA",
+    "analise_dados_financeiros": "JARVIS_APPLICATION_ANALISE_DADOS_FINANCEIROS",
+    "mmm_experiencia": "JARVIS_APPLICATION_MMM_EXPERIENCIA",
+    "inteligencia_mercado_experiencia": "JARVIS_APPLICATION_INTELIGENCIA_MERCADO_EXPERIENCIA",
+    "market_share_indicadores": "JARVIS_APPLICATION_MARKET_SHARE_INDICADORES",
+    "relatorios_executivos_experiencia": "JARVIS_APPLICATION_RELATORIOS_EXECUTIVOS_EXPERIENCIA",
+    "crm_experiencia": "JARVIS_APPLICATION_CRM_EXPERIENCIA",
+    "looker_apps_script": "JARVIS_APPLICATION_LOOKER_APPS_SCRIPT",
+    "python_dados_nivel": "JARVIS_APPLICATION_PYTHON_DADOS_NIVEL",
+    "melhoria_continua_exemplo": "JARVIS_APPLICATION_MELHORIA_CONTINUA_EXEMPLO",
+    "graduacao_area_tecnica": "JARVIS_APPLICATION_GRADUACAO_AREA_TECNICA",
+    "mestrado_concluido": "JARVIS_APPLICATION_MESTRADO_CONCLUIDO",
+    "conte_sua_experiencia": "JARVIS_APPLICATION_CONTE_SUA_EXPERIENCIA",
 }
 
 

@@ -427,6 +427,101 @@ def test_apply_resume_backed_profile_fields_leaves_graduacao_completa_unset_with
     assert profile["graduacao_completa"] is None
 
 
+def test_classify_question_field_recognizes_the_2026_09_14_chatgpt_drafted_batch():
+    # 2026-09-14: Nicholas had a separate assistant (web access to his
+    # public LinkedIn, cross-checked against his résumé) draft real,
+    # honest answers -- including real negatives -- for a batch of real,
+    # live-blocked InfoJobs listings. Every one of these was a genuine
+    # classification gap (the question appeared for real, no field
+    # matched it at all).
+    assert classify_question_field("Tem disponibilidade para estagiar das 09h00 às 16h00?") == "disponibilidade_estagio_09_16"
+    assert (
+        classify_question_field("Tem conhecimento em estatística e matemática financeira? Comente.")
+        == "estatistica_matematica_financeira"
+    )
+    assert classify_question_field("Já atuou na área de call center?") == "call_center_experiencia"
+    assert classify_question_field("Possui experiência com Power Query e DAX?") == "power_query_dax"
+    assert classify_question_field("Possui experiência com Power Automate?") == "power_automate_nivel"
+    assert classify_question_field("Você possuo conhecimento em Google Planilhas avançado?") == "google_sheets_nivel"
+    assert classify_question_field("Você possui experiência prévia com Inteligência Artificial (IA)?") == "ia_experiencia"
+    assert (
+        classify_question_field("Como você utiliza ferramentas de IA no seu dia a dia profissional?")
+        == "ia_experiencia"
+    )
+    assert classify_question_field("Possui vivência ou conhecimento de trâmites da SUSEP?") == "susep_conhecimento"
+    assert classify_question_field("Possui conhecimento e vivência com arquivos TXT, CSV ou similares?") == "txt_csv_conhecimento"
+    assert (
+        classify_question_field("Você possui experiência com análise de KPIs comerciais, dashboards e indicadores de vendas?")
+        == "kpis_comerciais_experiencia"
+    )
+    assert classify_question_field("Possui disponibilidade para atuar em contrato temporário?") == "disponibilidade_temporario"
+    assert classify_question_field("Possui interesse em vaga temporária 180 dias?") == "disponibilidade_temporario"
+    assert classify_question_field("Quais ferramentas de análise você domina?") == "ferramentas_analise_dominadas"
+    assert classify_question_field("Quais ferramentas de visualização você domina?") == "ferramentas_visualizacao_dominadas"
+    assert classify_question_field("Como você constrói seus relatórios e dashboards?") == "como_constroi_dashboards"
+    assert (
+        classify_question_field("Me conta sobre um resultado real que você gerou com dados.") == "resultado_real_dados"
+    )
+    assert classify_question_field("Qual é o seu diferencial como analista de dados?") == "diferencial_analista"
+    assert classify_question_field("Possui experiência com as atividades da vaga? Comente.") == "atividades_vaga_experiencia"
+    assert classify_question_field("Quantas ferramentas ETL você utilizou em projetos de BI?") == "etl_ferramentas_experiencia"
+    assert (
+        classify_question_field("Possui conhecimento prático ou teórico com Python ou DBT?") == "python_dbt_conhecimento"
+    )
+    assert (
+        classify_question_field("Você possui experiência prática com contas a pagar, contas a receber?")
+        == "contas_pagar_receber"
+    )
+    assert (
+        classify_question_field("Qual alternativa melhor representa sua experiência com DRE e relatórios financeiros gerenciais?")
+        == "dre_relatorios_financeiros"
+    )
+    assert (
+        classify_question_field("Qual alternativa melhor representa sua experiência com tecnologia aplicada à área financeira?")
+        == "tecnologia_area_financeira"
+    )
+    assert classify_question_field("Você tem experiência em análise de dados financeiros?") == "analise_dados_financeiros"
+    assert classify_question_field("Quantos anos de experiencia voce tem com Marketing Mix Modeling (MMM)") == "mmm_experiencia"
+    assert (
+        classify_question_field("Você possui experiência em Inteligência de Mercado, Planejamento Comercial?")
+        == "inteligencia_mercado_experiencia"
+    )
+    assert classify_question_field("Já trabalhou com indicadores de desempenho, market share?") == "market_share_indicadores"
+    assert (
+        classify_question_field("Você possui experiência na elaboração de relatórios gerenciais e apresentações executivas?")
+        == "relatorios_executivos_experiencia"
+    )
+    assert classify_question_field("Você já utilizou CRM em sua rotina profissional?") == "crm_experiencia"
+    assert classify_question_field("Possui conhecimento em Looker e Google Apps Script?") == "looker_apps_script"
+    assert (
+        classify_question_field("Possui experiência com Python ou outras linguagens de programação aplicadas à análise de dados?")
+        == "python_dados_nivel"
+    )
+    assert (
+        classify_question_field("Cite um exemplo de melhoria contínua que você implementou ou sugeriu com base em dados.")
+        == "melhoria_continua_exemplo"
+    )
+    assert (
+        classify_question_field("Você possui graduação em Engenharia, Economia, Administração, Ciências Exatas, Dados?")
+        == "graduacao_area_tecnica"
+    )
+    assert classify_question_field("Possui Graduação em áreas de exatas, computação e correlatas?") == "graduacao_area_tecnica"
+    assert classify_question_field("Concluiu seu mestrado?") == "mestrado_concluido"
+    # Résumé-backed extensions to already-existing fields (no new .env
+    # key needed -- see apply_resume_backed_profile_fields()).
+    assert classify_question_field("Está trabalhando no momento?") == "cargo_atual"
+    assert classify_question_field("Qual a sua formação acadêmica?") == "curso_nome"
+    assert classify_question_field("Qual a sua titulação (nome do curso, nível e mês e ano de conclusão)?") == "curso_nome"
+    assert (
+        classify_question_field("Comente sobre sua experiência com indicadores e análises gerenciais.")
+        == "indicadores_experiencia"
+    )
+    # The generic catch-all must stay LAST -- a more specific field
+    # covering the exact same real listing's OWN question keeps winning.
+    assert classify_question_field("Nos conte a respeito da sua experiência") == "conte_sua_experiencia"
+    assert classify_question_field("Comente brevemente suas experiência na área.") == "conte_sua_experiencia"
+
+
 def test_new_identity_fields_are_hard_pii():
     assert is_hard_pii_question("Órgão e Estado de emissão do RG")
     assert is_hard_pii_question("Nome da mãe")
