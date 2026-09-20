@@ -58,6 +58,15 @@ OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 # below, "warm" rarely holds between JARVIS activations spaced by normal
 # gaps -- the two fixes matter together, not either alone.
 LOCAL_MODEL = os.environ.get("JARVIS_MODEL", "qwen2.5:7b")
+# Separate model for assistant/coding_agent.py -- deliberately NOT the same
+# as LOCAL_MODEL above. That one is tuned for voice-turn latency (a small,
+# fast model); a coding task cares about capability, not sub-second
+# response, so it gets its own, larger, code-specialized model. No default
+# baked in on purpose -- `ollama pull` a real coding model first (see
+# assistant/coding_agent.py's module docstring for the current pick) and
+# set this explicitly, rather than silently falling back to a model never
+# meant for this job.
+CODING_MODEL = os.environ.get("JARVIS_MODEL_CODING")
 # How long Ollama keeps the model resident in memory after the last request
 # -- passed on every chat call (providers.py), not a server-side setting, so
 # it works regardless of how the Ollama service itself was started. 30
