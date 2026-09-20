@@ -145,6 +145,34 @@ def test_prepare_claude_prompt_logs_even_though_it_still_reports_clipboard_succe
     assert "copiado" in result.lower()
 
 
+# ---- ask_local_coding_agent ----
+
+
+def test_ask_local_coding_agent_delegates_with_project_root_as_workspace(monkeypatch):
+    import assistant.coding_agent as coding_agent
+    import config
+
+    captured = {}
+
+    def fake_run_coding_task(task, workspace_dir):
+        captured["task"] = task
+        captured["workspace_dir"] = workspace_dir
+        return "resposta real do agente"
+
+    monkeypatch.setattr(coding_agent, "run_coding_task", fake_run_coding_task)
+
+    result = tools.ask_local_coding_agent("o que o config.py faz?")
+
+    assert result == "resposta real do agente"
+    assert captured["task"] == "o que o config.py faz?"
+    # Fixed to the JARVIS repo's own src/ -- unlike prepare_claude_prompt,
+    # never guesses at "which project" the user means. src/, not
+    # PROJECT_ROOT itself, matching this project's own convention that
+    # every real path (assistant/, sites/, config.py...) is relative to
+    # src/ -- see README.md's "Arquitetura" section.
+    assert captured["workspace_dir"] == str(config.PROJECT_ROOT / "src")
+
+
 # ---- add_roadmap_item ----
 
 

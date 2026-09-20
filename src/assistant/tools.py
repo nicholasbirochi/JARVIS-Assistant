@@ -14,6 +14,14 @@ paste themselves, wherever/whenever they choose. That choice is
 deliberate, not a limitation to route around: which project a request is
 even about is Nicholas's call, not something to guess.
 
+ask_local_coding_agent() is the read-only counterpart, added once
+assistant/coding_agent.py existed: a real investigation of THIS
+project's own code (JARVIS's PROJECT_ROOT, fixed -- unlike
+prepare_claude_prompt, it never guesses at "which project" because it
+only ever looks at this one), answered by a separate local model
+(JARVIS_MODEL_CODING) actually reading files/searching/running tests,
+not the small, fast model this conversation itself runs on.
+
 add_roadmap_item()/add_reminder()/list_reminders() are the two other
 non-résumé tools -- respectively roadmap.py (appends to this
 project's own README.md "## Roadmap" section) and reminders.py
@@ -149,6 +157,33 @@ def prepare_claude_prompt(prompt: str) -> str:
 
     _log_claude_prompt(prompt)
     return "Prompt copiado para a área de transferência -- já pode colar numa conversa com o Claude Code."
+
+
+def ask_local_coding_agent(task: str) -> str:
+    """Faz uma pergunta ou pede uma investigação, SOMENTE LEITURA, sobre o
+    código do próprio JARVIS ao agente de coding local (assistant/coding_agent.py,
+    modelo separado configurado em JARVIS_MODEL_CODING).
+
+    Use para perguntas que exigem olhar o código de verdade (o que um
+    arquivo faz, onde algo é definido, se os testes passam, o que mudou)
+    -- diferente de prepare_claude_prompt, que é para PEDIR uma mudança de
+    código (esta ferramenta nunca escreve nem executa nada além dos
+    testes). Pode levar de alguns segundos a mais de um minuto -- avise
+    antes de chamar.
+
+    Args:
+        task: a pergunta ou tarefa de investigação, em texto livre.
+    """
+    from assistant.coding_agent import run_coding_task
+    from config import PROJECT_ROOT
+
+    # PROJECT_ROOT is the repo root, but this project's own convention
+    # (see README.md's "Arquitetura") treats every real path as relative
+    # to src/ -- "assistant/", "sites/config.py", etc. Real bug found
+    # live: pointing the workspace at PROJECT_ROOT made the agent report
+    # "assistant/ não existe" for a question about assistant/*.py, since
+    # that only exists under src/.
+    return run_coding_task(task, str(PROJECT_ROOT / "src"))
 
 
 def add_roadmap_item(description: str) -> str:
@@ -526,6 +561,7 @@ TOOLS = [
     list_supported_sites,
     push_resume_to_site,
     prepare_claude_prompt,
+    ask_local_coding_agent,
     add_roadmap_item,
     add_reminder,
     list_reminders,
