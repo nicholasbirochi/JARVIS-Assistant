@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .env
+.DS_Store
 src/data/backups/
 src/data/proposals/
 src/data/index_state.json
