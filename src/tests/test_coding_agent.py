@@ -1,5 +1,5 @@
 import copy
-from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -31,6 +31,10 @@ def set_coding_model(monkeypatch):
 
 def _patch_provider(monkeypatch, provider):
     monkeypatch.setattr(coding_agent, "get_provider", lambda model=None, host=None: provider)
+
+
+def _tools_by_name(workspace) -> dict:
+    return {f.__name__: f for f in make_tools(workspace)}
 
 
 def test_run_coding_task_refuses_when_no_model_configured(monkeypatch, tmp_path):
@@ -137,19 +141,19 @@ def test_run_coding_task_gives_up_after_max_iterations(monkeypatch, tmp_path):
 
 def test_make_tools_read_file_returns_content(tmp_path):
     (tmp_path / "nota.txt").write_text("conteúdo real", encoding="utf-8")
-    read_file, _, _ = make_tools(tmp_path)
+    read_file = _tools_by_name(tmp_path)["read_file"]
 
     assert read_file("nota.txt") == "conteúdo real"
 
 
 def test_make_tools_read_file_reports_missing_file(tmp_path):
-    read_file, _, _ = make_tools(tmp_path)
+    read_file = _tools_by_name(tmp_path)["read_file"]
 
     assert "não encontrado" in read_file("nao_existe.txt").lower()
 
 
 def test_make_tools_read_file_blocks_path_traversal(tmp_path):
-    read_file, _, _ = make_tools(tmp_path)
+    read_file = _tools_by_name(tmp_path)["read_file"]
 
     with pytest.raises(WorkspaceViolation):
         read_file("../../etc/passwd")
@@ -158,7 +162,7 @@ def test_make_tools_read_file_blocks_path_traversal(tmp_path):
 def test_make_tools_list_directory_lists_real_entries(tmp_path):
     (tmp_path / "b.py").write_text("", encoding="utf-8")
     (tmp_path / "sub").mkdir()
-    _, list_directory, _ = make_tools(tmp_path)
+    list_directory = _tools_by_name(tmp_path)["list_directory"]
 
     entries = list_directory(".").splitlines()
 
@@ -167,14 +171,14 @@ def test_make_tools_list_directory_lists_real_entries(tmp_path):
 
 
 def test_make_tools_list_directory_blocks_path_traversal(tmp_path):
-    _, list_directory, _ = make_tools(tmp_path)
+    list_directory = _tools_by_name(tmp_path)["list_directory"]
 
     with pytest.raises(WorkspaceViolation):
         list_directory("..")
 
 
 def test_make_tools_run_tests_invokes_pytest_scoped_to_workspace(tmp_path, monkeypatch):
-    _, _, run_tests = make_tools(tmp_path)
+    run_tests = _tools_by_name(tmp_path)["run_tests"]
     captured = {}
 
     class FakeCompleted:
@@ -196,10 +200,86 @@ def test_make_tools_run_tests_invokes_pytest_scoped_to_workspace(tmp_path, monke
 
 
 def test_make_tools_run_tests_blocks_path_traversal_in_target(tmp_path):
-    _, _, run_tests = make_tools(tmp_path)
+    run_tests = _tools_by_name(tmp_path)["run_tests"]
 
     with pytest.raises(WorkspaceViolation):
         run_tests(target="../../../etc")
+
+
+def test_make_tools_search_text_finds_a_real_match(tmp_path):
+    (tmp_path / "a.py").write_text("LOCAL_MODEL = 'qwen2.5:7b'\n", encoding="utf-8")
+    search_text = _tools_by_name(tmp_path)["search_text"]
+
+    result = search_text("LOCAL_MODEL")
+
+    assert "a.py" in result
+    assert "qwen2.5:7b" in result
+
+
+def test_make_tools_search_text_reports_no_matches(tmp_path):
+    (tmp_path / "a.py").write_text("nada relevante aqui\n", encoding="utf-8")
+    search_text = _tools_by_name(tmp_path)["search_text"]
+
+    assert "nenhuma ocorrência" in search_text("PADRAO_INEXISTENTE").lower()
+
+
+def test_make_tools_search_text_excludes_noise_directories(tmp_path):
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "cached.py").write_text("SEGREDO = 1\n", encoding="utf-8")
+    (tmp_path / "real.py").write_text("SEGREDO = 2\n", encoding="utf-8")
+    search_text = _tools_by_name(tmp_path)["search_text"]
+
+    result = search_text("SEGREDO")
+
+    assert "real.py" in result
+    assert "__pycache__" not in result
+
+
+def test_make_tools_search_text_reports_missing_directory(tmp_path):
+    search_text = _tools_by_name(tmp_path)["search_text"]
+
+    assert "não encontrado" in search_text("x", path="nao_existe").lower()
+
+
+def test_make_tools_git_log_reports_real_commits(tmp_path):
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Teste"], cwd=tmp_path, check=True)
+    (tmp_path / "a.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "a.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "primeiro commit"], cwd=tmp_path, check=True)
+    git_log = _tools_by_name(tmp_path)["git_log"]
+
+    assert "primeiro commit" in git_log()
+
+
+def test_make_tools_git_log_reports_when_not_a_repo(tmp_path):
+    git_log = _tools_by_name(tmp_path)["git_log"]
+
+    assert "não é um repositório git" in git_log().lower()
+
+
+def test_make_tools_git_diff_reports_real_uncommitted_change(tmp_path):
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "t@example.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Teste"], cwd=tmp_path, check=True)
+    (tmp_path / "a.txt").write_text("original\n", encoding="utf-8")
+    subprocess.run(["git", "add", "a.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "commit inicial"], cwd=tmp_path, check=True)
+    (tmp_path / "a.txt").write_text("mudou\n", encoding="utf-8")
+    git_diff = _tools_by_name(tmp_path)["git_diff"]
+
+    result = git_diff()
+
+    assert "mudou" in result
+    assert "original" in result
+
+
+def test_make_tools_git_diff_blocks_path_traversal(tmp_path):
+    git_diff = _tools_by_name(tmp_path)["git_diff"]
+
+    with pytest.raises(WorkspaceViolation):
+        git_diff(path="../../etc")
 
 
 def test_run_coding_task_recovers_a_real_tool_call_written_as_plain_json_content(monkeypatch, tmp_path):

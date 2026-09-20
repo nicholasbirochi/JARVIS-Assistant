@@ -37,9 +37,10 @@ Todos os caminhos abaixo são relativos a `src/` (ex.: `assistant/providers.py` 
   reduzir dependência de Claude/Codex hospedados em tarefas de engenharia), pela mesma
   abstração `LocalLLMProvider` acima, mas com modelo próprio (`JARVIS_MODEL_CODING` --
   ver Setup) e um conjunto de ferramentas bem mais restrito: **somente leitura**
-  (`read_file`/`list_directory`/`run_tests`), preso a um workspace específico com
-  proteção real contra sair da pasta (`WorkspaceViolation`). Ainda não edita nem executa
-  nada -- primeira versão é propositalmente de auditoria/consulta, não de escrita.
+  (`read_file`/`list_directory`/`search_text`/`git_log`/`git_diff`/`run_tests`), preso a
+  um workspace específico com proteção real contra sair da pasta (`WorkspaceViolation`).
+  Ainda não edita nem executa nada -- primeira versão é propositalmente de
+  auditoria/consulta, não de escrita.
 - **`resume/schema.py`** — currículo canônico com procedência: cada item
   (experiência, certificação, projeto...) carrega uma lista de `Evidence` (arquivo de
   origem, tipo, data de leitura, trecho, confiança, status de revisão). Conflitos entre

@@ -46,6 +46,13 @@ MAX_TOOL_ITERATIONS = 12
 _READ_FILE_CHAR_LIMIT = 20_000
 _TEST_OUTPUT_CHAR_LIMIT = 4_000
 _TEST_TIMEOUT_SECONDS = 120
+_SEARCH_OUTPUT_CHAR_LIMIT = 4_000
+_SEARCH_TIMEOUT_SECONDS = 30
+_GIT_OUTPUT_CHAR_LIMIT = 4_000
+_GIT_TIMEOUT_SECONDS = 15
+# Real noise for a codebase-wide text search -- none of these ever hold
+# source the agent should be reading, only generated/vendored output.
+_SEARCH_EXCLUDE_DIRS = [".git", "__pycache__", ".venv", "node_modules", ".pytest_cache"]
 
 _SYSTEM_PROMPT = """\
 Você é um agente de coding local, rodando inteiramente na máquina do \
@@ -53,8 +60,10 @@ usuário (sem nenhuma chamada de rede externa). Sua tarefa é ajudar em \
 tarefas reais de engenharia de software dentro do workspace indicado.
 
 Nesta primeira versão você é SOMENTE LEITURA: pode listar diretórios, \
-ler arquivos e rodar a suíte de testes (pytest) -- nunca editar ou \
-criar arquivos, nunca rodar comandos além dos testes. Se a tarefa \
+ler arquivos, buscar texto/padrões em vários arquivos de uma vez \
+(search_text), consultar o histórico e as mudanças não commitadas do \
+git (git_log/git_diff) e rodar a suíte de testes (pytest) -- nunca \
+editar ou criar arquivos, nunca rodar comandos além desses. Se a tarefa \
 pedida exigir escrever código, responda com a mudança proposta em \
 texto (um trecho claro ou diff) para o usuário aplicar manualmente -- \
 não finja que aplicou algo que não foi de fato escrito em disco.
@@ -129,7 +138,74 @@ def make_tools(workspace: Path) -> list[Callable]:
             return f"Testes excederam o tempo limite ({_TEST_TIMEOUT_SECONDS}s)."
         return (result.stdout + result.stderr)[-_TEST_OUTPUT_CHAR_LIMIT:]
 
-    return [read_file, list_directory, run_tests]
+    def search_text(pattern: str, path: str = ".") -> str:
+        """Busca um texto ou expressão regular nos arquivos de um diretório
+        do workspace (equivalente a um grep recursivo).
+
+        Args:
+            pattern: texto ou expressão regular (sintaxe grep) a buscar.
+            path: diretório relativo ao workspace onde buscar (padrão: raiz do workspace).
+        """
+        target = _resolve_within_workspace(workspace, path)
+        if not target.is_dir():
+            return f"Diretório não encontrado: {path}"
+        exclude_args = [arg for name in _SEARCH_EXCLUDE_DIRS for arg in ("--exclude-dir", name)]
+        try:
+            result = subprocess.run(
+                ["grep", "-rn", *exclude_args, "-e", pattern, str(target)],
+                capture_output=True,
+                text=True,
+                timeout=_SEARCH_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            return f"Busca excedeu o tempo limite ({_SEARCH_TIMEOUT_SECONDS}s)."
+        # grep's own exit code: 0 = matches found, 1 = none found (not an
+        # error), 2+ = a real error (bad pattern, unreadable path, etc.).
+        if result.returncode not in (0, 1):
+            return f"Erro na busca: {result.stderr.strip()}"
+        matches = result.stdout.strip()
+        return matches[:_SEARCH_OUTPUT_CHAR_LIMIT] if matches else "Nenhuma ocorrência encontrada."
+
+    def git_log(max_count: int = 10) -> str:
+        """Mostra o histórico recente de commits do workspace.
+
+        Args:
+            max_count: quantos commits mostrar, do mais recente pro mais antigo (padrão: 10).
+        """
+        try:
+            result = subprocess.run(
+                ["git", "log", f"-{max_count}", "--oneline"],
+                cwd=workspace,
+                capture_output=True,
+                text=True,
+                timeout=_GIT_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            return f"git log excedeu o tempo limite ({_GIT_TIMEOUT_SECONDS}s)."
+        if result.returncode != 0:
+            return f"Não é um repositório git ou ocorreu um erro: {result.stderr.strip()}"
+        return result.stdout.strip() or "(sem commits)"
+
+    def git_diff(path: str = "") -> str:
+        """Mostra as mudanças ainda não commitadas do workspace (git diff).
+
+        Args:
+            path: caminho relativo ao workspace pra restringir o diff (padrão: workspace inteiro).
+        """
+        args = ["git", "diff"]
+        if path:
+            args.append(_resolve_within_workspace(workspace, path).as_posix())
+        try:
+            result = subprocess.run(
+                args, cwd=workspace, capture_output=True, text=True, timeout=_GIT_TIMEOUT_SECONDS
+            )
+        except subprocess.TimeoutExpired:
+            return f"git diff excedeu o tempo limite ({_GIT_TIMEOUT_SECONDS}s)."
+        if result.returncode != 0:
+            return f"Não é um repositório git ou ocorreu um erro: {result.stderr.strip()}"
+        return (result.stdout.strip() or "(sem mudanças)")[:_GIT_OUTPUT_CHAR_LIMIT]
+
+    return [read_file, list_directory, run_tests, search_text, git_log, git_diff]
 
 
 def _recover_tool_call_from_content(content: str, known_tool_names: set[str]) -> ToolCallRequest | None:
