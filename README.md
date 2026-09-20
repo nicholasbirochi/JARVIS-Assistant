@@ -33,6 +33,13 @@ Todos os caminhos abaixo são relativos a `src/` (ex.: `assistant/providers.py` 
   padrão 30min) -- o padrão do próprio Ollama (5min) foi a causa real de respostas lentas
   medida na prática: qualquer intervalo maior entre ativações do JARVIS forçava um recarregamento
   frio do modelo (~30s) na resposta seguinte.
+- **`assistant/coding_agent.py`** — agente de coding local (primeiro passo pra
+  reduzir dependência de Claude/Codex hospedados em tarefas de engenharia), pela mesma
+  abstração `LocalLLMProvider` acima, mas com modelo próprio (`JARVIS_MODEL_CODING` --
+  ver Setup) e um conjunto de ferramentas bem mais restrito: **somente leitura**
+  (`read_file`/`list_directory`/`run_tests`), preso a um workspace específico com
+  proteção real contra sair da pasta (`WorkspaceViolation`). Ainda não edita nem executa
+  nada -- primeira versão é propositalmente de auditoria/consulta, não de escrita.
 - **`resume/schema.py`** — currículo canônico com procedência: cada item
   (experiência, certificação, projeto...) carrega uma lista de `Evidence` (arquivo de
   origem, tipo, data de leitura, trecho, confiança, status de revisão). Conflitos entre
@@ -96,6 +103,12 @@ cp .env.example .env   # opcional -- ver abaixo
 brew install ollama
 brew services start ollama
 ollama pull qwen2.5:7b   # ~4.7GB, baixa uma vez -- ~4x mais rápido que o 14b uma vez "aquecido"
+
+# Só necessário para usar o agente de coding local (assistant/coding_agent.py) --
+# modelo SEPARADO do de cima, de propósito (esse é escolhido por capacidade de
+# código, não por latência de voz). ~9GB, baixa uma vez.
+ollama pull qwen2.5-coder:14b
+# depois, no seu .env: JARVIS_MODEL_CODING=qwen2.5-coder:14b
 
 # Só necessário se for usar os adaptadores de site (sites/) -- baixa o Chromium
 # que o Playwright controla (não é o seu navegador normal, ~150MB, uma vez só)
