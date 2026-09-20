@@ -15,7 +15,11 @@ docstring); `catho-login` / `catho-preview` / `catho-apply` drive Catho
 `indeed-login` / `indeed-preview` / `indeed-apply` drive Indeed
 (sites/indeed.py); `linkedin-login` opens LinkedIn for manual login
 (sites/linkedin.py, search_jobs() only -- profile editing is
-permanently out of scope there, so there's no linkedin-preview/-apply)."""
+permanently out of scope there, so there's no linkedin-preview/-apply);
+`python src/cli.py code "tarefa" [--workspace pasta]` asks the local,
+read-only coding agent (assistant/coding_agent.py) to investigate the
+given workspace (default: current directory) -- requires
+JARVIS_MODEL_CODING set in .env first."""
 
 from __future__ import annotations
 
@@ -149,6 +153,14 @@ def main() -> None:
     subparsers.add_parser(
         "linkedin-login", help="Abre um navegador para login manual (uma vez só) no LinkedIn (só busca de vagas)."
     )
+    code_parser = subparsers.add_parser(
+        "code",
+        help="Pede uma tarefa (somente leitura) ao agente de coding local -- assistant/coding_agent.py.",
+    )
+    code_parser.add_argument("task", help="A tarefa a pedir, em texto livre (ex.: 'o que o config.py faz?').")
+    code_parser.add_argument(
+        "--workspace", default=".", help="Pasta a auditar, relativa ou absoluta (padrão: diretório atual)."
+    )
     args = parser.parse_args()
 
     if args.command == "index":
@@ -234,6 +246,12 @@ def main() -> None:
         from sites.linkedin import LinkedInAdapter
 
         LinkedInAdapter().login()
+        return
+
+    if args.command == "code":
+        from assistant.coding_agent import run_coding_task
+
+        print(run_coding_task(args.task, args.workspace))
         return
 
     from assistant.conversation import run_text_loop, run_voice_loop
