@@ -11,6 +11,9 @@ src/data/job_matches/
 src/data/applications_sent.json
 # legacy path -- session state now defaults outside the repo (see config.py's LOCAL_STATE_DIR); kept as a safety net
 src/data/sites/
+# scripts/benchmark_coding_agent.py's raw output -- real, machine/timing-
+# dependent run data, regenerated every run, not source
+src/data/coding_agent_benchmarks/
 .pytest_cache/
 *.egg-info/
 Completed courses/

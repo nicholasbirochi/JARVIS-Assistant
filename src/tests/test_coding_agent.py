@@ -45,6 +45,25 @@ def test_run_coding_task_refuses_when_no_model_configured(monkeypatch, tmp_path)
     assert "JARVIS_MODEL_CODING" in result
 
 
+def test_run_coding_task_uses_explicit_model_over_config(monkeypatch, tmp_path):
+    # scripts/benchmark_coding_agent.py relies on this to compare multiple
+    # models in one process -- config.CODING_MODEL alone can't do that,
+    # since config is only ever imported (and thus read) once.
+    monkeypatch.setattr(config, "CODING_MODEL", "qwen2.5-coder:14b")
+    captured = {}
+
+    def fake_get_provider(model=None, host=None):
+        captured["model"] = model
+        return ScriptedProvider([ProviderResponse(content="ok")])
+
+    monkeypatch.setattr(coding_agent, "get_provider", fake_get_provider)
+
+    result = run_coding_task("audite o projeto", str(tmp_path), model="qwen2.5:7b")
+
+    assert result == "ok"
+    assert captured["model"] == "qwen2.5:7b"
+
+
 def test_run_coding_task_reports_missing_workspace(monkeypatch):
     provider = ScriptedProvider([])
     _patch_provider(monkeypatch, provider)

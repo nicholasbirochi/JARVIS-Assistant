@@ -239,13 +239,22 @@ def _recover_tool_call_from_content(content: str, known_tool_names: set[str]) ->
     return ToolCallRequest(name=name, arguments=arguments)
 
 
-def run_coding_task(task: str, workspace_dir: str) -> str:
-    """Executa uma tarefa de coding, somente leitura, usando o modelo
-    configurado em JARVIS_MODEL_CODING. Retorna a resposta final do
-    modelo (texto) -- nunca aplica nenhuma mudança em disco."""
-    from config import CODING_MODEL
+def run_coding_task(task: str, workspace_dir: str, *, model: str | None = None) -> str:
+    """Executa uma tarefa de coding, somente leitura, usando o modelo dado
+    (ou, se omitido, o configurado em JARVIS_MODEL_CODING). Retorna a
+    resposta final do modelo (texto) -- nunca aplica nenhuma mudança em
+    disco.
 
-    if not CODING_MODEL:
+    `model` existe para permitir comparar modelos diferentes no mesmo
+    processo (ver scripts/benchmark_coding_agent.py) -- `config.CODING_MODEL`
+    sozinho não serviria pra isso, já que é lido uma vez só na importação
+    do módulo `config`, não a cada chamada."""
+    if model is None:
+        from config import CODING_MODEL
+
+        model = CODING_MODEL
+
+    if not model:
         return (
             "JARVIS_MODEL_CODING não está configurado -- defina no .env antes "
             "de usar o agente de coding (ver assistant/coding_agent.py)."
@@ -259,7 +268,7 @@ def run_coding_task(task: str, workspace_dir: str) -> str:
     functions_by_name = {f.__name__: f for f in tools}
     tool_specs = functions_to_tool_specs(tools)
 
-    provider: LocalLLMProvider = get_provider(model=CODING_MODEL)
+    provider: LocalLLMProvider = get_provider(model=model)
     messages: list[dict] = [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": task},
