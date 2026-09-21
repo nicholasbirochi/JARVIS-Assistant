@@ -574,9 +574,16 @@ class GupyAdapter(SiteAdapter):
         standard referral questions, always answered "Não"/"Não" -- see
         module docstring), then stops the instant it reaches ANY
         company-specific question. Never submits anything, and
-        can_submit is always False today -- the real final submit screen
-        has never been observed live (see module docstring). This is the
-        apply-flow equivalent of preview_changes() above. Never fills in
+        can_submit is always False today -- this method itself never
+        clicks a final submit button, by design (that's
+        continue_application_with_profile()'s job, gated by
+        confirmed=True). The final submit screen HAS since been observed
+        live for a zero-question listing (2026-09-21, 3 real Gupy
+        submissions with no company questions at all -- CiX, Aqua
+        Capital, Leão -- via continue_application_with_profile(),
+        confirming that path works, not just the with-questions one from
+        2026-08-19/Integra CSC). This is the apply-flow equivalent of
+        preview_changes() above. Never fills in
         or saves a real referral contact's name/email even if one exists
         locally -- use continue_application_with_profile() for that (a
         real, mutating action, gated by confirmed=True like every other
