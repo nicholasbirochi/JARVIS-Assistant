@@ -39,11 +39,10 @@ from __future__ import annotations
 import threading
 
 from assistant.llm_client import send_turn
-from config import GREETING, STOP_PHRASES
+from config import GOODBYE, GREETING, STOP_PHRASES
 from voice import tts
 from voice import audio, stt
 
-GOODBYE = "Até logo, Senhor Nicholas."
 MAX_CONSECUTIVE_EMPTY_TRANSCRIPTIONS = 3
 
 

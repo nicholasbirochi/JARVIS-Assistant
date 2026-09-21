@@ -1,10 +1,13 @@
 # J • A • R • V • I • S
 
-Assistente de voz pessoal do Nicholas. Ativado por wake word sem depender de nenhuma
-conta/chave externa, conversa em português por voz, e mantém um perfil profissional
-único e estruturado (`src/data/resume.json`) com procedência (evidência/fonte) por fato, que
-futuramente será publicado em sites de vagas (LinkedIn, Gupy, Catho, InfoJobs, Vagas.com,
-Indeed, Academia do Universitário e outros via adaptadores).
+Assistente de voz pessoal, local e adaptável -- criado pelo Nicholas, mas pensado desde
+o início pra qualquer pessoa rodar sua própria instância (nome, tratamento e currículo
+são configuráveis; ver "Rodando para outra pessoa" no Setup abaixo). Ativado por wake
+word sem depender de nenhuma conta/chave externa, conversa em português por voz, e
+mantém um perfil profissional único e estruturado (`src/data/resume.json`, dado local de
+cada pessoa, nunca versionado -- ver abaixo) com procedência (evidência/fonte) por fato,
+que futuramente será publicado em sites de vagas (LinkedIn, Gupy, Catho, InfoJobs,
+Vagas.com, Indeed, Academia do Universitário e outros via adaptadores).
 
 100% local: o "cérebro" roda via [Ollama](https://ollama.com) na própria máquina —
 nenhum dado do currículo ou da conversa sai do Mac, sem API paga, sem chave de nenhum
@@ -65,9 +68,13 @@ Todos os caminhos abaixo são relativos a `src/` (ex.: `assistant/providers.py` 
   todo o projeto vive dentro de uma pasta sincronizada com o OneDrive, e cookies de login
   reais (e, se algum dia houver, screenshots de evidência) nunca devem sair desta máquina
   nem pra uma nuvem que já é "confiada" por outro motivo. `src/data/resume.json` pode
-  continuar em `src/data/` (dentro do projeto) porque o schema já exclui de propósito CPF/RG/
-  endereço/data de nascimento -- ver `.env.example` para trocar o caminho
-  (`JARVIS_LOCAL_STATE_DIR`).
+  continuar em `src/data/` (dentro do projeto, sincronizado com o OneDrive) porque o
+  schema já exclui de propósito CPF/RG/endereço/data de nascimento -- mas esse repositório
+  Git é **público** no GitHub, o que é uma barra bem mais alta: por isso
+  `src/data/resume.json` e `src/data/review/` estão no `.gitignore` e nunca são
+  commitados, mesmo contendo só nome/telefone/e-mail/currículo. Cada pessoa gera o seu
+  localmente (`scripts/import_resume.py`) e ele fica só na própria máquina. Ver
+  `.env.example` para trocar o caminho do `LOCAL_STATE_DIR` (`JARVIS_LOCAL_STATE_DIR`).
 - **`menubar.py`** — app de menu bar (macOS) com botão liga/desliga; roda o loop
   de voz em background thread, controlado por `VoiceLoopController`. Inicia **desligado**
   (ícone visível, mas não ouvindo até você clicar) e sem ícone no Dock/Cmd-Tab (política de
@@ -130,6 +137,46 @@ em vez do openWakeWord padrão, apontar para um Ollama/modelo diferente, trocar 
 do TTS padrão (`TTS_VOICE` -- ver `.env.example` para como achar uma boa voz masculina, já
 que as que o macOS instala por padrão são de baixa qualidade), ou desligar a voz clonada
 (`TTS_ENGINE=say`).
+
+### Rodando para outra pessoa (ex.: um irmão/amigo)
+
+Este projeto foi pensado desde o início pra não ficar preso a uma pessoa só -- cada um
+roda sua **própria instância** (próprio clone, próprio `.venv`, próprio `.env`, próprios
+dados locais), não uma instância compartilhada. Nada disso precisa mexer em código, só no
+`.env` de cada um:
+
+```bash
+# Como o JARVIS se dirige a você (padrão: Nicholas / "Senhor Nicholas")
+JARVIS_USER_NAME=Fulano
+JARVIS_USER_HONORIFIC=Fulano          # ou "Senhor Fulano", "Doutor Fulano" etc.
+
+# As frases exatas faladas na ativação/despedida -- se não setar, são geradas a
+# partir dos dois acima com o texto padrão em português
+JARVIS_GREETING=Seja bem-vindo, Fulano... vamos começar o trabalho!
+JARVIS_CLAP_GREETING=Olá, Fulano, vamos começar o trabalho!
+JARVIS_GOODBYE=Até logo, Fulano.
+
+# Onde ficam os SEUS currículos-fonte (.docx), pra "python src/scripts/import_resume.py"
+# -- caminhos absolutos separados por ":" (o separador de path do seu sistema)
+JARVIS_SOURCE_RESUME_DOCS=/Users/fulano/Documents/Curriculo Brasil ATS.docx:/Users/fulano/Documents/Curriculo International ATS.docx
+
+# Só necessário se você também usar OneDrive pro indexador incremental
+# (python src/cli.py index) -- troca a raiz que AUTHORIZED_INDEX_ROOTS usa
+JARVIS_ONEDRIVE_ROOT=/Users/fulano/Library/CloudStorage/OneDrive-SuaOrg
+```
+
+Depois, rode `python src/scripts/import_resume.py` normalmente -- gera o **seu**
+`src/data/resume.json` local, que nunca é commitado (está no `.gitignore` de propósito,
+já que este repositório é público no GitHub -- ver "Arquitetura" acima). O arquivo
+`~/Library/Application Support/JARVIS/application_profile.env` (RG/CPF/pretensão
+salarial, se você usar os adaptadores de site) já é local por máquina, sem mudança
+nenhuma necessária.
+
+**Limitação conhecida, ainda não resolvida:** `find_matching_jobs`/`open_job_portal`
+classificam vaga "perto de você" vs. "home office" usando uma lista de cidades fixa em
+`sites/job_matching.py` (`_TARGET_REGION_TERMS`), hoje hardcoded pra região do Nicholas
+(São Bernardo do Campo/ABC/São Paulo) -- ainda não é uma variável de ambiente. Pra outra
+cidade, isso vai classificar errado até alguém parametrizar essa lista também.
 
 ## Uso
 

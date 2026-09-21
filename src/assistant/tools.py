@@ -87,7 +87,7 @@ SUPPORTED_SITES = ["LinkedIn", "Gupy", "Catho", "InfoJobs", "Vagas.com", "Indeed
 
 
 def read_resume() -> str:
-    """Retorna o currículo completo do Nicholas em JSON.
+    """Retorna o currículo completo do usuário em JSON.
 
     Use sempre que precisar consultar os dados atuais do currículo, antes de
     responder uma pergunta sobre ele ou antes de editar um campo.
@@ -208,10 +208,10 @@ def add_roadmap_item(description: str) -> str:
 
 
 def add_reminder(text: str) -> str:
-    """Anota um lembrete pessoal para o Nicholas ver depois.
+    """Anota um lembrete pessoal para o usuário ver depois.
 
     Args:
-        text: O texto do lembrete, como o Nicholas pediria para anotar.
+        text: O texto do lembrete, como o usuário pediria para anotar.
     """
     import reminders
 
@@ -230,12 +230,13 @@ def list_reminders() -> str:
 
 
 def find_matching_jobs() -> str:
-    """Busca vagas de emprego reais que combinam com o currículo do Nicholas,
-    em InfoJobs, Catho e Gupy -- separadas em presencial/híbrido perto dele
-    (São Bernardo do Campo, Centro de São Paulo, região do ABC) e home
+    """Busca vagas de emprego reais que combinam com o currículo do usuário,
+    em InfoJobs, Catho e Gupy -- separadas em presencial/híbrido perto da
+    região configurada (ver sites/job_matching.py -- hoje fixa na região do
+    Nicholas, ainda não configurável por variável de ambiente) e home
     office (nacional e internacional).
 
-    Use quando o Nicholas pedir para buscar/procurar vagas de emprego.
+    Use quando o usuário pedir para buscar/procurar vagas de emprego.
     Essa busca é REAL (abre navegador de verdade, pode levar 1 a 2
     minutos) -- avise que vai demorar um pouco antes de chamar esta
     ferramenta. Não inclui Indeed (bloqueado no momento, ver roadmap) nem
@@ -266,7 +267,7 @@ def list_recent_job_matches() -> str:
 
 
 def evaluate_investments() -> str:
-    """Avalia o patrimônio e os investimentos do Nicholas, lendo a planilha
+    """Avalia o patrimônio e os investimentos do usuário, lendo a planilha
     Patrimônio.xlsx que ele mesmo mantém (enquanto não há integração direta
     com os bancos).
 
@@ -399,7 +400,7 @@ def continue_job_application(url: str, *, finalize: bool = False) -> str:
 
 
 def setup_application_profile() -> str:
-    """Cria (se ainda não existir) o arquivo local onde o Nicholas
+    """Cria (se ainda não existir) o arquivo local onde o usuário
     preenche RG, órgão/estado de emissão do RG, CPF, nome da mãe, nome
     do pai, naturalidade, pretensão salarial (estágio/júnior/pleno,
     separadas) e estado civil -- nunca sincronizado, nunca versionado,

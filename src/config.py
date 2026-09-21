@@ -75,12 +75,25 @@ CODING_MODEL = os.environ.get("JARVIS_MODEL_CODING")
 # for a long stretch.
 OLLAMA_KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
 
+# This project is meant to be cloned and run by more than one person (each
+# on their own machine, own .env, own local data) -- not a single shared
+# instance. USER_NAME/USER_HONORIFIC drive every spoken/written place the
+# assistant addresses its owner by name (greetings, the conversation system
+# prompt in assistant/llm_client.py) -- a second person (e.g. an irmão who's
+# also a developer) sets their own in their own .env and gets their own
+# JARVIS without touching any code. Defaults are Nicholas's own, unchanged.
+USER_NAME = os.environ.get("JARVIS_USER_NAME", "Nicholas")
+USER_HONORIFIC = os.environ.get("JARVIS_USER_HONORIFIC", f"Senhor {USER_NAME}")
+
 # Spoken the instant a trigger fires, before the model is ever invoked -- an
 # LLM asked to "say this greeting" could paraphrase or drop the punctuation,
 # which isn't acceptable for a phrase the user specified verbatim. Each
-# trigger has its own exact phrase.
-GREETING = "Seja bem-vindo, Senhor Nicholas... vamos começar o trabalho!"
-CLAP_GREETING = "Olá, Nicolas, vamos começar o trabalho!"
+# trigger has its own exact phrase. Overridable directly (not just derived
+# from USER_NAME/USER_HONORIFIC above) since the exact wording is a matter
+# of personal taste, not just a name substitution.
+GREETING = os.environ.get("JARVIS_GREETING", "Seja bem-vindo, Senhor Nicholas... vamos começar o trabalho!")
+CLAP_GREETING = os.environ.get("JARVIS_CLAP_GREETING", "Olá, Nicolas, vamos começar o trabalho!")
+GOODBYE = os.environ.get("JARVIS_GOODBYE", "Até logo, Senhor Nicholas.")
 
 # "Felipe (Aprimorada)" -- com.apple.voice.enhanced.pt-BR.Felipe -- is a
 # proper Enhanced-quality male pt_BR voice (downloaded via System Settings >
@@ -166,7 +179,11 @@ CLAP_WINDOW_SECONDS = float(os.environ.get("CLAP_WINDOW_SECONDS", "1.5"))
 WHISPER_MODEL_SIZE = "small"
 WHISPER_LANGUAGE = "pt"
 
-SOURCE_RESUME_DOCS = [
+# Nicholas's own exact filenames, kept as the default so his own setup needs
+# no .env changes. A second person (own OneDrive/Drive account, own résumé
+# filenames) sets JARVIS_SOURCE_RESUME_DOCS (paths joined by os.pathsep --
+# ":" on macOS/Linux) in their own .env instead of editing this file.
+_DEFAULT_SOURCE_RESUME_DOCS = [
     # 2026-09-07: real drift found live, in two stages. First: Nicholas
     # had renamed the on-disk files, dropping the " ATS" suffix this
     # constant expected -- fixed by pointing at the renamed files. But
@@ -183,11 +200,18 @@ SOURCE_RESUME_DOCS = [
     "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - Brasil ATS.docx",
     "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena/Extras/Perfil/Currículos/Currículo - DataBase - International ATS.docx",
 ]
+_source_resume_docs_env = os.environ.get("JARVIS_SOURCE_RESUME_DOCS")
+SOURCE_RESUME_DOCS = _source_resume_docs_env.split(os.pathsep) if _source_resume_docs_env else _DEFAULT_SOURCE_RESUME_DOCS
 
 # Incremental document indexer (indexing/) -- only these roots are ever
 # scanned; the project's own repo is explicitly excluded so code/README never
-# get mistaken for résumé projects.
-_ONEDRIVE_ROOT = "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena"
+# get mistaken for résumé projects. _ONEDRIVE_ROOT is overridable on its own
+# (JARVIS_ONEDRIVE_ROOT) since a second person's username/cloud folder name
+# differs but the same three-subfolder shape underneath it is a reasonable
+# default to keep.
+_ONEDRIVE_ROOT = os.environ.get(
+    "JARVIS_ONEDRIVE_ROOT", "/Users/nicholasbirochi/Library/CloudStorage/OneDrive-FundaçãoSalvadorArena"
+)
 AUTHORIZED_INDEX_ROOTS = [
     Path(f"{_ONEDRIVE_ROOT}/Extras/Perfil/Currículos"),
     Path(f"{_ONEDRIVE_ROOT}/Estudos/Completed courses"),
