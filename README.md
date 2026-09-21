@@ -114,9 +114,18 @@ ollama pull qwen2.5:7b   # ~4.7GB, baixa uma vez -- ~4x mais rápido que o 14b u
 
 # Só necessário para usar o agente de coding local (assistant/coding_agent.py) --
 # modelo SEPARADO do de cima, de propósito (esse é escolhido por capacidade de
-# código, não por latência de voz). ~9GB, baixa uma vez.
+# código, não por latência de voz). ~9GB, baixa uma vez -- é o que roda de
+# verdade numa máquina de 24GB de RAM.
 ollama pull qwen2.5-coder:14b
 # depois, no seu .env: JARVIS_MODEL_CODING=qwen2.5-coder:14b
+
+# Só se sua máquina tiver 64GB+ de RAM (ex.: um Mac mini/Studio) -- muito
+# maiores, não rodam bem em 24GB. qwen3-coder:30b (~19GB, maduro, especializado
+# em código) e nemotron-3.5-lightning:30b (~25GB, mais novo, feito pra
+# "execução de agentes always-on") -- ver assistant/coding_agent.py pra
+# comparação completa.
+# ollama pull qwen3-coder:30b
+# ollama pull nemotron-3.5-lightning:30b
 
 # Só necessário se for usar os adaptadores de site (sites/) -- baixa o Chromium
 # que o Playwright controla (não é o seu navegador normal, ~150MB, uma vez só)

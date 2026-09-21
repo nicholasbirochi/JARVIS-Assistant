@@ -18,12 +18,34 @@ Current model recommendation (2026-09-20, see
 JARVIS_Apple_Private_AI_Cluster_MASTER_v3.zip's own
 07_MODEL_RUNTIME_STRATEGY.md for the full reasoning, confirmed live):
 `qwen2.5-coder:14b` on the current 24 GB machine (~9 GB, fits
-comfortably); `qwen3-coder:30b` once on the future 64 GB Mac mini.
-Neither is hardcoded here -- set JARVIS_MODEL_CODING in .env.
-run_coding_task() refuses to run with no model configured rather than
-silently falling back to config.LOCAL_MODEL (the voice assistant's own
-model, deliberately small/fast for conversational latency -- see that
-constant's own comment -- not sized or chosen for coding capability).
+comfortably). None of the below is hardcoded here -- set
+JARVIS_MODEL_CODING in .env. run_coding_task() refuses to run with no
+model configured rather than silently falling back to config.LOCAL_MODEL
+(the voice assistant's own model, deliberately small/fast for
+conversational latency -- see that constant's own comment -- not sized
+or chosen for coding capability).
+
+Two real candidates for the future 64 GB Mac mini were pulled onto THIS
+machine already (2026-09-20, ~44GB combined, verified against Ollama's
+own library pages directly -- not the AI-generated "best models" blog
+posts that keep surfacing suspiciously-named entries), specifically so
+the download doesn't have to happen again once the Mac mini exists --
+Ollama's model storage (~/.ollama/models, content-addressed blobs +
+manifests) is a plain directory copy away from being usable on another
+Apple Silicon Mac, no re-pull needed:
+- `qwen3-coder:30b` (19GB, MoE 30B total/3.3B active, 256K context) --
+  the mature, code-specialized pick, unchanged from the original
+  recommendation above.
+- `nemotron-3.5-lightning:30b` (25GB, MoE 30B total/3B active, 1M
+  context) -- NVIDIA, newer, marketed specifically as built "for the
+  execution layer of always-on agents", i.e. aimed directly at the real
+  failure mode found in scripts/benchmark_coding_agent.py's first run
+  (qwen2.5-coder:14b often retrieves the right data via tools but fails
+  the final precise-answer synthesis step) -- a real, targeted
+  hypothesis to test once hardware allows, not a hunch.
+Neither has been run on this 24GB machine -- 19-25GB of weights alone
+leaves too little headroom here for KV cache + everything else already
+resident; that test only makes sense on the Mac mini.
 
 Workspace-scoped by design (a real, named concern in the blueprint's
 own SECURITY/THREAT_MODEL.md -- path traversal): every tool here takes
