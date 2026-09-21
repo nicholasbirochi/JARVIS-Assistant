@@ -535,6 +535,9 @@ def test_classify_question_field_recognizes_round_2_of_the_chatgpt_drafted_batch
         == "projeto_automacao_digitalizacao"
     )
     assert classify_question_field("Inglês avançado ?") == "ingles_nivel"
+    # 2026-09-21, real miss found live (Gupy, MTP Métodos e Tecnologia):
+    # "proficiência" instead of "nível"/"conhecimento".
+    assert classify_question_field("Qual sua proficiência em inglês?") == "ingles_nivel"
     # "Power B.I" (a literal dot between B and I) doesn't contain the
     # bare "power bi" substring.
     assert classify_question_field("Possui vivência com análise e validação de dados em Power B.I?") == "powerbi_nivel"

@@ -438,6 +438,12 @@ _FIELD_TERMS: dict[str, list[str]] = {
         # framing at all.
         "inglês avançado",
         "ingles avancado",
+        # 2026-09-21, real miss found live (Gupy batch-apply run, MTP
+        # Métodos e Tecnologia): "proficiência em inglês" is the same
+        # question, worded with "proficiência" instead of "nível"/
+        # "conhecimento" -- neither existing term covers it.
+        "proficiência em inglês",
+        "proficiencia em ingles",
     ],
     "portfolio_link": ["link do seu portfólio", "link do seu portfolio", "portfólio ou projetos de referência"],
     # Self-rated tool proficiency -- genuinely new facts (not derivable
