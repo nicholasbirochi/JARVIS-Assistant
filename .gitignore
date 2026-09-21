@@ -9,6 +9,13 @@ src/data/index_state.json
 src/data/reminders.json
 src/data/job_matches/
 src/data/applications_sent.json
+# Real personal data (name/phone/email/résumé content) -- this repo is
+# PUBLIC on GitHub, so this must never be tracked, same reasoning as every
+# other entry in this file. Each person running JARVIS generates their own
+# locally via scripts/import_resume.py (see README.md) -- resume.schema.json
+# stays tracked (structure only, no personal content).
+src/data/resume.json
+src/data/review/
 # legacy path -- session state now defaults outside the repo (see config.py's LOCAL_STATE_DIR); kept as a safety net
 src/data/sites/
 # scripts/benchmark_coding_agent.py's raw output -- real, machine/timing-
