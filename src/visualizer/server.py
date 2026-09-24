@@ -77,6 +77,12 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        # Real bug this avoids (2026-09-23, see native_window.py's own
+        # open_window() fix): WKWebView caching this response would
+        # defeat that fix's whole point -- reloading the URL is useless
+        # if the browser engine just serves its own cached copy instead
+        # of asking this server again.
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 

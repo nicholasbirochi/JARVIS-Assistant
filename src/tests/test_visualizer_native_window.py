@@ -25,13 +25,39 @@ class FakeWindow:
         return self._visible
 
 
+class FakeWebview:
+    def __init__(self):
+        self.reloaded = False
+
+    def loadRequest_(self, _request):
+        self.reloaded = True
+
+
 def test_open_window_brings_existing_window_forward_instead_of_recreating(monkeypatch):
+    monkeypatch.setattr(native_window.server, "url", lambda: "http://127.0.0.1:8765/")
     fake = FakeWindow()
     monkeypatch.setattr(native_window, "_window", fake)
+    monkeypatch.setattr(native_window, "_webview", FakeWebview())
 
     native_window.open_window()
 
     assert fake.brought_forward is True
+
+
+def test_open_window_reloads_the_page_even_when_reusing_an_existing_window(monkeypatch):
+    # Real bug this covers (2026-09-23): a rebuilt app kept showing the
+    # stale page.html a previously-opened window had already loaded,
+    # for as long as the process stayed alive across close/open cycles.
+    # server.url() is faked (not just given port=0) so this never binds a
+    # real socket at all -- the reload path only needs a URL string.
+    monkeypatch.setattr(native_window.server, "url", lambda: "http://127.0.0.1:8765/")
+    monkeypatch.setattr(native_window, "_window", FakeWindow())
+    fake_webview = FakeWebview()
+    monkeypatch.setattr(native_window, "_webview", fake_webview)
+
+    native_window.open_window()
+
+    assert fake_webview.reloaded is True
 
 
 def test_close_window_closes_the_existing_window(monkeypatch):

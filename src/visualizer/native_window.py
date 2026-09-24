@@ -21,10 +21,23 @@ _webview = None
 
 def open_window() -> None:
     """Opens the HUD in its own window, or brings the existing one
-    forward if already open -- safe to call repeatedly."""
+    forward if already open -- safe to call repeatedly.
+
+    Real bug this fixes (2026-09-23): bringing an already-created window
+    forward used to just show whatever the WKWebView last had loaded,
+    without reloading page.html -- a rebuilt app (new code on disk) kept
+    showing the stale page from the window's first-ever load, for as
+    long as this process stayed alive across close_window()/open_window()
+    cycles (the window survives a close -- see close_window()'s own
+    docstring). Reloading on every open is cheap (localhost, no network
+    round trip) and guarantees the page shown always matches the code
+    actually running."""
     global _window, _webview
 
     if _window is not None:
+        from Foundation import NSURL, NSURLRequest
+
+        _webview.loadRequest_(NSURLRequest.requestWithURL_(NSURL.URLWithString_(server.url())))
         _window.makeKeyAndOrderFront_(None)
         return
 
