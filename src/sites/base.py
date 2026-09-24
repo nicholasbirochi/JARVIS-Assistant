@@ -274,6 +274,10 @@ _FIELD_TERMS: dict[str, list[str]] = {
         # name as context, which classify_question_field() doesn't have
         # -- a real, known gap, not fixed here.
         "atuou em alguma empresa do grupo",
+        # 2026-09-23, real miss found live (Gupy, Caixa Vida e
+        # Previdência): present tense ("trabalha", not "trabalhou"/
+        # "atuou") -- same underlying nepotism-style question.
+        "trabalha em alguma empresa do grupo",
     ],
     "disponibilidade_viagem": ["disponibilidade para viajar", "disponível para viajar", "disponivel para viajar"],
     "disponibilidade_fds": [
@@ -288,7 +292,15 @@ _FIELD_TERMS: dict[str, list[str]] = {
     # question (hybrid/in-person work arrangement), two real phrasings,
     # neither mentioning "viajar" or "fins de semana" so this needed its
     # own field rather than reusing disponibilidade_viagem/_fds.
-    "disponibilidade_hibrido": ["modelo híbrido", "modelo hibrido"],
+    "disponibilidade_hibrido": [
+        "modelo híbrido",
+        "modelo hibrido",
+        # 2026-09-23, real miss found live (Gupy, Bolsista Mestre
+        # Bradesco): "atuação híbrida" instead of "modelo híbrido" --
+        # same underlying fact.
+        "atuação híbrida",
+        "atuação hibrida",
+    ],
     "escolaridade": [
         "ensino superior completo",
         "superior completo",
@@ -503,6 +515,10 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "experiencia previa com ia",
         "utiliza ferramentas de ia",
         "utiliza ferramentas de inteligência artificial",
+        # 2026-09-23, real miss found live (Gupy, Invillia): "IA
+        # Generativa em ambiente corporativo" -- same underlying fact
+        # (his real local-AI tool), specifically about generative AI.
+        "ia generativa",
     ],
     "susep_conhecimento": ["trâmites da susep", "tramites da susep"],
     "txt_csv_conhecimento": ["arquivos txt, csv", "txt ou csv"],
@@ -598,6 +614,47 @@ _FIELD_TERMS: dict[str, list[str]] = {
         "areas de exatas, computacao e correlatas",
     ],
     "mestrado_concluido": ["concluiu seu mestrado", "concluiu o mestrado"],
+    # 2026-09-23: a second batch of real, honest answers Nicholas gave
+    # directly (against his own résumé/local projects, no separate
+    # assistant this time) for a batch of real, live-blocked Gupy
+    # listings' own screening questions -- same "narrow, single-purpose
+    # field" discipline as the 2026-09-14 batch above.
+    "databricks_nivel": ["databricks"],
+    "rag_experiencia": ["retrieval augmented generation"],
+    "python_tempo_profissional": ["atua profissionalmente com python"],
+    "java_dotnet_experiencia": ["java ou .net"],
+    "frontend_tecnologia": ["tecnologia de front-end"],
+    "api_rest_experiencia": ["apis rest"],
+    "devops_experiencia": ["atuando como devops", "pipelines de ci/cd"],
+    "consentimento_dados_ia": ["consentimento para o tratamento dos dados da sua candidatura"],
+    "pricing_revenue_experiencia": ["pricing e/ou revenue management"],
+    # Presencial/híbrido availability tied to one specific neighborhood/
+    # city -- genuinely can't be answered from the résumé (no fixed
+    # location field there, see apply_resume_backed_profile_fields()),
+    # and unlike disponibilidade_viagem/_fds/_hibrido above, the real
+    # fact varies by exactly which place is named, not a single blanket
+    # yes/no -- so each confirmed place gets added here as it's found
+    # live and confirmed with him, not assumed to generalize to every
+    # conceivable neighborhood.
+    "disponibilidade_regiao_especifica": [
+        "lapa de baixo",
+        "mooca",
+        "guarulhos",
+        "zona oeste de são paulo",
+        "zona oeste de sao paulo",
+        "vila guilherme",
+        "bairro de pinheiros",
+    ],
+    # Company-specific one-off facts -- deliberately scoped to each
+    # company's own exact phrasing (same reasoning as anima_vinculo_
+    # comercial/anima_clt_historico above), since the underlying fact
+    # (was he ever an employee there, does he have a conflicting
+    # relationship there) is real but genuinely different per company,
+    # not a reusable generic answer.
+    "vw_ja_foi_funcionario": ["empregado vw"],
+    "fisia_nike_ja_trabalhou": ["fisia/nike ou em uma das empresas do grupo sbf"],
+    "caixa_vida_parentes_concorrente": ["por afinidade até o 3° grau"],
+    "caixa_vida_societaria": ["participação societária ou é administrador"],
     # Deliberately LAST in this dict: a generic "tell me about your
     # experience" catch-all, real content but real risk of shadowing a
     # more specific field if checked too early -- classify_question_field

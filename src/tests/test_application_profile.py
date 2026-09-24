@@ -89,6 +89,20 @@ def test_load_application_profile_returns_all_none_when_file_missing(monkeypatch
         "graduacao_area_tecnica": None,
         "mestrado_concluido": None,
         "conte_sua_experiencia": None,
+        "databricks_nivel": None,
+        "rag_experiencia": None,
+        "python_tempo_profissional": None,
+        "java_dotnet_experiencia": None,
+        "frontend_tecnologia": None,
+        "api_rest_experiencia": None,
+        "devops_experiencia": None,
+        "consentimento_dados_ia": None,
+        "pricing_revenue_experiencia": None,
+        "disponibilidade_regiao_especifica": None,
+        "vw_ja_foi_funcionario": None,
+        "fisia_nike_ja_trabalhou": None,
+        "caixa_vida_parentes_concorrente": None,
+        "caixa_vida_societaria": None,
     }
 
 
@@ -204,6 +218,20 @@ def test_load_application_profile_reads_real_values(monkeypatch, tmp_path):
         "graduacao_area_tecnica": None,
         "mestrado_concluido": "Não",
         "conte_sua_experiencia": None,
+        "databricks_nivel": None,
+        "rag_experiencia": None,
+        "python_tempo_profissional": None,
+        "java_dotnet_experiencia": None,
+        "frontend_tecnologia": None,
+        "api_rest_experiencia": None,
+        "devops_experiencia": None,
+        "consentimento_dados_ia": None,
+        "pricing_revenue_experiencia": None,
+        "disponibilidade_regiao_especifica": None,
+        "vw_ja_foi_funcionario": None,
+        "fisia_nike_ja_trabalhou": None,
+        "caixa_vida_parentes_concorrente": None,
+        "caixa_vida_societaria": None,
     }
 
 

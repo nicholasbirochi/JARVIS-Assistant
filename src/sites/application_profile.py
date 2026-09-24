@@ -191,6 +191,22 @@ _FIELD_ENV_KEYS: dict[str, str] = {
     "graduacao_area_tecnica": "JARVIS_APPLICATION_GRADUACAO_AREA_TECNICA",
     "mestrado_concluido": "JARVIS_APPLICATION_MESTRADO_CONCLUIDO",
     "conte_sua_experiencia": "JARVIS_APPLICATION_CONTE_SUA_EXPERIENCIA",
+    # 2026-09-23: second batch -- see base.py's _FIELD_TERMS comment for
+    # the same discipline/reasoning as the 2026-09-14 batch above.
+    "databricks_nivel": "JARVIS_APPLICATION_DATABRICKS_NIVEL",
+    "rag_experiencia": "JARVIS_APPLICATION_RAG_EXPERIENCIA",
+    "python_tempo_profissional": "JARVIS_APPLICATION_PYTHON_TEMPO_PROFISSIONAL",
+    "java_dotnet_experiencia": "JARVIS_APPLICATION_JAVA_DOTNET_EXPERIENCIA",
+    "frontend_tecnologia": "JARVIS_APPLICATION_FRONTEND_TECNOLOGIA",
+    "api_rest_experiencia": "JARVIS_APPLICATION_API_REST_EXPERIENCIA",
+    "devops_experiencia": "JARVIS_APPLICATION_DEVOPS_EXPERIENCIA",
+    "consentimento_dados_ia": "JARVIS_APPLICATION_CONSENTIMENTO_DADOS_IA",
+    "pricing_revenue_experiencia": "JARVIS_APPLICATION_PRICING_REVENUE_EXPERIENCIA",
+    "disponibilidade_regiao_especifica": "JARVIS_APPLICATION_DISPONIBILIDADE_REGIAO_ESPECIFICA",
+    "vw_ja_foi_funcionario": "JARVIS_APPLICATION_VW_JA_FOI_FUNCIONARIO",
+    "fisia_nike_ja_trabalhou": "JARVIS_APPLICATION_FISIA_NIKE_JA_TRABALHOU",
+    "caixa_vida_parentes_concorrente": "JARVIS_APPLICATION_CAIXA_VIDA_PARENTES_CONCORRENTE",
+    "caixa_vida_societaria": "JARVIS_APPLICATION_CAIXA_VIDA_SOCIETARIA",
 }
 
 

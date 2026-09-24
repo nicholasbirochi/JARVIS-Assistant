@@ -583,6 +583,70 @@ def test_classify_question_field_recognizes_round_2_of_the_chatgpt_drafted_batch
     assert classify_question_field("Possui vivência com construção de dashboards?") == "como_constroi_dashboards"
 
 
+def test_classify_question_field_recognizes_the_2026_09_23_gupy_batch():
+    # 2026-09-23, real answers Nicholas gave directly for a batch of
+    # real, live-blocked Gupy listings found during that day's
+    # batch-apply run (Invillia, Keeggotech, Cantustore, Compass UOL,
+    # Fisia/Nike, VW Brasil, Caixa Vida e Previdência).
+    assert classify_question_field("Como você considera que seja seu conhecimento em Databricks?") == "databricks_nivel"
+    assert (
+        classify_question_field("Qual melhor descreve sua experiência com arquiteturas RAG (Retrieval Augmented Generation)?")
+        == "rag_experiencia"
+    )
+    assert (
+        classify_question_field("Qual sua experiência com soluções de IA Generativa em ambiente corporativo?")
+        == "ia_experiencia"
+    )
+    assert classify_question_field("Há quanto tempo você atua profissionalmente com Python?") == "python_tempo_profissional"
+    assert classify_question_field("Você possui experiência profissional com Java ou .NET?") == "java_dotnet_experiencia"
+    assert classify_question_field("Com qual tecnologia de Front-end você possui experiência profissional?") == "frontend_tecnologia"
+    assert (
+        classify_question_field("Você possui experiência prática no desenvolvimento e consumo de APIs REST?")
+        == "api_rest_experiencia"
+    )
+    assert classify_question_field("Você possui experiência de pelo menos 2 anos atuando como DevOps?") == "devops_experiencia"
+    assert (
+        classify_question_field("Você possui experiência prática com pipelines de CI/CD, utilizando Azure DevOps?")
+        == "devops_experiencia"
+    )
+    assert (
+        classify_question_field(
+            "Você fornece seu consentimento para o tratamento dos dados da sua candidatura com o apoio de IA?"
+        )
+        == "consentimento_dados_ia"
+    )
+    assert (
+        classify_question_field("Você possui experiência em Pricing e/ou Revenue Management?")
+        == "pricing_revenue_experiencia"
+    )
+    assert (
+        classify_question_field("Possui disponibilidade para atuação hibrida em Osasco - SP?") == "disponibilidade_hibrido"
+    )
+    assert classify_question_field("Você trabalha em alguma empresa do grupo?") == "ja_trabalhou_aqui"
+    assert (
+        classify_question_field("Possui disponibilidade para atuar presencial em Guarulhos 2x por semana?")
+        == "disponibilidade_regiao_especifica"
+    )
+    assert (
+        classify_question_field("Reside na Vila Guilherme/SP ou bairros próximos?") == "disponibilidade_regiao_especifica"
+    )
+    assert classify_question_field("Você já foi empregado VW?") == "vw_ja_foi_funcionario"
+    assert (
+        classify_question_field("Você já trabalhou na Fisia/Nike ou em uma das empresas do Grupo SBF?")
+        == "fisia_nike_ja_trabalhou"
+    )
+    assert (
+        classify_question_field(
+            "Você possui cônjuge, companheiro(a) ou parentes em linha reta, colateral, por afinidade até o 3° grau?"
+        )
+        == "caixa_vida_parentes_concorrente"
+    )
+    assert (
+        classify_question_field("Você possui participação societária ou é administrador(a) em alguma empresa?")
+        == "caixa_vida_societaria"
+    )
+
+
 def test_new_identity_fields_are_hard_pii():
     assert is_hard_pii_question("Órgão e Estado de emissão do RG")
     assert is_hard_pii_question("Nome da mãe")
