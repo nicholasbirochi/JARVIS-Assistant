@@ -161,6 +161,20 @@ class JarvisMenuBarApp(rumps.App):
         self._toggle_item = rumps.MenuItem("Ligar", callback=self.toggle)
         self.menu = [self._visualizer_item, self._toggle_item]
         self._controller = VoiceLoopController()  # starts OFF -- see module docstring
+        # The HUD's own on/off button (visualizer/page.html) posts to
+        # /api/toggle from the visualizer HTTP server's own thread --
+        # never safe to touch self.icon/self._toggle_item.title (real
+        # NSStatusItem/NSMenuItem objects) from there. This just sets a
+        # flag; _drain_remote_toggle (a fast rumps.Timer, so it runs on
+        # the main thread) picks it up and does the real work shortly
+        # after -- same "poll a flag from the main loop" shape as
+        # _sync_with_reality below, just on a much shorter interval since
+        # this one's driven by an actual button press, not a 5s safety net.
+        self._remote_toggle_requested = threading.Event()
+        from visualizer import server as visualizer_server
+
+        visualizer_server.set_toggle_callback(self._remote_toggle_requested.set)
+        rumps.Timer(self._drain_remote_toggle, 0.3).start()
         # run_voice_loop now survives most failures on its own (see its
         # docstring), but if it ever does die unrecovered, this is what
         # stops the icon/title from claiming "on" forever afterward --
@@ -241,7 +255,12 @@ class JarvisMenuBarApp(rumps.App):
         if self._visualizer_item.title == "Fechar" and not native_window.is_open():
             self._visualizer_item.title = "Abrir"
 
-    def toggle(self, _sender: rumps.MenuItem) -> None:
+    def _drain_remote_toggle(self, _timer: rumps.Timer) -> None:
+        if self._remote_toggle_requested.is_set():
+            self._remote_toggle_requested.clear()
+            self.toggle(None)
+
+    def toggle(self, _sender: rumps.MenuItem | None) -> None:
         if self._controller.is_running:
             self._controller.stop()
             self.icon = ICON_OFF

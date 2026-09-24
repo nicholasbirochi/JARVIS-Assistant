@@ -11,6 +11,7 @@ import queue
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Callable
 
 from visualizer import state
 
@@ -23,6 +24,20 @@ _KEEPALIVE_SECONDS = 15
 
 _server: ThreadingHTTPServer | None = None
 _server_lock = threading.Lock()
+
+# The HUD's own on/off button (POST /api/toggle) -- registered by
+# menubar.py at startup, since this module has no business knowing about
+# VoiceLoopController/rumps itself (same layering as state.py's own
+# publish/subscribe: this module only ever reacts to what it's told).
+# None (the default) means the visualizer is running standalone, without
+# the menu bar app driving it -- the endpoint reports that plainly instead
+# of pretending the click did something.
+_toggle_callback: Callable[[], None] | None = None
+
+
+def set_toggle_callback(callback: Callable[[], None] | None) -> None:
+    global _toggle_callback
+    _toggle_callback = callback
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -37,6 +52,25 @@ class _Handler(BaseHTTPRequestHandler):
         else:
             self.send_response(404)
             self.end_headers()
+
+    def do_POST(self) -> None:
+        if self.path == "/api/toggle":
+            self._handle_toggle()
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def _handle_toggle(self) -> None:
+        if _toggle_callback is None:
+            self.send_response(503)
+            self.end_headers()
+            return
+        # Runs on this request's own thread, never the main/AppKit one --
+        # see menubar.py's own registered callback for how it hops back
+        # before touching anything NSStatusItem-related.
+        _toggle_callback()
+        self.send_response(204)
+        self.end_headers()
 
     def _serve_page(self) -> None:
         body = _PAGE_PATH.read_bytes()

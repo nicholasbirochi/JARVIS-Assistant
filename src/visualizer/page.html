@@ -70,6 +70,25 @@
   body[data-state="off"] #status { color: #4a4f58; }
   body[data-state="off"] #brand, body[data-state="off"] #clock { color: #363a42; }
 
+  #power-btn {
+    margin-top: 22px;
+    padding: 9px 26px;
+    background: transparent;
+    border: 1px solid var(--text-dim);
+    border-radius: 999px;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
+  }
+  #power-btn:hover { color: var(--blue-listening); border-color: var(--blue-listening); box-shadow: 0 0 12px rgba(47,182,232,0.3); }
+  #power-btn:active { transform: scale(0.96); }
+  #power-btn:disabled { opacity: 0.45; cursor: default; }
+  body[data-state="off"] #power-btn { color: var(--blue-listening); border-color: var(--blue-listening); }
+
   /* Fixed-size scrollable panel, pinned near the bottom -- independent of
      #core above. Content can be any length; it scrolls inside its own
      box instead of growing it. Both wheel/trackpad scroll (native, via
@@ -183,6 +202,7 @@
       <canvas id="orb"></canvas>
     </div>
     <div id="status">Desligado</div>
+    <button id="power-btn" type="button">Ligar</button>
   </div>
   <div id="transcript-wrap"><div id="transcript"></div></div>
   <div id="chart-panel"></div>
@@ -191,6 +211,7 @@
 const canvas = document.getElementById("orb");
 const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
+const powerBtn = document.getElementById("power-btn");
 const transcriptEl = document.getElementById("transcript");
 const transcriptWrap = document.getElementById("transcript-wrap");
 const body = document.body;
@@ -384,6 +405,7 @@ function setState(newState, text) {
     stateSince = performance.now();
     body.setAttribute("data-state", newState);
     statusEl.textContent = STATE_LABEL[newState] || newState;
+    powerBtn.textContent = newState === "off" ? "Ligar" : "Desligar";
   }
   if (text) {
     transcriptEl.textContent = text;
@@ -613,6 +635,18 @@ function formatChartValue(v) {
 }
 
 window.addEventListener("resize", updateChartVisibility);
+
+// Real state feedback comes back through the existing SSE stream (setState
+// above) once menubar.py's _drain_remote_toggle actually flips it -- this
+// handler only fires the request and briefly disables the button so a
+// second click can't race the ~0.3s it takes to land, not a fake local
+// on/off guess.
+powerBtn.addEventListener("click", () => {
+  powerBtn.disabled = true;
+  fetch("/api/toggle", { method: "POST" })
+    .catch(() => {})
+    .finally(() => setTimeout(() => { powerBtn.disabled = false; }, 800));
+});
 
 function connect() {
   const es = new EventSource("/events");
